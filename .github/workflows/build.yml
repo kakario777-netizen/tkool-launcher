@@ -1,0 +1,28 @@
+name: build
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: dotnet build TkoolLauncher.csproj -c Release
+
+      - name: Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VER="v0.1.${{ github.run_number }}"
+          cp bin/Release/net48/TkoolLauncher.exe "TkoolLauncher.exe"
+          MSG=$(git log -1 --pretty=%B)
+          gh release create "$VER" "TkoolLauncher.exe" --title "쯔꾸르 런처 $VER" --notes "$MSG" --latest
