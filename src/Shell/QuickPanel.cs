@@ -1,0 +1,326 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+namespace TkoolLauncher
+{
+    /// <summary>
+    /// 오른쪽에서 나오는 빠른 설정판 (스팀덱 '…' 버튼 메뉴 / AYASpace 빠른 메뉴 같은 것)
+    /// </summary>
+    class QuickPanel
+    {
+        public ShellForm Shell;
+        public bool Open;
+        public float T;
+        int focus;
+        float scroll;
+        Rectangle panel;
+
+        enum Kind { Slider, Toggle, Choice, Action }
+
+        class Row
+        {
+            public Kind Kind;
+            public string Title, Sub;
+            public int Num;                 // 슬라이더 값 0~100
+            public bool On;
+            public string[] Choices;
+            public int ChoiceIndex;
+            public Action<int> Change;      // 슬라이더·선택: 새 값 / 토글: 1·0
+            public Action Act;
+            public Rectangle Rect;
+            public bool Danger;
+        }
+
+        List<Row> rows = new List<Row>();
+        int brightness = -1, volume = -1, power = 1, rot;
+        bool mute, wifi, bt, hasWifi, hasBt, radiosLoaded;
+        List<string> resList = new List<string>();
+        int resIndex;
+        string memNote;
+        bool confirmQuit;
+
+        public void Show()
+        {
+            Open = true;
+            focus = 0;
+            confirmQuit = false;
+            LoadState();
+            Shell.Animate();
+        }
+
+        public void Hide()
+        {
+            Open = false;
+            Shell.Animate();
+        }
+
+        void LoadState()
+        {
+            brightness = SystemControls.GetBrightness();
+            volume = SystemControls.GetVolume();
+            mute = SystemControls.GetMute();
+            power = SystemControls.GetPowerMode();
+            try { resList = SystemControls.Resolutions(out resIndex); } catch { resList = new List<string>(); }
+            try { rot = SystemControls.GetRotation(); } catch { rot = 0; }
+            Task.Run(() =>
+            {
+                var r = SystemControls.GetRadios();
+                Shell.BeginInvoke(new Action(() =>
+                {
+                    hasWifi = r.ContainsKey("WiFi"); wifi = hasWifi && r["WiFi"];
+                    hasBt = r.ContainsKey("Bluetooth"); bt = hasBt && r["Bluetooth"];
+                    radiosLoaded = true;
+                    Shell.Invalidate();
+                }));
+            });
+        }
+
+        void Build()
+        {
+            rows = new List<Row>();
+            bool game = GameWatch.Running;
+            if (game)
+            {
+                rows.Add(new Row { Kind = Kind.Action, Title = "게임으로 돌아가기", Act = Shell.ReturnToGame });
+                rows.Add(new Row
+                {
+                    Kind = Kind.Action, Danger = true,
+                    Title = confirmQuit ? "한 번 더 누르면 게임을 끝내요" : "게임 끝내기",
+                    Sub = confirmQuit ? "저장 안 한 내용은 사라져요" : null,
+                    Act = () => { if (!confirmQuit) { confirmQuit = true; } else { confirmQuit = false; Shell.QuitGame(); } }
+                });
+            }
+            if (brightness >= 0)
+                rows.Add(new Row { Kind = Kind.Slider, Title = "밝기", Num = brightness, Change = v => { brightness = v; SystemControls.SetBrightness(v); } });
+            if (volume >= 0)
+            {
+                rows.Add(new Row { Kind = Kind.Slider, Title = mute ? "소리 (음소거)" : "소리", Num = volume, Change = v => { volume = v; mute = false; SystemControls.SetVolume(v); } });
+                rows.Add(new Row { Kind = Kind.Toggle, Title = "음소거", On = mute, Change = v => { mute = v == 1; SystemControls.SetMute(mute); } });
+            }
+            rows.Add(new Row
+            {
+                Kind = Kind.Toggle, Title = "와이파이", On = wifi, Sub = radiosLoaded ? (hasWifi ? null : "와이파이 장치를 못 찾았어요") : "확인 중...",
+                Change = v => { wifi = v == 1; Task.Run(() => SystemControls.SetRadio("WiFi", v == 1)); }
+            });
+            rows.Add(new Row
+            {
+                Kind = Kind.Toggle, Title = "블루투스", On = bt, Sub = radiosLoaded ? (hasBt ? null : "블루투스 장치를 못 찾았어요") : "확인 중...",
+                Change = v => { bt = v == 1; Task.Run(() => SystemControls.SetRadio("Bluetooth", v == 1)); }
+            });
+            rows.Add(new Row { Kind = Kind.Choice, Title = "성능 모드", Choices = SystemControls.PowerNames, ChoiceIndex = power, Change = v => { power = v; SystemControls.SetPowerMode(v); } });
+            rows.Add(new Row { Kind = Kind.Toggle, Title = "성능 표시 (화면 위)", On = OverlayForm.IsOn, Change = v => OverlayForm.Toggle(v == 1) });
+            if (resList.Count > 1)
+                rows.Add(new Row
+                {
+                    Kind = Kind.Choice, Title = "해상도", Choices = resList.ToArray(), ChoiceIndex = Math.Max(0, resIndex),
+                    Change = v => { resIndex = v; SystemControls.SetResolution(resList[v]); Shell.AfterDisplayChange(); }
+                });
+            rows.Add(new Row
+            {
+                Kind = Kind.Choice, Title = "화면 회전", Choices = SystemControls.RotationNames, ChoiceIndex = rot,
+                Change = v => { rot = v; SystemControls.SetRotation(v); try { resList = SystemControls.Resolutions(out resIndex); } catch { } Shell.AfterDisplayChange(); }
+            });
+            rows.Add(new Row
+            {
+                Kind = Kind.Action, Title = "메모리 정리", Sub = memNote,
+                Act = () =>
+                {
+                    memNote = "정리하는 중...";
+                    Task.Run(() =>
+                    {
+                        int mb = SystemControls.CleanMemory();
+                        var m = SystemControls.Memory();
+                        Shell.BeginInvoke(new Action(() =>
+                        {
+                            memNote = mb + "MB 비웠어요 · 남은 메모리 " + (m.Avail / 1048576) + "MB";
+                            Shell.Invalidate();
+                        }));
+                    });
+                }
+            });
+            rows.Add(new Row { Kind = Kind.Action, Title = "팬 · 조명 · TDP", Sub = "다음 업데이트에서 추가돼요 (드라이버 필요)", Act = null });
+            if (focus >= rows.Count) focus = rows.Count - 1;
+        }
+
+        public bool Tick(float dt)
+        {
+            float target = Open ? 1f : 0f;
+            float before = T;
+            T = Draw.Lerp(T, target, dt * 16f);
+            if (Math.Abs(T - target) < 0.01f) T = target;
+            return Math.Abs(T - before) > 0.0001f;
+        }
+
+        int S(float v) => Theme.S(v);
+
+        public void Paint(Graphics g, Rectangle full)
+        {
+            if (T <= 0) return;
+            Build();
+            using (var b = new SolidBrush(Color.FromArgb((int)(140 * T), 0, 0, 0))) g.FillRectangle(b, full);
+            int w = S(460);
+            float e = 1 - (1 - T) * (1 - T) * (1 - T);
+            int x = (int)(full.Width - w * e);
+            panel = new Rectangle(x, 0, w, full.Height);
+            using (var b = new SolidBrush(Color.FromArgb(14, 20, 27))) g.FillRectangle(b, panel);
+            using (var p = new Pen(Color.FromArgb(40, 255, 255, 255))) g.DrawLine(p, x, 0, x, full.Height);
+
+            // 머리: 시간·배터리
+            Draw.Text(g, DateTime.Now.ToString("HH:mm"), Draw.H1, new Rectangle(x + S(28), S(18), w, S(36)), Theme.Text);
+            Draw.Text(g, SystemControls.BatteryText(), Draw.Body, new Rectangle(x + S(28), S(56), w - S(40), S(22)), Theme.SubText);
+
+            int top = S(96), bottom = full.Height - S(60);
+            var clip = g.Clip;
+            g.SetClip(new Rectangle(x, top, w, bottom - top));
+
+            // 포커스가 보이게 스크롤
+            int y0 = top + S(6);
+            int fy = 0;
+            for (int i = 0; i < rows.Count; i++) { if (i == focus) break; fy += RowH(rows[i]) + S(8); }
+            int fh = rows.Count > 0 ? RowH(rows[focus]) : 0;
+            if (fy - scroll < 0) scroll = fy;
+            if (fy + fh - scroll > bottom - y0) scroll = fy + fh - (bottom - y0);
+            if (scroll < 0) scroll = 0;
+
+            int y = y0 - (int)scroll;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var row = rows[i];
+                int h = RowH(row);
+                var r = new Rectangle(x + S(14), y, w - S(28), h);
+                row.Rect = r;
+                bool f = i == focus;
+                Draw.Fill(g, r, S(4), f ? Theme.TileHot : Color.FromArgb(255, 23, 29, 37));
+                var tc = row.Act == null && row.Kind == Kind.Action ? Theme.Dim : row.Danger ? Color.FromArgb(240, 140, 140) : Theme.Text;
+                int ix = r.X + S(18);
+                switch (row.Kind)
+                {
+                    case Kind.Slider:
+                        Draw.Text(g, row.Title, Draw.Body, new Rectangle(ix, r.Y + S(8), r.Width, S(22)), tc);
+                        Draw.Text(g, row.Num + "%", Draw.BodyBold, new Rectangle(r.Right - S(80), r.Y + S(8), S(62), S(22)), Theme.SubText, Draw.Right);
+                        var track = new Rectangle(ix, r.Y + S(40), r.Width - S(36), S(6));
+                        Draw.Fill(g, track, S(3), Color.FromArgb(70, 78, 90));
+                        Draw.Fill(g, new Rectangle(track.X, track.Y, track.Width * row.Num / 100, track.Height), S(3), Theme.Accent);
+                        int kx = track.X + track.Width * row.Num / 100;
+                        using (var b = new SolidBrush(Color.White)) g.FillEllipse(b, kx - S(9), track.Y + S(3) - S(9), S(18), S(18));
+                        break;
+                    case Kind.Toggle:
+                        Draw.Text(g, row.Title, Draw.Body, new Rectangle(ix, r.Y, r.Width - S(100), row.Sub != null ? h - S(18) : h), tc);
+                        if (row.Sub != null) Draw.Text(g, row.Sub, Draw.Small, new Rectangle(ix, r.Y + h - S(26), r.Width, S(20)), Theme.SubText);
+                        var t = new Rectangle(r.Right - S(18) - S(50), r.Y + (h - S(26)) / 2, S(50), S(26));
+                        Draw.Fill(g, t, S(13), row.On ? Theme.Accent : Color.FromArgb(70, 78, 90));
+                        using (var b = new SolidBrush(Color.White))
+                            g.FillEllipse(b, row.On ? t.Right - S(23) : t.X + S(3), t.Y + S(3), S(20), S(20));
+                        break;
+                    case Kind.Choice:
+                        Draw.Text(g, row.Title, Draw.Body, new Rectangle(ix, r.Y, r.Width / 2, h), tc);
+                        string v = row.Choices[Math.Max(0, Math.Min(row.Choices.Length - 1, row.ChoiceIndex))];
+                        var vr = new Rectangle(r.Right - S(210), r.Y, S(192), h);
+                        Draw.Text(g, "‹", Draw.H2, new Rectangle(vr.X, vr.Y, S(24), h), f ? Theme.Text : Theme.Dim, Draw.Center);
+                        Draw.Text(g, v, Draw.BodyBold, new Rectangle(vr.X + S(24), vr.Y, vr.Width - S(48), h), Theme.Text, Draw.Center);
+                        Draw.Text(g, "›", Draw.H2, new Rectangle(vr.Right - S(24), vr.Y, S(24), h), f ? Theme.Text : Theme.Dim, Draw.Center);
+                        break;
+                    default:
+                        Draw.Text(g, row.Title, Draw.Body, new Rectangle(ix, r.Y, r.Width, row.Sub != null ? h - S(18) : h), tc);
+                        if (row.Sub != null) Draw.Text(g, row.Sub, Draw.Small, new Rectangle(ix, r.Y + h - S(26), r.Width - S(30), S(20)), Theme.SubText);
+                        break;
+                }
+                y += h + S(8);
+            }
+            g.Clip = clip;
+        }
+
+        int RowH(Row r) => r.Kind == Kind.Slider ? S(62) : r.Sub != null ? S(62) : S(50);
+
+        void Adjust(int dir)
+        {
+            if (focus < 0 || focus >= rows.Count) return;
+            var r = rows[focus];
+            if (r.Kind == Kind.Slider) r.Change(Math.Max(0, Math.Min(100, r.Num + dir * 5)));
+            else if (r.Kind == Kind.Choice) r.Change((r.ChoiceIndex + dir + r.Choices.Length) % r.Choices.Length);
+            else if (r.Kind == Kind.Toggle && (dir > 0) != r.On) r.Change(dir > 0 ? 1 : 0);
+            Shell.Invalidate();
+        }
+
+        void Activate(Row r)
+        {
+            if (r.Kind == Kind.Toggle) r.Change(r.On ? 0 : 1);
+            else if (r.Kind == Kind.Choice) r.Change((r.ChoiceIndex + 1) % r.Choices.Length);
+            else if (r.Kind == Kind.Action) r.Act?.Invoke();
+            Shell.Invalidate();
+        }
+
+        public void OnPad(Pad b)
+        {
+            Build();
+            switch (b)
+            {
+                case Pad.Up: focus = Math.Max(0, focus - 1); confirmQuit = false; break;
+                case Pad.Down: focus = Math.Min(rows.Count - 1, focus + 1); confirmQuit = false; break;
+                case Pad.Left: Adjust(-1); break;
+                case Pad.Right: Adjust(1); break;
+                case Pad.A: if (focus < rows.Count) Activate(rows[focus]); break;
+                case Pad.B: case Pad.Start:
+                    if (GameWatch.Running && Shell.CameFromGame) Shell.ReturnToGame(); else Hide();
+                    return;
+            }
+            Shell.Invalidate();
+        }
+
+        public void OnTap(Point p)
+        {
+            if (!panel.Contains(p))
+            {
+                if (GameWatch.Running && Shell.CameFromGame) Shell.ReturnToGame(); else Hide();
+                return;
+            }
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var r = rows[i];
+                if (!r.Rect.Contains(p)) continue;
+                focus = i;
+                if (r.Kind == Kind.Slider)
+                {
+                    int tx = r.Rect.X + S(18), tw = r.Rect.Width - S(36);
+                    r.Change(Math.Max(0, Math.Min(100, (p.X - tx) * 100 / Math.Max(1, tw))));
+                }
+                else if (r.Kind == Kind.Choice)
+                {
+                    if (p.X < r.Rect.Right - S(105)) r.Change((r.ChoiceIndex - 1 + r.Choices.Length) % r.Choices.Length);
+                    else r.Change((r.ChoiceIndex + 1) % r.Choices.Length);
+                }
+                else Activate(r);
+                Shell.Invalidate();
+                return;
+            }
+        }
+
+        /// <summary>슬라이더 끌기</summary>
+        public void OnDrag(Point p)
+        {
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var r = rows[i];
+                if (r.Kind != Kind.Slider || !r.Rect.Contains(p.X, r.Rect.Y + 1) || p.Y < r.Rect.Y - S(20) || p.Y > r.Rect.Bottom + S(20)) continue;
+                int tx = r.Rect.X + S(18), tw = r.Rect.Width - S(36);
+                int v = Math.Max(0, Math.Min(100, (p.X - tx) * 100 / Math.Max(1, tw)));
+                if (v != r.Num) r.Change(v);
+                Shell.Invalidate();
+                return;
+            }
+        }
+
+        public List<Hint> Hints()
+        {
+            return new List<Hint>
+            {
+                new Hint(Pad.A, "선택", () => OnPad(Pad.A)),
+                new Hint(Pad.B, GameWatch.Running && Shell.CameFromGame ? "게임으로" : "닫기", () => OnPad(Pad.B)),
+            };
+        }
+    }
+}

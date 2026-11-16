@@ -11,7 +11,7 @@ namespace TkoolLauncher
         None = 0,
         Up = 0x0001, Down = 0x0002, Left = 0x0004, Right = 0x0008,
         Start = 0x0010, Back = 0x0020, LThumb = 0x0040, RThumb = 0x0080,
-        LB = 0x0100, RB = 0x0200,
+        LB = 0x0100, RB = 0x0200, Guide = 0x0400,
         A = 0x1000, B = 0x2000, X = 0x4000, Y = 0x8000,
     }
 
@@ -41,17 +41,28 @@ namespace TkoolLauncher
 
         [DllImport("xinput1_4.dll", EntryPoint = "XInputGetState")]
         static extern int Get14(int i, out XState s);
+        [DllImport("xinput1_4.dll", EntryPoint = "#100")]
+        static extern int Get14Ex(int i, out XState s);   // 가이드(홈) 버튼까지 읽는 숨은 함수
         [DllImport("xinput9_1_0.dll", EntryPoint = "XInputGetState")]
         static extern int Get910(int i, out XState s);
 
         static int dll = 0; // 0: 1_4, 1: 9_1_0, 2: 없음
+        static bool exOk = true;
 
         static bool Read(int i, out XState s)
         {
             s = default(XState);
             try
             {
-                if (dll == 0) return Get14(i, out s) == 0;
+                if (dll == 0)
+                {
+                    if (exOk)
+                    {
+                        try { return Get14Ex(i, out s) == 0; }
+                        catch (EntryPointNotFoundException) { exOk = false; }
+                    }
+                    return Get14(i, out s) == 0;
+                }
                 if (dll == 1) return Get910(i, out s) == 0;
             }
             catch (DllNotFoundException) { dll++; }
@@ -110,8 +121,11 @@ namespace TkoolLauncher
         static readonly Pad[] All =
         {
             Pad.Up, Pad.Down, Pad.Left, Pad.Right, Pad.A, Pad.B, Pad.X, Pad.Y,
-            Pad.LB, Pad.RB, Pad.Start, Pad.Back
+            Pad.LB, Pad.RB, Pad.Start, Pad.Back, Pad.Guide
         };
+
+        /// <summary>게임 중 홈 버튼(가이드 버튼, 또는 보기+메뉴 동시)</summary>
+        public static Action Home;
 
         // ── 상태 ──
         public static bool MapKeys;         // 그 게임에 키보드 변환을 할지
@@ -143,7 +157,7 @@ namespace TkoolLauncher
         static void Tick(object sender, EventArgs e)
         {
             var target = Form.ActiveForm as IPadTarget;
-            bool game = GameRunning && MapKeys;
+            bool game = GameRunning;
 
             if (target == null && !game)
             {
@@ -176,8 +190,17 @@ namespace TkoolLauncher
             }
             else
             {
-                timer.Interval = 16;
-                if (GameIsForeground()) HandleGame(cur & ~blocked);
+                timer.Interval = MapKeys ? 16 : 40;
+                Pad fresh = cur & ~old & ~blocked;
+                bool combo = (cur & (Pad.Back | Pad.Start)) == (Pad.Back | Pad.Start) && (fresh & (Pad.Back | Pad.Start)) != 0;
+                if ((fresh & Pad.Guide) != 0 || combo)
+                {
+                    ReleaseGameKeys();
+                    blocked = cur;
+                    Home?.Invoke();
+                    return;
+                }
+                if (MapKeys && GameIsForeground()) HandleGame(cur & ~blocked);
                 else ReleaseGameKeys();
             }
         }

@@ -10,4 +10,6 @@
 - 미리보기: Xvfb + mono로 ShellForm.DrawToBitmap 스크린샷 가능(배터리 읽기는 mono에서 예외 → try로 감쌈).
 - 게임 종류: GameKind(Tkool·Steam·Epic·Gog·Pc). 스토어는 StoreScanner, PC 폴더 게임은 GameScanner.DetectPc(폴더 하나=게임 하나), 직접 추가는 Settings.ManualGames. 실행 감시는 GameWatch(게임 폴더 안 프로세스가 다 꺼질 때까지). 검색은 SearchScreen(초성·알파벳·가나 줄).
 - 기기: 사용자 기기는 AYANEO AIR Plus (AMD 7320U 멘도시노, 보드명 AB05-Mendocino). 팬은 리눅스 oxp-sensors와 같은 EC 레지스터(pwm 0~100) — 윈도우에선 EC 접근 드라이버 필요.
+- 빠른 설정판: Shell/QuickPanel(메뉴 버튼·오른쪽 위 탭·위에서 쓸어내리기), 기능은 SystemControls(WMI 밝기, Core Audio, PowerShell WinRT 무선, 전원 오버레이, DEVMODE). 성능 표시 OverlayForm. AYA 버튼은 Hotkeys(저수준 키보드 훅 배우기), 패드 가이드 버튼은 XInput #100, 게임 중 보기+메뉴 = 홈.
+- 팬·조명·TDP는 PawnIO(서명 드라이버, LpcACPIEC 모듈) 경로로 다음 단계 예정.
 - 진행 순서: 1) 폴더 검색·제목/버전 인식·목록 2) 스팀식 표지 화면·플레이 시간 3) 게임패드·전체 화면·일본어 환경 실행·RTP 확인 4) 상태 표시줄·빠른 설정판 5) 최소화 반복 감시.

@@ -664,6 +664,7 @@ namespace TkoolLauncher
     class SettingsScreen : Screen
     {
         int focus;
+        float scroll;
         readonly List<Rectangle> rows = new List<Rectangle>();
         string updateNote;
 
@@ -683,11 +684,32 @@ namespace TkoolLauncher
                           Act = () => { Settings.StoreScan = !Settings.StoreScan; Settings.Save(); Shell.Rescan(); } },
                 new Row { Title = "게임 직접 추가", Sub = "자동으로 못 찾은 게임의 실행 파일(exe)을 골라 넣어요", Value = Settings.ManualGames.Count + "개",
                           Act = Shell.AddManualGame },
+                new Row { Title = "AYA 버튼 연결", Sub = learning ? "지금 AYA 버튼(또는 쓰고 싶은 기기 버튼)을 누르세요..." : "누르면 어디서든 빠른 설정이 열려요 · 패드 가이드 버튼, 보기+메뉴 동시 누름도 돼요",
+                          Value = Hotkeys.Describe(Settings.HomeKey), Act = Learn },
+                new Row { Title = "윈도우 시작할 때 자동 실행", Sub = "켜면 부팅하자마자 런처가 떠요", Toggle = SystemControls.GetAutoStart(),
+                          Act = () => SystemControls.SetAutoStart(!SystemControls.GetAutoStart()) },
                 new Row { Title = "숨긴 게임 다시 보이기", Sub = "게임 화면에서 [숨기기]로 숨긴 게임을 모두 되돌려요", Value = GameData.HiddenCount() + "개",
                           Act = () => { GameData.UnhideAll(); Shell.RefreshLists(); Shell.ShowToast("숨긴 게임을 다시 보이게 했어요"); } },
                 new Row { Title = "게임 다시 찾기", Sub = "폴더에 새 게임을 넣었을 때", Value = "게임 " + Shell.Games.Count + "개",
                           Act = Shell.Rescan },
             };
+        }
+
+        bool learning;
+
+        void Learn()
+        {
+            if (learning) { learning = false; Hotkeys.Learning = false; return; }
+            learning = true;
+            Hotkeys.Learned = combo => Shell.BeginInvoke(new Action(() =>
+            {
+                learning = false;
+                Settings.HomeKey = combo;
+                Settings.Save();
+                Shell.ShowToast("연결했어요: " + Hotkeys.Describe(combo), 4000);
+                Shell.Invalidate();
+            }));
+            Hotkeys.Learning = true;
         }
 
         void CheckNow()
@@ -710,8 +732,16 @@ namespace TkoolLauncher
             Draw.Text(g, "설정", Draw.H1, new Rectangle(x, Area.Y + S(8), w, S(40)), Theme.Text);
 
             rows.Clear();
-            int y = Area.Y + S(58);
             var list = Rows();
+            int rowStep = S(74);
+            int visible = Area.Bottom - (Area.Y + S(58)) - S(8);
+            float need = (focus + 1) * rowStep - visible;
+            if (need > scroll) scroll = need;
+            if (focus * rowStep < scroll) scroll = focus * rowStep;
+            if (scroll < 0) scroll = 0;
+            var clipS = g.Clip;
+            g.SetClip(new Rectangle(Area.X, Area.Y + S(54), Area.Width, Area.Height - S(54)));
+            int y = Area.Y + S(58) - (int)scroll;
             for (int i = 0; i < list.Count; i++)
             {
                 var row = list[i];
@@ -735,6 +765,7 @@ namespace TkoolLauncher
                 if (i == focus && Shell.ShowFocus) Draw.Ring(g, r, S(4), Theme.Focus, S(2));
                 y += S(74);
             }
+            g.Clip = clipS;
         }
 
         void Run(int i)

@@ -21,6 +21,13 @@ namespace TkoolLauncher
 
         readonly List<Screen> stack = new List<Screen>();
         readonly MainMenu menu = new MainMenu();
+        readonly QuickPanel quick = new QuickPanel();
+        public bool CameFromGame;   // 게임 중에 홈 버튼으로 불려 나왔는지
+        IntPtr gameHwnd;
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
         readonly Timer anim = new Timer { Interval = 15 };
         readonly Timer clock = new Timer { Interval = 15000 };
         readonly Stopwatch sw = Stopwatch.StartNew();
@@ -51,6 +58,10 @@ namespace TkoolLauncher
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
 
             menu.Shell = this;
+            quick.Shell = this;
+            Gamepad.Home = HomeAction;
+            Hotkeys.Home = () => BeginInvoke(new Action(HomeAction));
+            try { Hotkeys.Start(); } catch { }
             anim.Tick += OnAnim;
             clock.Tick += (s, e) => Invalidate();
             clock.Start();
@@ -114,6 +125,76 @@ namespace TkoolLauncher
             while (stack.Count > 1) stack.RemoveAt(stack.Count - 1);
             FocusChanged();
             Animate();
+        }
+
+        // ───────── 홈 버튼·빠른 설정 ─────────
+        /// <summary>AYA 버튼·가이드 버튼·보기+메뉴: 게임 중이면 런처를 불러와 빠른 설정을, 런처 안이면 빠른 설정 열고 닫기</summary>
+        public void HomeAction()
+        {
+            if (GameWatch.Running && (WindowState == FormWindowState.Minimized || Form.ActiveForm == null))
+            {
+                gameHwnd = GetForegroundWindow();
+                CameFromGame = true;
+                WindowState = FormWindowState.Maximized;
+                Show();
+                Activate();
+                SetForegroundWindow(Handle);
+                menu.Open = false;
+                quick.Show();
+                return;
+            }
+            if (WindowState == FormWindowState.Minimized)
+            {
+                WindowState = FormWindowState.Maximized;
+                Activate();
+                menu.Open = false;
+                quick.Show();
+                return;
+            }
+            if (quick.Open) quick.Hide(); else { menu.Open = false; quick.Show(); }
+        }
+
+        public void OpenQuick()
+        {
+            menu.Open = false;
+            quick.Show();
+        }
+
+        public void ReturnToGame()
+        {
+            quick.Open = false;
+            quick.T = 0;
+            CameFromGame = false;
+            WindowState = FormWindowState.Minimized;
+            if (gameHwnd != IntPtr.Zero) { ShowWindow(gameHwnd, 9); SetForegroundWindow(gameHwnd); }
+        }
+
+        public void QuitGame()
+        {
+            string dir = GameWatch.Dir;
+            if (dir == null) return;
+            foreach (var p in Process.GetProcesses())
+            {
+                try { if (p.Id != Process.GetCurrentProcess().Id && GameWatch.InDir(p.Id, dir)) p.Kill(); }
+                catch { }
+                finally { p.Dispose(); }
+            }
+            quick.Hide();
+            CameFromGame = false;
+            ShowToast("게임을 끝냈어요", 2500);
+        }
+
+        public void AfterDisplayChange()
+        {
+            // 해상도·회전이 바뀌면 창을 다시 꽉 채움
+            BeginInvoke(new Action(() =>
+            {
+                WindowState = FormWindowState.Normal;
+                WindowState = FormWindowState.Maximized;
+                LayoutScreens();
+                foreach (var sc in stack) sc.OnGamesChanged();
+                Invalidate();
+            }));
         }
 
         public void OpenMenu()
@@ -197,6 +278,7 @@ namespace TkoolLauncher
             lastTick = now;
             bool more = Cur.Tick(dt);
             more |= menu.Tick(dt);
+            more |= quick.Tick(dt);
             if (bgFade < 1f) { bgFade = Math.Min(1f, bgFade + dt * 3f); more = true; }
             if (toast != null && now > toastUntil) toast = null;
             Invalidate();
@@ -214,6 +296,13 @@ namespace TkoolLauncher
         }
 
         // ───────── 그리기 ─────────
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            Hotkeys.Stop();
+            OverlayForm.Toggle(false);
+            base.OnFormClosed(e);
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             if (stack.Count == 0) return;
@@ -226,6 +315,7 @@ namespace TkoolLauncher
             Cur.Paint(g);
             PaintTopBar(g);
             menu.Paint(g, ClientRectangle);
+            quick.Paint(g, ClientRectangle);
             PaintBottomBar(g);
             PaintToast(g);
         }
@@ -265,7 +355,8 @@ namespace TkoolLauncher
             using (var b = new SolidBrush(Color.FromArgb(menu.T > 0.5f ? 255 : 235, 14, 18, 24))) g.FillRectangle(b, r);
             using (var p = new Pen(Color.FromArgb(30, 255, 255, 255))) g.DrawLine(p, 0, r.Y, Width, r.Y);
 
-            hints = menu.Open ? menu.Hints() : Cur.Hints();
+            hints = quick.Open ? quick.Hints() : menu.Open ? menu.Hints() : Cur.Hints();
+            if (!quick.Open && !menu.Open) hints.Insert(0, new Hint(Pad.Start, "빠른 설정", OpenQuick));
             int x = Width - Theme.S(24);
             int cy = r.Y + h / 2;
             for (int i = hints.Count - 1; i >= 0; i--)
@@ -295,8 +386,10 @@ namespace TkoolLauncher
         // ───────── 입력: 패드 ─────────
         public void OnPad(Pad b)
         {
+            if (quick.Open) { quick.OnPad(b); return; }
             if (menu.Open) { menu.OnPad(b); return; }
-            if (b == Pad.Back || b == Pad.Start) { OpenMenu(); return; }
+            if (b == Pad.Back || b == Pad.Guide) { OpenMenu(); return; }
+            if (b == Pad.Start) { OpenQuick(); return; }
             Cur.OnPad(b);
             Animate();
         }
@@ -337,6 +430,9 @@ namespace TkoolLauncher
             base.OnMouseMove(e);
             if (!isDown || menu.Open) return;
             int dx = e.X - down.X, dy = e.Y - down.Y;
+            if (quick.Open) { quick.OnDrag(e.Location); dragging = Math.Abs(dx) > Theme.S(12); return; }
+            // 위쪽 끝에서 아래로 쓸어내리면 빠른 설정
+            if (down.Y < Theme.S(TopH) && dy > Theme.S(60)) { isDown = false; OpenQuick(); return; }
             if (!dragging && (Math.Abs(dx) > Theme.S(12) || Math.Abs(dy) > Theme.S(12)) && Cur.Area.Contains(down))
             {
                 dragging = true;
@@ -350,11 +446,14 @@ namespace TkoolLauncher
             base.OnMouseUp(e);
             if (!isDown) return;
             isDown = false;
+            if (dragging && quick.Open) { dragging = false; return; }
             if (dragging) { dragging = false; Cur.OnDrag(int.MinValue, int.MinValue, false); Animate(); return; }
             var p = e.Location;
             foreach (var h in hints) if (h.Bounds.Contains(p)) { h.Act?.Invoke(); Animate(); return; }
+            if (quick.Open) { quick.OnTap(p); Invalidate(); return; }
             if (menu.Open) { menu.OnTap(p); Invalidate(); return; }
             if (menuIcon.Contains(p)) { OpenMenu(); return; }
+            if (p.Y < Theme.S(TopH) && p.X > Width - Theme.S(220)) { OpenQuick(); return; }
             Cur.OnTap(p);
             Animate();
         }
@@ -451,8 +550,11 @@ namespace TkoolLauncher
             // 키보드 변환은 패드를 못 읽는 쯔꾸르(2000~VX Ace)만
             Gamepad.MapKeys = g.IsTkool && g.Version != TkoolVersion.MV && g.Version != TkoolVersion.MZ;
             string dir = g.InstallDir ?? g.Folder;
+            CameFromGame = false;
             GameWatch.Start(p, dir, () => BeginInvoke(new Action(() =>
             {
+                CameFromGame = false;
+                quick.Open = false; quick.T = 0;
                 st.TotalSeconds += (long)(DateTime.Now - started).TotalSeconds;
                 st.LastPlayed = DateTime.Now.Ticks;
                 GameData.Save();
