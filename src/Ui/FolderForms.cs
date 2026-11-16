@@ -166,9 +166,11 @@ namespace TkoolLauncher
         public string SelectedPath { get; private set; }
         string current; // null = 드라이브 목록
         readonly Button upBtn, pickBtn;
+        readonly bool exeMode;
 
-        public FolderPickerForm(string start) : base("게임 폴더 고르기")
+        public FolderPickerForm(string start, bool pickExe = false) : base(pickExe ? "게임 실행 파일 고르기" : "게임 폴더 고르기")
         {
+            exeMode = pickExe;
             AddButton("취소", () => { DialogResult = DialogResult.Cancel; Close(); });
             pickBtn = AddButton("이 폴더 선택", () =>
             {
@@ -179,8 +181,19 @@ namespace TkoolLauncher
             }, Theme.Accent);
             upBtn = AddButton("▲ 위로", GoUp);
             SetPrimary(pickBtn);
+            if (exeMode) pickBtn.Visible = false;
 
-            Grid.ItemClicked += it => Navigate((string)it.Tag);
+            Grid.ItemClicked += it =>
+            {
+                string t = (string)it.Tag;
+                if (t.StartsWith("file:"))
+                {
+                    SelectedPath = t.Substring(5);
+                    DialogResult = DialogResult.OK;
+                    Close();
+                }
+                else Navigate(t);
+            };
             Navigate(start != null && Directory.Exists(start) ? start : null);
         }
 
@@ -229,7 +242,7 @@ namespace TkoolLauncher
                         try
                         {
                             var g = GameScanner.Detect(dir);
-                            if (g != null) item.Badges.Add((g.VersionLabel, Theme.VersionColor(g.Version)));
+                            if (g != null) item.Badges.Add((g.VersionLabel, Theme.GameColor(g)));
                         }
                         catch { }
                         items.Add(item);
@@ -238,6 +251,20 @@ namespace TkoolLauncher
                 catch (Exception ex)
                 {
                     SubHeader.Text = path + "   ·   열 수 없음: " + ex.Message;
+                }
+                if (exeMode)
+                {
+                    SubHeader.Text = path + "   ·   게임 실행 파일(exe)을 누르세요";
+                    try
+                    {
+                        foreach (var f in Directory.GetFiles(path, "*.exe").OrderBy(x => x, StringComparer.CurrentCultureIgnoreCase))
+                        {
+                            var item = new TileItem { Title = Path.GetFileName(f), Tag = "file:" + f };
+                            item.Badges.Add(("실행 파일", Theme.Accent));
+                            items.Insert(0, item);
+                        }
+                    }
+                    catch { }
                 }
             }
             Grid.TileHeight = 76;
@@ -255,11 +282,11 @@ namespace TkoolLauncher
     {
         public bool Changed { get; private set; }
 
-        public FolderManagerForm(bool firstRun) : base(firstRun ? "쯔꾸르 게임 폴더를 골라 주세요" : "게임 폴더 설정")
+        public FolderManagerForm(bool firstRun) : base(firstRun ? "게임 폴더를 골라 주세요" : "게임 폴더 설정")
         {
             Grid.ShowSelection = true;
             Grid.EmptyText = "아직 등록된 폴더가 없어요.\n[폴더 추가]를 눌러 쯔꾸르 게임이 들어있는 폴더를 골라 주세요.";
-            SubHeader.Text = "여기 등록한 폴더 안의 게임을 자동으로 찾아요 (폴더 속 폴더까지)";
+            SubHeader.Text = "여기 등록한 폴더 안의 쯔꾸르·PC 게임을 자동으로 찾아요 (폴더 하나 = 게임 하나)";
 
             var done = AddButton("완료", () => { DialogResult = DialogResult.OK; Close(); }, Theme.Accent);
             AddButton("선택 삭제", RemoveSelected, Theme.Danger);

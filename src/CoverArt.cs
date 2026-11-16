@@ -151,7 +151,7 @@ namespace TkoolLauncher
         {
             string id = GameData.IdOf(g);
             string custom = CustomCover(g);
-            string stamp = Version + "|" + (custom ?? "") + "|" + (custom != null ? File.GetLastWriteTimeUtc(custom).Ticks.ToString() : "") + "|" + g.Title;
+            string stamp = Version + "|" + (g.CoverHint ?? "") + "|" + (g.HeroHint ?? "") + "|" + (custom ?? "") + "|" + (custom != null ? File.GetLastWriteTimeUtc(custom).Ticks.ToString() : "") + "|" + g.Title;
             string cPath = Path.Combine(CacheDir, id + "_c.png");
             string hPath = Path.Combine(CacheDir, id + "_h.png");
             string bPath = Path.Combine(CacheDir, id + "_b.png");
@@ -167,14 +167,29 @@ namespace TkoolLauncher
             }
             catch { }
 
-            Bitmap src = custom != null ? LoadPng(custom) : ArtExtract.FindTitleImage(g);
-            var art = new GameArt
+            GameArt art;
+            Bitmap store = custom == null && g.CoverHint != null ? LoadPng(g.CoverHint) : null;
+            if (store != null)
             {
-                Capsule = MakeCapsule(g, src, custom != null),
-                Hero = src != null ? MakeHero(src) : null,
-            };
+                // 스토어 표지는 이미 제목이 들어간 세로 그림이라 그대로
+                var heroSrc = g.HeroHint != null ? LoadPng(g.HeroHint) : null;
+                art = new GameArt { Capsule = MakeCapsule(g, store, true), Hero = heroSrc != null ? MakeHero(heroSrc) : null };
+                heroSrc?.Dispose();
+                store.Dispose();
+            }
+            else
+            {
+                Bitmap src = custom != null ? LoadPng(custom) : ArtExtract.FindTitleImage(g);
+                Bitmap heroOnly = src == null && g.HeroHint != null ? LoadPng(g.HeroHint) : null;
+                Bitmap icon = src == null && heroOnly == null && !g.IsTkool ? ArtExtract.ExeIcon(g.Exe) : null;
+                art = new GameArt
+                {
+                    Capsule = MakeCapsule(g, src ?? heroOnly, custom != null, icon),
+                    Hero = (src ?? heroOnly) != null ? MakeHero(src ?? heroOnly) : null,
+                };
+                src?.Dispose(); heroOnly?.Dispose(); icon?.Dispose();
+            }
             art.Blur = Shrink(art.Capsule, 24, 36);
-            src?.Dispose();
 
             try
             {
@@ -191,7 +206,7 @@ namespace TkoolLauncher
 
         static bool IsPixelArt(Bitmap b) => b.Width <= 816;
 
-        static Bitmap MakeCapsule(GameInfo g, Bitmap src, bool isCustom)
+        static Bitmap MakeCapsule(GameInfo g, Bitmap src, bool isCustom, Bitmap icon = null)
         {
             var bmp = new Bitmap(CW, CH, PixelFormat.Format32bppArgb);
             using (var gr = Graphics.FromImage(bmp))
@@ -209,7 +224,7 @@ namespace TkoolLauncher
                 }
                 else
                 {
-                    var c = Theme.VersionColor(g.Version);
+                    var c = Theme.GameColor(g);
                     using (var lg = new LinearGradientBrush(full, Mix(c, Color.Black, 0.35f), Mix(c, Color.FromArgb(10, 12, 18), 0.85f), 60f))
                         gr.FillRectangle(lg, full);
                     // 은은한 원 장식
@@ -220,7 +235,17 @@ namespace TkoolLauncher
                     }
                 }
 
-                if (isCustom) return bmp; // 직접 넣은 표지는 글씨 안 얹음
+                if (icon != null)
+                {
+                    // 실행 파일 아이콘을 가운데 위에 크게
+                    int isz = 140;
+                    var ir = new Rectangle((CW - isz) / 2, 110, isz, isz);
+                    using (var sh = new SolidBrush(Color.FromArgb(50, 0, 0, 0))) gr.FillEllipse(sh, ir.X - 20, ir.Y - 10, isz + 40, isz + 40);
+                    gr.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                    gr.DrawImage(icon, ir);
+                }
+
+                if (isCustom) return bmp; // 직접 넣은 표지·스토어 표지는 글씨 안 얹음
 
                 // 아래쪽 어둡게 + 제목
                 var shade = new Rectangle(0, CH * 45 / 100, CW, CH - CH * 45 / 100);
@@ -238,7 +263,7 @@ namespace TkoolLauncher
                         gr.DrawString(g.Title, f, sh, new RectangleF(textRect.X + 2, textRect.Y + 2, textRect.Width, textRect.Height), sf);
                     gr.DrawString(g.Title, f, Brushes.White, textRect, sf);
                     using (var tb = new SolidBrush(Color.FromArgb(190, 255, 255, 255)))
-                        gr.DrawString("RPG MAKER " + g.VersionLabel.ToUpperInvariant(), tagFont, tb, 18, CH - 34);
+                        gr.DrawString(g.IsTkool ? "RPG MAKER " + g.VersionLabel.ToUpperInvariant() : g.VersionLabel.ToUpperInvariant() + " GAME", tagFont, tb, 18, CH - 34);
                 }
             }
             return bmp;

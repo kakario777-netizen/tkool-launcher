@@ -19,6 +19,7 @@ namespace TkoolLauncher
 
         public static Bitmap FindTitleImage(GameInfo g)
         {
+            if (!g.IsTkool) return null;
             try
             {
                 switch (g.Version)
@@ -28,6 +29,28 @@ namespace TkoolLauncher
                     case TkoolVersion.RM2000: return From2k(g);
                     default: return FromRgss(g);
                 }
+            }
+            catch { return null; }
+        }
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        static extern uint PrivateExtractIcons(string file, int index, int cx, int cy, IntPtr[] icons, int[] ids, uint n, uint flags);
+        [DllImport("user32.dll")] static extern bool DestroyIcon(IntPtr h);
+
+        /// <summary>실행 파일의 큰 아이콘(256) 꺼내기</summary>
+        public static Bitmap ExeIcon(string exe)
+        {
+            try
+            {
+                if (exe == null || !File.Exists(exe)) return null;
+                var h = new IntPtr[1];
+                var ids = new int[1];
+                if (PrivateExtractIcons(exe, 0, 256, 256, h, ids, 1, 0) == 0 || h[0] == IntPtr.Zero) return null;
+                try
+                {
+                    using (var ic = Icon.FromHandle(h[0])) return ic.ToBitmap();
+                }
+                finally { DestroyIcon(h[0]); }
             }
             catch { return null; }
         }

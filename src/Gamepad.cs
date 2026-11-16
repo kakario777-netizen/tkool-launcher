@@ -114,7 +114,6 @@ namespace TkoolLauncher
         };
 
         // ── 상태 ──
-        public static Process Game;         // 런처가 띄운 게임
         public static bool MapKeys;         // 그 게임에 키보드 변환을 할지
         public static bool Used;            // 패드를 한 번이라도 썼는지 (선택 테두리 표시용)
 
@@ -137,8 +136,7 @@ namespace TkoolLauncher
         {
             get
             {
-                try { return Game != null && !Game.HasExited; }
-                catch { return false; }
+                return GameWatch.Running;
             }
         }
 
@@ -254,12 +252,18 @@ namespace TkoolLauncher
             sentKeys = Pad.None;
         }
 
+        static uint fgPid;
+        static bool fgIsGame;
+
         static bool GameIsForeground()
         {
             try
             {
                 GetWindowThreadProcessId(GetForegroundWindow(), out uint pid);
-                return Game != null && pid == (uint)Game.Id;
+                if (pid == fgPid) return fgIsGame;
+                fgPid = pid;
+                fgIsGame = GameWatch.InDir((int)pid, GameWatch.Dir);
+                return fgIsGame;
             }
             catch { return false; }
         }

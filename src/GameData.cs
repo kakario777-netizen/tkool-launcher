@@ -11,6 +11,7 @@ namespace TkoolLauncher
         public bool Favorite;
         public long LastPlayed;     // DateTime.Ticks (0 = 안 해봄)
         public long TotalSeconds;
+        public bool Hidden;
     }
 
     static class GameData
@@ -56,6 +57,7 @@ namespace TkoolLauncher
                         Favorite = p[1] == "1",
                         LastPlayed = long.TryParse(p[2], out long lp) ? lp : 0,
                         TotalSeconds = long.TryParse(p[3], out long ts) ? ts : 0,
+                        Hidden = p.Length > 4 && p[4] == "1",
                     };
                     stats[p[0]] = s;
                 }
@@ -72,13 +74,26 @@ namespace TkoolLauncher
                 foreach (var kv in stats)
                 {
                     var s = kv.Value;
-                    if (!s.Favorite && s.LastPlayed == 0 && s.TotalSeconds == 0) continue;
+                    if (!s.Favorite && s.LastPlayed == 0 && s.TotalSeconds == 0 && !s.Hidden) continue;
                     sb.Append(kv.Key).Append('|').Append(s.Favorite ? "1" : "0").Append('|')
-                      .Append(s.LastPlayed).Append('|').Append(s.TotalSeconds).AppendLine();
+                      .Append(s.LastPlayed).Append('|').Append(s.TotalSeconds).Append('|').Append(s.Hidden ? "1" : "0").AppendLine();
                 }
                 File.WriteAllText(FilePath, sb.ToString(), new UTF8Encoding(false));
             }
             catch { }
+        }
+
+        public static void UnhideAll()
+        {
+            foreach (var s in stats.Values) s.Hidden = false;
+            Save();
+        }
+
+        public static int HiddenCount()
+        {
+            int n = 0;
+            foreach (var s in stats.Values) if (s.Hidden) n++;
+            return n;
         }
 
         public static string PlayTimeText(long seconds)

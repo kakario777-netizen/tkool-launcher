@@ -65,10 +65,10 @@ namespace TkoolLauncher
             {
                 if (Settings.AutoUpdate) Updater.CheckAsync(this, msg => ShowToast(msg, 60000), () =>
                 {
-                    if (Gamepad.Game == null || Gamepad.Game.HasExited) Updater.Restart();
+                    if (!GameWatch.Running) Updater.Restart();
                     else ShowToast("게임을 끄면 새 버전으로 바뀌어요", 5000);
                 });
-                if (Settings.GameFolders.Count == 0) OpenFolders(true);
+                if (Settings.GameFolders.Count == 0 && !Settings.StoreScan) OpenFolders(true);
                 else Rescan();
             };
         }
@@ -122,9 +122,11 @@ namespace TkoolLauncher
             Animate();
         }
 
+        public IEnumerable<GameInfo> VisibleGames => Games.Where(g => !GameData.Get(g).Hidden);
+
         public List<GameInfo> Recent(int max)
         {
-            return Games.OrderByDescending(g => GameData.Get(g).LastPlayed)
+            return VisibleGames.OrderByDescending(g => GameData.Get(g).LastPlayed)
                         .ThenBy(g => g.Title, StringComparer.CurrentCultureIgnoreCase)
                         .Take(max).ToList();
         }
@@ -376,6 +378,20 @@ namespace TkoolLauncher
             }
         }
 
+        public void AddManualGame()
+        {
+            using (var f = new FolderPickerForm(null, true))
+            {
+                if (f.ShowDialog(this) != DialogResult.OK) return;
+                if (!Settings.ManualGames.Contains(f.SelectedPath, StringComparer.OrdinalIgnoreCase))
+                {
+                    Settings.ManualGames.Add(f.SelectedPath);
+                    Settings.Save();
+                }
+                Rescan();
+            }
+        }
+
         public void Rescan()
         {
             if (Scanning) return;
@@ -395,6 +411,12 @@ namespace TkoolLauncher
             });
         }
 
+        public void RefreshLists()
+        {
+            foreach (var s in stack) s.OnGamesChanged();
+            FocusChanged();
+        }
+
         public void SetGames(List<GameInfo> found)
         {
             Games = found;
@@ -405,39 +427,42 @@ namespace TkoolLauncher
 
         public void Launch(GameInfo g)
         {
+            if (GameWatch.Running) { ShowToast("다른 게임이 아직 실행 중이에요", 3000); return; }
+            Process p = null;
             try
             {
-                var psi = new ProcessStartInfo(g.Exe) { WorkingDirectory = g.Folder, UseShellExecute = true };
-                var p = Process.Start(psi);
-                var st = GameData.Get(g);
-                st.LastPlayed = DateTime.Now.Ticks;
-                GameData.Save();
-                var started = DateTime.Now;
-                WindowState = FormWindowState.Minimized; // 게임하는 동안 런처는 쉬기
-                if (p == null) return;
-
-                // MV·MZ는 게임 자체가 패드를 잘 읽으므로 키 변환은 2000~VX Ace만
-                Gamepad.Game = p;
-                Gamepad.MapKeys = g.Version != TkoolVersion.MV && g.Version != TkoolVersion.MZ;
-                p.EnableRaisingEvents = true;
-                p.Exited += (s, e) => BeginInvoke(new Action(() =>
-                {
-                    if (Gamepad.Game == p) Gamepad.Game = null;
-                    st.TotalSeconds += (long)(DateTime.Now - started).TotalSeconds;
-                    st.LastPlayed = DateTime.Now.Ticks;
-                    GameData.Save();
-                    if (Updater.RestartPending) { Updater.Restart(); return; }
-                    foreach (var sc in stack) if (!(sc is DetailScreen)) sc.OnGamesChanged();
-                    WindowState = FormWindowState.Maximized;
-                    Activate();
-                    Invalidate();
-                }));
+                if (g.LaunchUri != null)
+                    Process.Start(new ProcessStartInfo(g.LaunchUri) { UseShellExecute = true });
+                else
+                    p = Process.Start(new ProcessStartInfo(g.Exe) { WorkingDirectory = g.Folder, UseShellExecute = true });
             }
             catch (Exception ex)
             {
-                WindowState = FormWindowState.Maximized;
                 ShowToast("실행하지 못했어요: " + ex.Message, 5000);
+                return;
             }
+
+            var st = GameData.Get(g);
+            st.LastPlayed = DateTime.Now.Ticks;
+            GameData.Save();
+            var started = DateTime.Now;
+            WindowState = FormWindowState.Minimized; // 게임하는 동안 런처는 쉬기
+
+            // 키보드 변환은 패드를 못 읽는 쯔꾸르(2000~VX Ace)만
+            Gamepad.MapKeys = g.IsTkool && g.Version != TkoolVersion.MV && g.Version != TkoolVersion.MZ;
+            string dir = g.InstallDir ?? g.Folder;
+            GameWatch.Start(p, dir, () => BeginInvoke(new Action(() =>
+            {
+                st.TotalSeconds += (long)(DateTime.Now - started).TotalSeconds;
+                st.LastPlayed = DateTime.Now.Ticks;
+                GameData.Save();
+                Gamepad.MapKeys = false;
+                if (Updater.RestartPending) { Updater.Restart(); return; }
+                foreach (var sc in stack) if (!(sc is DetailScreen)) sc.OnGamesChanged();
+                WindowState = FormWindowState.Maximized;
+                Activate();
+                Invalidate();
+            })));
         }
     }
 }

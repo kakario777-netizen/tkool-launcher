@@ -6,9 +6,18 @@ using System.Linq;
 namespace TkoolLauncher
 {
     enum TkoolVersion { RM2000, XP, VX, VXAce, MV, MZ }
+    enum GameKind { Tkool, Steam, Epic, Gog, Pc }
 
     class GameInfo
     {
+        public GameKind Kind = GameKind.Tkool;
+        public string LaunchUri;     // 스팀·에픽은 주소로 실행
+        public string InstallDir;    // 플레이 시간 잴 때 이 폴더의 프로그램을 찾음
+        public string CoverHint;     // 스토어가 갖고 있는 세로 표지
+        public string HeroHint;      // 스토어가 갖고 있는 가로 큰 그림
+        public bool Manual;          // 직접 추가한 게임
+        public bool IsTkool => Kind == GameKind.Tkool;
+
         public string Title;
         public string Folder;
         public string Exe;
@@ -21,6 +30,13 @@ namespace TkoolLauncher
         {
             get
             {
+                switch (Kind)
+                {
+                    case GameKind.Steam: return "Steam";
+                    case GameKind.Epic: return "Epic";
+                    case GameKind.Gog: return "GOG";
+                    case GameKind.Pc: return "PC";
+                }
                 switch (Version)
                 {
                     case TkoolVersion.RM2000: return "2000/2003";
@@ -58,6 +74,20 @@ namespace TkoolLauncher
             {
                 if (Directory.Exists(r)) Walk(r, 0, list, seen);
             }
+            // 스토어 게임 + 직접 추가한 게임 합치기 (같은 폴더가 겹치면 스토어 쪽만)
+            var stores = new List<GameInfo>();
+            if (Settings.StoreScan) { try { stores = StoreScanner.ScanAll(); } catch { } }
+            foreach (var st in stores)
+            {
+                list.RemoveAll(x => !x.IsTkool && st.InstallDir != null &&
+                    x.Folder.StartsWith(st.InstallDir.TrimEnd('\\') , StringComparison.OrdinalIgnoreCase));
+                if (seen.Add(st.Exe ?? st.LaunchUri)) list.Add(st);
+            }
+            foreach (var exe in Settings.ManualGames)
+            {
+                if (!File.Exists(exe) || seen.Contains(exe)) continue;
+                try { var g = FromExe(exe); if (seen.Add(g.Exe)) list.Add(g); } catch { }
+            }
             return list.OrderBy(g => g.Title, StringComparer.CurrentCultureIgnoreCase).ToList();
         }
 
@@ -65,6 +95,10 @@ namespace TkoolLauncher
         {
             GameInfo g = null;
             try { g = Detect(dir); } catch { }
+            if (g == null && depth >= 1)
+            {
+                try { g = DetectPc(dir); } catch { }
+            }
             if (g != null)
             {
                 if (seen.Add(g.Exe)) list.Add(g);
@@ -86,6 +120,64 @@ namespace TkoolLauncher
                 catch { continue; }
                 Walk(s, depth + 1, list, seen);
             }
+        }
+
+        // ───────── 일반 PC 게임 ─────────
+        static readonly string[] PcSkip =
+        {
+            "unins", "uninstall", "setup", "install", "crash", "unitycrashhandler", "vc_redist", "vcredist",
+            "dxsetup", "dxwebsetup", "dotnet", "redist", "updater", "update", "config", "settings", "report",
+            "notification_helper", "nwjc", "ue4prereq", "ueprereq", "easyanticheat", "be_service", "battleye",
+            "cefprocess", "subprocess", "helper", "7z", "winrar", "python", "java"
+        };
+
+        static bool GoodExe(string path)
+        {
+            string n = Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
+            if (PcSkip.Any(h => n.StartsWith(h) || n.Contains("crash") || n.Contains("redist"))) return false;
+            try { return new FileInfo(path).Length > 150 * 1024; } catch { return false; }
+        }
+
+        /// <summary>폴더 하나 = 게임 하나로 보고 대표 실행 파일 고르기</summary>
+        public static GameInfo DetectPc(string dir)
+        {
+            string[] exes;
+            try { exes = Directory.GetFiles(dir, "*.exe").Where(GoodExe).ToArray(); } catch { return null; }
+            if (exes.Length == 0) return null;
+            string folder = Path.GetFileName(dir);
+            string pick =
+                // 유니티: 이름.exe + 이름_Data
+                exes.FirstOrDefault(e => Directory.Exists(Path.Combine(dir, Path.GetFileNameWithoutExtension(e) + "_Data"))) ??
+                exes.FirstOrDefault(e => Path.GetFileNameWithoutExtension(e).Equals(folder, StringComparison.OrdinalIgnoreCase)) ??
+                exes.FirstOrDefault(e => Path.GetFileName(e).Equals("Game.exe", StringComparison.OrdinalIgnoreCase)) ??
+                exes.OrderByDescending(e => { try { return new FileInfo(e).Length; } catch { return 0L; } }).First();
+            return new GameInfo
+            {
+                Kind = GameKind.Pc,
+                Folder = dir,
+                InstallDir = dir,
+                Exe = pick,
+                Title = PrettyName(folder),
+                Japanese = TextDecode.LangOf(folder) == TextLang.Japanese,
+            };
+        }
+
+        public static GameInfo FromExe(string exe)
+        {
+            string dir = Path.GetDirectoryName(exe);
+            var g = Detect(dir);
+            if (g != null) { g.Manual = true; return g; }
+            return new GameInfo
+            {
+                Kind = GameKind.Pc, Folder = dir, InstallDir = dir, Exe = exe, Manual = true,
+                Title = PrettyName(Path.GetFileName(dir) is string f && f.Length > 0 ? f : Path.GetFileNameWithoutExtension(exe)),
+            };
+        }
+
+        static string PrettyName(string s)
+        {
+            s = s.Replace('_', ' ').Trim();
+            return s.Length == 0 ? "게임" : s;
         }
 
         static bool Has(string dir, string rel) => File.Exists(Path.Combine(dir, rel));

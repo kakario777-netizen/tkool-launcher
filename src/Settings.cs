@@ -16,10 +16,13 @@ namespace TkoolLauncher
 
         public static List<string> GameFolders = new List<string>();
         public static bool AutoUpdate = true;
+        public static bool StoreScan = true;
+        public static List<string> ManualGames = new List<string>();
 
         public static void Load()
         {
             GameFolders.Clear();
+            ManualGames.Clear();
             try
             {
                 if (!File.Exists(FilePath)) return;
@@ -31,6 +34,10 @@ namespace TkoolLauncher
                     string val = raw.Substring(eq + 1).Trim();
                     if (key == "GameFolder" && val.Length > 0 && !GameFolders.Contains(val))
                         GameFolders.Add(val);
+                    else if (key == "ManualGame" && val.Length > 0 && !ManualGames.Contains(val))
+                        ManualGames.Add(val);
+                    else if (key == "StoreScan")
+                        StoreScan = val != "0";
                     else if (key == "AutoUpdate")
                         AutoUpdate = val != "0";
                 }
@@ -46,7 +53,9 @@ namespace TkoolLauncher
                 var sb = new StringBuilder();
                 sb.AppendLine("[쯔꾸르 런처]");
                 sb.AppendLine("AutoUpdate=" + (AutoUpdate ? "1" : "0"));
+                sb.AppendLine("StoreScan=" + (StoreScan ? "1" : "0"));
                 foreach (var f in GameFolders) sb.AppendLine("GameFolder=" + f);
+                foreach (var f in ManualGames) sb.AppendLine("ManualGame=" + f);
                 File.WriteAllText(FilePath, sb.ToString(), new UTF8Encoding(false));
             }
             catch { }

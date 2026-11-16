@@ -43,6 +43,18 @@ namespace TkoolLauncher
         public static Font F(float pt, bool bold = false) =>
             new Font(FontName, pt, bold ? FontStyle.Bold : FontStyle.Regular, GraphicsUnit.Point);
 
+        public static Color GameColor(GameInfo g)
+        {
+            switch (g.Kind)
+            {
+                case GameKind.Steam: return Color.FromArgb(42, 71, 94);
+                case GameKind.Epic: return Color.FromArgb(70, 70, 76);
+                case GameKind.Gog: return Color.FromArgb(124, 64, 168);
+                case GameKind.Pc: return Color.FromArgb(58, 96, 140);
+                default: return VersionColor(g.Version);
+            }
+        }
+
         public static Color VersionColor(TkoolVersion v)
         {
             switch (v)
