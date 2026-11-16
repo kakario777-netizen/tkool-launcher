@@ -37,8 +37,13 @@ namespace TkoolLauncher
         }
 
         /// <summary>status: 화면에 잠깐 띄울 글, ready: 교체 끝났을 때 (UI 스레드에서 호출)</summary>
-        public static void CheckAsync(Control ui, Action<string> status, Action ready)
+        public static bool Checking;
+
+        /// <summary>manual = 설정에서 직접 누른 경우 (결과를 꼭 알려줌)</summary>
+        public static void CheckAsync(Control ui, Action<string> status, Action ready, bool manual = false)
         {
+            if (Checking || RestartPending) { if (manual && RestartPending) status("새 버전이 준비됐어요. 게임을 끄면 바뀌어요"); return; }
+            Checking = true;
             Task.Run(() =>
             {
                 try
@@ -54,7 +59,11 @@ namespace TkoolLauncher
                         if (tag == null) return;
                         if (!Version.TryParse(tag.TrimStart('v', 'V'), out Version latest)) return;
                         latest = new Version(latest.Major, latest.Minor, Math.Max(0, latest.Build));
-                        if (latest <= Current) return;
+                        if (latest <= Current)
+                        {
+                            if (manual) ui.BeginInvoke(new Action(() => status("최신 버전이에요 (v" + Current + ")")));
+                            return;
+                        }
 
                         string url = TextDecode.JsonString(json, "browser_download_url");
                         if (url == null || !url.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) return;
@@ -85,8 +94,10 @@ namespace TkoolLauncher
                 }
                 catch
                 {
-                    // 인터넷이 없거나 폴더에 쓰기 권한이 없으면 조용히 넘어감
+                    // 인터넷이 없거나 폴더에 쓰기 권한이 없으면 조용히 넘어감 (직접 눌렀을 때만 알림)
+                    if (manual) try { ui.BeginInvoke(new Action(() => status("업데이트 확인 실패 — 인터넷 연결을 확인해 주세요"))); } catch { }
                 }
+                finally { Checking = false; }
             });
         }
 

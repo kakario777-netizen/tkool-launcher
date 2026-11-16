@@ -525,7 +525,7 @@ namespace TkoolLauncher
         Rectangle panel;
         readonly List<Rectangle> rects = new List<Rectangle>();
 
-        string[] Names => new[] { "홈", "라이브러리", "게임 폴더 설정", "게임 다시 찾기", "런처 끄기" };
+        string[] Names => new[] { "홈", "라이브러리", "설정", "게임 폴더 설정", "게임 다시 찾기", "런처 끄기" };
 
         public bool Tick(float dt)
         {
@@ -561,7 +561,7 @@ namespace TkoolLauncher
                 Draw.Text(g, names[i], i == focus ? Theme.Px(18, true) : Draw.Menu, new Rectangle(r.X + Theme.S(22), r.Y, r.Width, r.Height),
                     i == names.Length - 1 ? Color.FromArgb(240, 140, 140) : Theme.Text);
                 y += Theme.S(60);
-                if (i == 1 || i == 3) y += Theme.S(14);
+                if (i == 1 || i == 4) y += Theme.S(14);
             }
         }
 
@@ -575,9 +575,10 @@ namespace TkoolLauncher
             {
                 case 0: Shell.GoHome(); break;
                 case 1: Shell.GoHome(); Shell.Push(new LibraryScreen()); break;
-                case 2: Shell.OpenFolders(); break;
-                case 3: Shell.Rescan(); break;
-                case 4: Shell.Close(); break;
+                case 2: Shell.GoHome(); Shell.Push(new SettingsScreen()); break;
+                case 3: Shell.OpenFolders(); break;
+                case 4: Shell.Rescan(); break;
+                case 5: Shell.Close(); break;
             }
         }
 
@@ -604,6 +605,113 @@ namespace TkoolLauncher
         {
             new Hint(Pad.A, "선택", () => Run(focus)),
             new Hint(Pad.B, "닫기", () => { Open = false; Shell.Animate(); }),
+        };
+    }
+}
+
+namespace TkoolLauncher
+{
+    // ═════════════════════ 설정 ═════════════════════
+    class SettingsScreen : Screen
+    {
+        int focus;
+        readonly List<Rectangle> rows = new List<Rectangle>();
+        string updateNote;
+
+        class Row { public string Title, Sub, Value; public bool? Toggle; public Action Act; }
+
+        List<Row> Rows()
+        {
+            return new List<Row>
+            {
+                new Row { Title = "자동 업데이트", Sub = "켤 때 새 버전이 있으면 알아서 받고 런처만 다시 켜져요", Toggle = Settings.AutoUpdate,
+                          Act = () => { Settings.AutoUpdate = !Settings.AutoUpdate; Settings.Save(); } },
+                new Row { Title = "지금 업데이트 확인", Sub = updateNote ?? "GitHub에 올라온 새 버전을 바로 확인해요", Value = "v" + Updater.Current,
+                          Act = CheckNow },
+                new Row { Title = "게임 폴더 설정", Sub = "쯔꾸르 게임이 들어있는 폴더 추가·삭제", Value = Settings.GameFolders.Count + "개 폴더",
+                          Act = Shell.OpenFolders },
+                new Row { Title = "게임 다시 찾기", Sub = "폴더에 새 게임을 넣었을 때", Value = "게임 " + Shell.Games.Count + "개",
+                          Act = Shell.Rescan },
+            };
+        }
+
+        void CheckNow()
+        {
+            updateNote = "확인하는 중...";
+            Updater.CheckAsync(Shell, msg => { updateNote = msg; Shell.ShowToast(msg, 4000); Shell.Invalidate(); }, () =>
+            {
+                updateNote = "새 버전을 받았어요. 다시 켜는 중...";
+                Shell.Invalidate();
+                if (Gamepad.Game == null || Gamepad.Game.HasExited) Updater.Restart();
+            }, true);
+            Shell.Invalidate();
+        }
+
+        public override void Paint(Graphics g)
+        {
+            int pad = S(48);
+            int w = Math.Min(Area.Width - pad * 2, S(900));
+            int x = Area.X + (Area.Width - w) / 2;
+            Draw.Text(g, "설정", Draw.H1, new Rectangle(x, Area.Y + S(20), w, S(40)), Theme.Text);
+
+            rows.Clear();
+            int y = Area.Y + S(80);
+            var list = Rows();
+            for (int i = 0; i < list.Count; i++)
+            {
+                var row = list[i];
+                var r = new Rectangle(x, y, w, S(76));
+                rows.Add(r);
+                Draw.Fill(g, r, S(4), i == focus ? Theme.TileHot : Color.FromArgb(150, 23, 29, 37));
+                Draw.Text(g, row.Title, Draw.Menu, new Rectangle(r.X + S(24), r.Y + S(12), r.Width - S(260), S(28)), Theme.Text);
+                Draw.Text(g, row.Sub, Draw.Small, new Rectangle(r.X + S(24), r.Y + S(42), r.Width - S(260), S(22)), Theme.SubText);
+                if (row.Toggle.HasValue)
+                {
+                    var t = new Rectangle(r.Right - S(24) - S(56), r.Y + (r.Height - S(30)) / 2, S(56), S(30));
+                    Draw.Fill(g, t, S(15), row.Toggle.Value ? Theme.Accent : Color.FromArgb(70, 78, 90));
+                    int k = S(24);
+                    var knob = new Rectangle(row.Toggle.Value ? t.Right - k - S(3) : t.X + S(3), t.Y + S(3), k, k);
+                    using (var b = new SolidBrush(Color.White)) g.FillEllipse(b, knob);
+                }
+                else if (row.Value != null)
+                {
+                    Draw.Text(g, row.Value, Draw.Body, new Rectangle(r.Right - S(224), r.Y, S(200), r.Height), Theme.SubText, Draw.Right);
+                }
+                if (i == focus && Shell.ShowFocus) Draw.Ring(g, r, S(4), Theme.Focus, S(2));
+                y += S(86);
+            }
+        }
+
+        void Run(int i)
+        {
+            var list = Rows();
+            if (i >= 0 && i < list.Count) list[i].Act?.Invoke();
+            Shell.Invalidate();
+        }
+
+        public override void OnPad(Pad b)
+        {
+            int n = Rows().Count;
+            switch (b)
+            {
+                case Pad.Up: focus = Math.Max(0, focus - 1); break;
+                case Pad.Down: focus = Math.Min(n - 1, focus + 1); break;
+                case Pad.A: Run(focus); break;
+                case Pad.B: Shell.Pop(); break;
+            }
+            Shell.Invalidate();
+        }
+
+        public override void OnTap(Point p)
+        {
+            for (int i = 0; i < rows.Count; i++)
+                if (rows[i].Contains(p)) { focus = i; Run(i); return; }
+        }
+
+        public override List<Hint> Hints() => new List<Hint>
+        {
+            new Hint(Pad.A, "선택", () => Run(focus)),
+            new Hint(Pad.B, "뒤로", Shell.Pop),
         };
     }
 }

@@ -15,6 +15,7 @@ namespace TkoolLauncher
         static readonly string FilePath = Path.Combine(Dir, "settings.ini");
 
         public static List<string> GameFolders = new List<string>();
+        public static bool AutoUpdate = true;
 
         public static void Load()
         {
@@ -30,6 +31,8 @@ namespace TkoolLauncher
                     string val = raw.Substring(eq + 1).Trim();
                     if (key == "GameFolder" && val.Length > 0 && !GameFolders.Contains(val))
                         GameFolders.Add(val);
+                    else if (key == "AutoUpdate")
+                        AutoUpdate = val != "0";
                 }
             }
             catch { }
@@ -42,6 +45,7 @@ namespace TkoolLauncher
                 Directory.CreateDirectory(Dir);
                 var sb = new StringBuilder();
                 sb.AppendLine("[쯔꾸르 런처]");
+                sb.AppendLine("AutoUpdate=" + (AutoUpdate ? "1" : "0"));
                 foreach (var f in GameFolders) sb.AppendLine("GameFolder=" + f);
                 File.WriteAllText(FilePath, sb.ToString(), new UTF8Encoding(false));
             }

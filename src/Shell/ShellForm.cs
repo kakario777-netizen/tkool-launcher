@@ -63,7 +63,7 @@ namespace TkoolLauncher
 
             Shown += (s, e) =>
             {
-                Updater.CheckAsync(this, msg => ShowToast(msg, 60000), () =>
+                if (Settings.AutoUpdate) Updater.CheckAsync(this, msg => ShowToast(msg, 60000), () =>
                 {
                     if (Gamepad.Game == null || Gamepad.Game.HasExited) Updater.Restart();
                     else ShowToast("게임을 끄면 새 버전으로 바뀌어요", 5000);
