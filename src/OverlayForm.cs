@@ -72,7 +72,10 @@ namespace TkoolLauncher
                     string bat = "";
                     try { bat = "  배터리 " + (int)Math.Round(SystemInformation.PowerStatus.BatteryLifePercent * 100) + "%"; } catch { }
                     float temp = Hardware.TempReady ? Hardware.CpuTemp() : 0;
-                    t = "CPU " + (int)c + "%" + (temp > 0 ? " " + (int)temp + "°C" : "") + (Settings.Tdp > 0 ? " " + Settings.Tdp + "W" : "") + "   GPU " + (gpu < 0 ? "-" : ((int)gpu).ToString()) + "%   RAM " + used.ToString("0.0") + "/" + total.ToString("0.0") + "GB" +
+                    float fps = Fps.Value;
+                    string fpsText = fps > 0 ? "FPS " + (int)Math.Round(fps) + "   " : (Fps.Problem != "" && GameWatch.Running ? "FPS -   " : "");
+                    int tdpNow = Settings.SmartFps > 0 && GameWatch.Running ? SmartTdp.Current : Settings.Tdp;
+                    t = fpsText + "CPU " + (int)c + "%" + (temp > 0 ? " " + (int)temp + "°C" : "") + (tdpNow > 0 ? " " + tdpNow + "W" : "") + "   GPU " + (gpu < 0 ? "-" : ((int)gpu).ToString()) + "%   RAM " + used.ToString("0.0") + "/" + total.ToString("0.0") + "GB" +
                         (w > 0 ? "   " + w.ToString("0.0") + "W" : "") + bat + "   " + DateTime.Now.ToString("HH:mm");
                 }
                 catch { t = "측정 실패"; }

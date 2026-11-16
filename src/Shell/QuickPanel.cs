@@ -160,6 +160,17 @@ namespace TkoolLauncher
                     }
                 });
             }
+            if (Hardware.SmuReady)
+            {
+                var smartNames = new[] { "끔", "30 FPS", "40 FPS", "45 FPS", "60 FPS" };
+                var smartVals = new[] { 0, 30, 40, 45, 60 };
+                rows.Add(new Row
+                {
+                    Kind = Kind.Choice, Title = "스마트 TDP", Sub = Fps.Problem != "" && Settings.SmartFps > 0 ? Fps.Problem : "목표 FPS를 지키며 전력을 아껴요",
+                    Choices = smartNames, ChoiceIndex = Math.Max(0, Array.IndexOf(smartVals, Settings.SmartFps)),
+                    Change = v => { Settings.SmartFps = smartVals[v]; Settings.Save(); SmartTdp.Reset(); }
+                });
+            }
             if (Hardware.EcReady)
             {
                 var fanNames = new List<string> { "자동" };
@@ -199,6 +210,9 @@ namespace TkoolLauncher
             }
 
             // ── 빠른 버튼 ──
+            rows.Add(new Row { Kind = Kind.Toggle, Title = "조이스틱 마우스 모드", Sub = "왼쪽 스틱 이동 · A 클릭 · B 오른쪽 클릭 · 오른쪽 스틱 휠", On = Gamepad.MouseMode,
+                               Change = v => Gamepad.MouseMode = v == 1 });
+            rows.Add(new Row { Kind = Kind.Action, Title = "미니 모드", Sub = "런처를 작은 동그라미로 줄여요", Act = Shell.EnterMini });
             rows.Add(new Row { Kind = Kind.Action, Title = "ESC 보내기", Act = () => Shell.SendToGame(() => KeySender.Combo(KeySender.Esc)) });
             rows.Add(new Row { Kind = Kind.Action, Title = "전체 화면 전환 (Alt+Enter)", Act = () => Shell.SendToGame(() => KeySender.Combo(KeySender.Alt, KeySender.Enter)) });
             rows.Add(new Row { Kind = Kind.Action, Title = "스크린샷", Sub = "사진 › 스크린샷 폴더에 저장돼요", Act = () => Shell.SendToGame(() => KeySender.Combo(KeySender.Win, KeySender.PrtSc)) });

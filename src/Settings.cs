@@ -20,6 +20,11 @@ namespace TkoolLauncher
         public static string HomeKey = "Win+Ctrl+128";   // AYA 큰 버튼 (Ctrl+Win+F17)
         public static string SmallKey = "Win+68";        // AYA 작은 버튼 (Win+D)
         public static bool HardwareControl;
+        public static int SmartFps;          // 0 = 끔
+        public static int AccentIndex;       // 테마 색
+        public static bool UseBgImage = true, Bgm;
+        public static int LcAction = 1, RcAction = 3;   // 위쪽 LC/RC 버튼 기능 (ButtonActions 번호)
+        public static bool LoopGuard = true;
         public static int Tdp;          // 0 = 기기 기본
         public static int Fan = -1;     // -1 = 자동
         public static bool LedSet, LedOn = true;
@@ -47,6 +52,13 @@ namespace TkoolLauncher
                     else if (key == "SmallKey") SmallKey = val;
                     else if (key == "HardwareControl") HardwareControl = val == "1";
                     else if (key == "Tdp") int.TryParse(val, out Tdp);
+                    else if (key == "SmartFps") int.TryParse(val, out SmartFps);
+                    else if (key == "Accent") int.TryParse(val, out AccentIndex);
+                    else if (key == "BgImage") UseBgImage = val != "0";
+                    else if (key == "Bgm") Bgm = val == "1";
+                    else if (key == "LcAction") int.TryParse(val, out LcAction);
+                    else if (key == "RcAction") int.TryParse(val, out RcAction);
+                    else if (key == "LoopGuard") LoopGuard = val != "0";
                     else if (key == "Fan") int.TryParse(val, out Fan);
                     else if (key == "Led")
                     {
@@ -79,6 +91,13 @@ namespace TkoolLauncher
                 sb.AppendLine("SmallKey=" + SmallKey);
                 sb.AppendLine("HardwareControl=" + (HardwareControl ? "1" : "0"));
                 sb.AppendLine("Tdp=" + Tdp);
+                sb.AppendLine("SmartFps=" + SmartFps);
+                sb.AppendLine("Accent=" + AccentIndex);
+                sb.AppendLine("BgImage=" + (UseBgImage ? "1" : "0"));
+                sb.AppendLine("Bgm=" + (Bgm ? "1" : "0"));
+                sb.AppendLine("LcAction=" + LcAction);
+                sb.AppendLine("RcAction=" + RcAction);
+                sb.AppendLine("LoopGuard=" + (LoopGuard ? "1" : "0"));
                 sb.AppendLine("Fan=" + Fan);
                 if (LedSet) sb.AppendLine("Led=" + (LedOn ? "1" : "0") + "," + LedR + "," + LedG + "," + LedB + "," + LedBright);
                 foreach (var f in GameFolders) sb.AppendLine("GameFolder=" + f);

@@ -130,6 +130,10 @@ namespace TkoolLauncher
         // ── 상태 ──
         public static bool MapKeys;         // 그 게임에 키보드 변환을 할지
         public static bool Used;            // 패드를 한 번이라도 썼는지 (선택 테두리 표시용)
+        public static bool MouseMode;       // 조이스틱으로 마우스 움직이기
+        static XState raw;
+        static int lastPress;
+        public static int LastPressAge() => Environment.TickCount - lastPress;
 
         static Timer timer;
         static int index = -1;
@@ -159,7 +163,7 @@ namespace TkoolLauncher
             var target = Form.ActiveForm as IPadTarget;
             bool game = GameRunning;
 
-            if (target == null && !game)
+            if (target == null && !game && !MouseMode)
             {
                 // 런처가 뒤에 있고 변환할 게임도 없음 → 쉬기
                 ReleaseGameKeys();
@@ -172,6 +176,7 @@ namespace TkoolLauncher
             // 화면 처리 중 새 창(대화상자)이 떠서 타이머가 다시 불려도 같은 버튼을 두 번 받지 않게 먼저 기록
             Pad old = prev;
             prev = cur;
+            if ((cur & ~old) != 0) lastPress = Environment.TickCount;
 
             bool gameMode = target == null;
             if (gameMode != lastGameMode)
@@ -200,7 +205,8 @@ namespace TkoolLauncher
                     Home?.Invoke();
                     return;
                 }
-                if (MapKeys && GameIsForeground()) HandleGame(cur & ~blocked);
+                if (MouseMode) { ReleaseGameKeys(); HandleMouse(cur, old); timer.Interval = 16; }
+                else if (MapKeys && GameIsForeground()) HandleGame(cur & ~blocked);
                 else ReleaseGameKeys();
             }
         }
@@ -221,6 +227,7 @@ namespace TkoolLauncher
                 if (index < 0) return Pad.None;
             }
             if (!Read(index, out XState s)) { index = -1; return Pad.None; }
+            raw = s;
 
             var p = (Pad)s.Buttons;
             const int dead = 14000;
@@ -265,6 +272,40 @@ namespace TkoolLauncher
                 if (down && !sent) { SendKey(k, true); sentKeys |= b; }
                 else if (!down && sent) { SendKey(k, false); sentKeys &= ~b; }
             }
+        }
+
+        // ── 조이스틱 마우스: 왼쪽 스틱 이동, A 왼쪽 클릭, B 오른쪽 클릭, 오른쪽 스틱 휠 ──
+        static float mx, my;
+
+        static void SendMouse(int dx, int dy, uint flags, int data = 0)
+        {
+            var inp = new INPUT { type = 0, u = new InputUnion { mi = new MOUSEINPUT { dx = dx, dy = dy, flags = flags, data = (uint)data } } };
+            SendInput(1, new[] { inp }, Marshal.SizeOf(typeof(INPUT)));
+        }
+
+        static float Curve(short v)
+        {
+            float f = v / 32767f;
+            float a = Math.Abs(f);
+            if (a < 0.12f) return 0;
+            a = (a - 0.12f) / 0.88f;
+            return Math.Sign(f) * a * a;
+        }
+
+        static void HandleMouse(Pad cur, Pad old)
+        {
+            float speed = Theme.S(22);
+            mx += Curve(raw.LX) * speed;
+            my -= Curve(raw.LY) * speed;
+            int ix = (int)mx, iy = (int)my;
+            if (ix != 0 || iy != 0) { SendMouse(ix, iy, 0x0001); mx -= ix; my -= iy; }
+            float wheel = Curve(raw.RY);
+            if (wheel != 0) SendMouse(0, 0, 0x0800, (int)(wheel * 40));
+            Pad pressed = cur & ~old, released = old & ~cur;
+            if ((pressed & Pad.A) != 0) SendMouse(0, 0, 0x0002);
+            if ((released & Pad.A) != 0) SendMouse(0, 0, 0x0004);
+            if ((pressed & Pad.B) != 0) SendMouse(0, 0, 0x0008);
+            if ((released & Pad.B) != 0) SendMouse(0, 0, 0x0010);
         }
 
         static void ReleaseGameKeys()

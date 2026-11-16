@@ -62,6 +62,11 @@ namespace TkoolLauncher
             Gamepad.Home = HomeAction;
             Hotkeys.Home = () => BeginInvoke(new Action(HomeAction));
             Hotkeys.Small = () => BeginInvoke(new Action(SmallAction));
+            Hotkeys.Button = which => BeginInvoke(new Action(() => ButtonActions.Run(this, which == 1 ? Settings.LcAction : Settings.RcAction)));
+            LoopGuard.Alert = msg => { try { BeginInvoke(new Action(() => ShowToast(msg, 8000))); } catch { } };
+            try { LoopGuard.Start(); } catch { }
+            Theme.ApplyAccent();
+            LoadBackground();
             try { Hotkeys.Start(); } catch { }
             anim.Tick += OnAnim;
             clock.Tick += (s, e) => Invalidate();
@@ -82,8 +87,24 @@ namespace TkoolLauncher
                     try { BeginInvoke(new Action(Invalidate)); } catch { }
                 });
                 var hw = new Timer { Interval = 15000 };
-                hw.Tick += (s2, e2) => { if (Hardware.SmuReady && Settings.Tdp > 0) Task.Run(() => Hardware.SetTdp(Settings.Tdp)); };
+                hw.Tick += (s2, e2) =>
+                {
+                    bool smart = Settings.SmartFps > 0 && GameWatch.Running;
+                    if (Hardware.SmuReady && Settings.Tdp > 0 && !smart) Task.Run(() => Hardware.SetTdp(Settings.Tdp));
+                };
                 hw.Start();
+
+                // 1초마다: FPS 측정 켜고 끄기, 스마트 TDP, 배경음악
+                int sec = 0;
+                var fpsTimer = new Timer { Interval = 1000 };
+                fpsTimer.Tick += (s3, e3) =>
+                {
+                    bool need = GameWatch.Running && (OverlayForm.IsOn || Settings.SmartFps > 0);
+                    if (need) { Fps.Start(); Fps.Tick(); } else if (Fps.Running) Fps.Stop();
+                    if (++sec % 3 == 0 && need) Task.Run(() => SmartTdp.Tick());
+                    Bgm.Update(!GameWatch.Running && WindowState != FormWindowState.Minimized && Visible && mini == null);
+                };
+                fpsTimer.Start();
                 if (Settings.AutoUpdate) Updater.CheckAsync(this, msg => ShowToast(msg, 60000), () =>
                 {
                     if (!GameWatch.Running) Updater.Restart();
@@ -194,6 +215,59 @@ namespace TkoolLauncher
             }
         }
 
+        // ───────── 미니 모드 ─────────
+        MiniBubble mini;
+
+        public void EnterMini()
+        {
+            quick.Open = false; quick.T = 0; menu.Open = false;
+            if (mini == null) { mini = new MiniBubble(this); mini.Show(); }
+            if (CameFromGame && GameWatch.Running) ReturnToGame();
+            else WindowState = FormWindowState.Minimized;
+        }
+
+        public void LeaveMini()
+        {
+            if (mini != null) { mini.Close(); mini = null; }
+            if (GameWatch.Running) { gameHwnd = GetForegroundWindow(); CameFromGame = true; }
+            WindowState = FormWindowState.Maximized;
+            Show(); Activate(); SetForegroundWindow(Handle);
+        }
+
+        // ───────── 배경 사진 (내 문서\쯔꾸르 런처\background.jpg/png) ─────────
+        Bitmap bgImage;
+
+        public void LoadBackground()
+        {
+            bgImage?.Dispose();
+            bgImage = null;
+            if (!Settings.UseBgImage) return;
+            foreach (var n in new[] { "background.jpg", "background.png", "background.jpeg" })
+            {
+                string p = System.IO.Path.Combine(Settings.Dir, n);
+                if (!System.IO.File.Exists(p)) continue;
+                try
+                {
+                    using (var fs = System.IO.File.OpenRead(p))
+                    using (var img = Image.FromStream(fs))
+                    {
+                        // 화면 크기로 한 번만 줄여 둠 (메모리 아끼기)
+                        var sc = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
+                        int w = Math.Min(sc.Width, 1920), h = w * sc.Height / Math.Max(1, sc.Width);
+                        bgImage = new Bitmap(w, h);
+                        using (var g = Graphics.FromImage(bgImage))
+                        {
+                            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                            CoverArt.DrawCover(g, img, new Rectangle(0, 0, w, h));
+                        }
+                    }
+                }
+                catch { bgImage = null; }
+                break;
+            }
+            Invalidate();
+        }
+
         public void OpenQuick()
         {
             menu.Open = false;
@@ -278,6 +352,12 @@ namespace TkoolLauncher
         {
             var r = ClientRectangle;
             using (var lg = new LinearGradientBrush(r, Theme.BgTop, Theme.BgBottom, 90f)) g.FillRectangle(lg, r);
+            if (bgImage != null)
+            {
+                g.InterpolationMode = InterpolationMode.Bilinear;
+                g.DrawImage(bgImage, r);
+                using (var dim = new SolidBrush(Color.FromArgb(120, 9, 12, 16))) g.FillRectangle(dim, r);
+            }
             g.InterpolationMode = InterpolationMode.HighQualityBilinear;
             g.PixelOffsetMode = PixelOffsetMode.Half;
             if (bgPrev != null && bgFade < 1f) DrawBg(g, bgPrev, (1f - bgFade) * 0.55f);
@@ -339,6 +419,9 @@ namespace TkoolLauncher
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             Hotkeys.Stop();
+            LoopGuard.Stop();
+            Fps.Stop();
+            Bgm.Close();
             Hardware.Shutdown();
             OverlayForm.Toggle(false);
             base.OnFormClosed(e);
@@ -592,6 +675,7 @@ namespace TkoolLauncher
             Gamepad.MapKeys = g.IsTkool && g.Version != TkoolVersion.MV && g.Version != TkoolVersion.MZ;
             string dir = g.InstallDir ?? g.Folder;
             CameFromGame = false;
+            SmartTdp.Reset();
             GameWatch.Start(p, dir, () => BeginInvoke(new Action(() =>
             {
                 CameFromGame = false;

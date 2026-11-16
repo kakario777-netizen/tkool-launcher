@@ -25,8 +25,13 @@ namespace TkoolLauncher
         static HookProc proc;      // 가비지 수집 안 되게 붙잡아 둠
         public static Action Home;
         public static Action Small;
+        public static Action<int> Button;     // 위쪽 LC(1)/RC(2) 버튼
+        public static string LastCombo = "";
+        public static long LastComboTime;
+        public const string LcCombo = "Win+Ctrl+126", RcCombo = "Win+Ctrl+127";   // Ctrl+Win+F15 / F16
         public static Action<string> Learned;
         public static bool Learning;
+        public static int SmallBlockedUntil;
 
         public static void Start()
         {
@@ -69,6 +74,8 @@ namespace TkoolLauncher
                 {
                     string combo = (Down(0x5B) || Down(0x5C) ? "Win+" : "") + (Down(0x11) ? "Ctrl+" : "") +
                                    (Down(0x12) ? "Alt+" : "") + (Down(0x10) ? "Shift+" : "") + k.vk;
+                    LastCombo = combo;
+                    LastComboTime = Environment.TickCount;
                     if (Learning)
                     {
                         Learning = false;
@@ -82,7 +89,13 @@ namespace TkoolLauncher
                     }
                     if (!string.IsNullOrEmpty(Settings.SmallKey) && combo == Settings.SmallKey && Small != null)
                     {
+                        if (Environment.TickCount - SmallBlockedUntil < 0) return (IntPtr)1; // 최소화 반복 감시가 막아둔 동안은 무시
                         Small();
+                        return (IntPtr)1;
+                    }
+                    if (Button != null && (combo == LcCombo || combo == RcCombo))
+                    {
+                        Button(combo == LcCombo ? 1 : 2);
                         return (IntPtr)1;
                     }
                 }

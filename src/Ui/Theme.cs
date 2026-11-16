@@ -15,7 +15,14 @@ namespace TkoolLauncher
         public static readonly Color Panel = Color.FromArgb(23, 29, 37);
         public static readonly Color Tile = Color.FromArgb(35, 41, 51);
         public static readonly Color TileHot = Color.FromArgb(61, 68, 80);
-        public static readonly Color Accent = Color.FromArgb(26, 159, 255);
+        public static Color Accent = Color.FromArgb(26, 159, 255);
+        public static readonly string[] AccentNames = { "파랑", "초록", "주황", "분홍", "보라", "하늘" };
+        static readonly Color[] Accents =
+        {
+            Color.FromArgb(26, 159, 255), Color.FromArgb(89, 191, 64), Color.FromArgb(255, 140, 40),
+            Color.FromArgb(255, 90, 160), Color.FromArgb(150, 110, 255), Color.FromArgb(0, 200, 220)
+        };
+        public static void ApplyAccent() => Accent = Accents[Math.Max(0, Math.Min(Accents.Length - 1, Settings.AccentIndex))];
         public static readonly Color Focus = Color.FromArgb(240, 244, 248);
         public static readonly Color Text = Color.FromArgb(255, 255, 255);
         public static readonly Color SubText = Color.FromArgb(139, 146, 154);
