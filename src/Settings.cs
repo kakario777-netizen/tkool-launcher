@@ -17,7 +17,13 @@ namespace TkoolLauncher
         public static List<string> GameFolders = new List<string>();
         public static bool AutoUpdate = true;
         public static bool StoreScan = true;
-        public static string HomeKey = "";
+        public static string HomeKey = "Win+Ctrl+128";   // AYA 큰 버튼 (Ctrl+Win+F17)
+        public static string SmallKey = "Win+68";        // AYA 작은 버튼 (Win+D)
+        public static bool HardwareControl;
+        public static int Tdp;          // 0 = 기기 기본
+        public static int Fan = -1;     // -1 = 자동
+        public static bool LedSet, LedOn = true;
+        public static int LedR = 255, LedG = 255, LedB = 255, LedBright = 60;
         public static List<string> ManualGames = new List<string>();
 
         public static void Load()
@@ -37,8 +43,20 @@ namespace TkoolLauncher
                         GameFolders.Add(val);
                     else if (key == "ManualGame" && val.Length > 0 && !ManualGames.Contains(val))
                         ManualGames.Add(val);
-                    else if (key == "HomeKey")
-                        HomeKey = val;
+                    else if (key == "HomeKey") HomeKey = val;
+                    else if (key == "SmallKey") SmallKey = val;
+                    else if (key == "HardwareControl") HardwareControl = val == "1";
+                    else if (key == "Tdp") int.TryParse(val, out Tdp);
+                    else if (key == "Fan") int.TryParse(val, out Fan);
+                    else if (key == "Led")
+                    {
+                        var q = val.Split(',');
+                        if (q.Length == 5)
+                        {
+                            LedSet = true; LedOn = q[0] == "1";
+                            int.TryParse(q[1], out LedR); int.TryParse(q[2], out LedG); int.TryParse(q[3], out LedB); int.TryParse(q[4], out LedBright);
+                        }
+                    }
                     else if (key == "StoreScan")
                         StoreScan = val != "0";
                     else if (key == "AutoUpdate")
@@ -58,6 +76,11 @@ namespace TkoolLauncher
                 sb.AppendLine("AutoUpdate=" + (AutoUpdate ? "1" : "0"));
                 sb.AppendLine("StoreScan=" + (StoreScan ? "1" : "0"));
                 sb.AppendLine("HomeKey=" + HomeKey);
+                sb.AppendLine("SmallKey=" + SmallKey);
+                sb.AppendLine("HardwareControl=" + (HardwareControl ? "1" : "0"));
+                sb.AppendLine("Tdp=" + Tdp);
+                sb.AppendLine("Fan=" + Fan);
+                if (LedSet) sb.AppendLine("Led=" + (LedOn ? "1" : "0") + "," + LedR + "," + LedG + "," + LedB + "," + LedBright);
                 foreach (var f in GameFolders) sb.AppendLine("GameFolder=" + f);
                 foreach (var f in ManualGames) sb.AppendLine("ManualGame=" + f);
                 File.WriteAllText(FilePath, sb.ToString(), new UTF8Encoding(false));

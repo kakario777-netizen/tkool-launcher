@@ -61,6 +61,7 @@ namespace TkoolLauncher
             quick.Shell = this;
             Gamepad.Home = HomeAction;
             Hotkeys.Home = () => BeginInvoke(new Action(HomeAction));
+            Hotkeys.Small = () => BeginInvoke(new Action(SmallAction));
             try { Hotkeys.Start(); } catch { }
             anim.Tick += OnAnim;
             clock.Tick += (s, e) => Invalidate();
@@ -74,6 +75,15 @@ namespace TkoolLauncher
 
             Shown += (s, e) =>
             {
+                // 팬·조명·TDP 드라이버 준비 (느릴 수 있어 뒤에서)
+                Task.Run(() =>
+                {
+                    try { Hardware.Init(); Hardware.ApplySaved(); } catch { }
+                    try { BeginInvoke(new Action(Invalidate)); } catch { }
+                });
+                var hw = new Timer { Interval = 15000 };
+                hw.Tick += (s2, e2) => { if (Hardware.SmuReady && Settings.Tdp > 0) Task.Run(() => Hardware.SetTdp(Settings.Tdp)); };
+                hw.Start();
                 if (Settings.AutoUpdate) Updater.CheckAsync(this, msg => ShowToast(msg, 60000), () =>
                 {
                     if (!GameWatch.Running) Updater.Restart();
@@ -152,6 +162,36 @@ namespace TkoolLauncher
                 return;
             }
             if (quick.Open) quick.Hide(); else { menu.Open = false; quick.Show(); }
+        }
+
+        /// <summary>AYA 작은 버튼: 게임 중이면 런처 홈 화면을, 런처 안이면 홈으로</summary>
+        public void SmallAction()
+        {
+            if (WindowState == FormWindowState.Minimized || Form.ActiveForm == null)
+            {
+                if (GameWatch.Running) { gameHwnd = GetForegroundWindow(); CameFromGame = true; }
+                WindowState = FormWindowState.Maximized;
+                Show(); Activate(); SetForegroundWindow(Handle);
+            }
+            quick.Open = false; menu.Open = false;
+            GoHome();
+        }
+
+        /// <summary>빠른 버튼: 게임에서 불려 나왔으면 게임으로 돌아간 뒤 실행</summary>
+        public void SendToGame(Action a)
+        {
+            if (CameFromGame && GameWatch.Running)
+            {
+                ReturnToGame();
+                var t = new Timer { Interval = 350 };
+                t.Tick += (s, e) => { t.Stop(); t.Dispose(); try { a(); } catch { } };
+                t.Start();
+            }
+            else
+            {
+                quick.Hide();
+                try { a(); } catch { }
+            }
         }
 
         public void OpenQuick()
@@ -299,6 +339,7 @@ namespace TkoolLauncher
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             Hotkeys.Stop();
+            Hardware.Shutdown();
             OverlayForm.Toggle(false);
             base.OnFormClosed(e);
         }

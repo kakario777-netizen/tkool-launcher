@@ -684,8 +684,13 @@ namespace TkoolLauncher
                           Act = () => { Settings.StoreScan = !Settings.StoreScan; Settings.Save(); Shell.Rescan(); } },
                 new Row { Title = "게임 직접 추가", Sub = "자동으로 못 찾은 게임의 실행 파일(exe)을 골라 넣어요", Value = Settings.ManualGames.Count + "개",
                           Act = Shell.AddManualGame },
-                new Row { Title = "AYA 버튼 연결", Sub = learning ? "지금 AYA 버튼(또는 쓰고 싶은 기기 버튼)을 누르세요..." : "누르면 어디서든 빠른 설정이 열려요 · 패드 가이드 버튼, 보기+메뉴 동시 누름도 돼요",
-                          Value = Hotkeys.Describe(Settings.HomeKey), Act = Learn },
+                new Row { Title = "고급 하드웨어 제어 (팬·조명·TDP)", Toggle = Settings.HardwareControl,
+                          Sub = Settings.HardwareControl ? (Hardware.Ready ? "켜짐 · " + (Hardware.SmuReady ? "TDP " : "") + (Hardware.EcReady ? "팬 조명 " : "") + (Hardware.TempReady ? "온도" : "") : Hardware.Problem)
+                                                         : (Hardware.PawnInstalled ? "켜면 관리자 권한으로 다시 켜져요 (허락 창은 처음 한 번만)" : "PawnIO 드라이버 설치부터 해요 (누르면 설치 시작)"),
+                          Act = ToggleHardware },
+                new Row { Title = "AYA 큰 버튼 연결", Sub = learning == 1 ? "지금 AYA 큰 버튼을 누르세요..." : "빠른 설정 열기 · 패드 가이드 버튼, 보기+메뉴 동시 누름도 돼요",
+                          Value = Hotkeys.Describe(Settings.HomeKey), Act = () => Learn(1) },
+                new Row { Title = "AYA 작은 버튼 연결", Sub = learning == 2 ? "지금 AYA 작은 버튼을 누르세요..." : "런처 홈 화면으로", Value = Hotkeys.Describe(Settings.SmallKey), Act = () => Learn(2) },
                 new Row { Title = "윈도우 시작할 때 자동 실행", Sub = "켜면 부팅하자마자 런처가 떠요", Toggle = SystemControls.GetAutoStart(),
                           Act = () => SystemControls.SetAutoStart(!SystemControls.GetAutoStart()) },
                 new Row { Title = "숨긴 게임 다시 보이기", Sub = "게임 화면에서 [숨기기]로 숨긴 게임을 모두 되돌려요", Value = GameData.HiddenCount() + "개",
@@ -695,16 +700,44 @@ namespace TkoolLauncher
             };
         }
 
-        bool learning;
+        int learning; // 0 없음, 1 큰 버튼, 2 작은 버튼
 
-        void Learn()
+        void ToggleHardware()
         {
-            if (learning) { learning = false; Hotkeys.Learning = false; return; }
-            learning = true;
+            if (!Settings.HardwareControl)
+            {
+                if (!Hardware.PawnInstalled)
+                {
+                    Hardware.InstallPawn();
+                    Shell.ShowToast("PawnIO 설치가 끝나면 이 스위치를 다시 켜 주세요", 6000);
+                    return;
+                }
+                Settings.HardwareControl = true;
+                Settings.Save();
+                if (Hardware.IsAdmin) { System.Threading.Tasks.Task.Run(() => { Hardware.Init(); Hardware.ApplySaved(); }); return; }
+                if (Hardware.CreateAdminTask() && Hardware.RunAdminTask()) { Application.Exit(); return; }
+                Settings.HardwareControl = false;
+                Settings.Save();
+                Shell.ShowToast("관리자 허락을 받지 못했어요", 4000);
+            }
+            else
+            {
+                Settings.HardwareControl = false;
+                Settings.Save();
+                Hardware.Shutdown();
+                Hardware.DeleteAdminTask();
+                Shell.ShowToast("껐어요. 다음에 켤 때부터 일반 권한으로 켜져요", 4000);
+            }
+        }
+
+        void Learn(int which)
+        {
+            if (learning != 0) { learning = 0; Hotkeys.Learning = false; return; }
+            learning = which;
             Hotkeys.Learned = combo => Shell.BeginInvoke(new Action(() =>
             {
-                learning = false;
-                Settings.HomeKey = combo;
+                if (learning == 2) Settings.SmallKey = combo; else Settings.HomeKey = combo;
+                learning = 0;
                 Settings.Save();
                 Shell.ShowToast("연결했어요: " + Hotkeys.Describe(combo), 4000);
                 Shell.Invalidate();

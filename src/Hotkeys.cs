@@ -24,6 +24,7 @@ namespace TkoolLauncher
         static IntPtr hook;
         static HookProc proc;      // 가비지 수집 안 되게 붙잡아 둠
         public static Action Home;
+        public static Action Small;
         public static Action<string> Learned;
         public static bool Learning;
 
@@ -78,6 +79,11 @@ namespace TkoolLauncher
                     {
                         Home?.Invoke();
                         return (IntPtr)1; // 다른 프로그램엔 안 넘김
+                    }
+                    if (!string.IsNullOrEmpty(Settings.SmallKey) && combo == Settings.SmallKey && Small != null)
+                    {
+                        Small();
+                        return (IntPtr)1;
                     }
                 }
             }

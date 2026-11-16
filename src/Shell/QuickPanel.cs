@@ -142,8 +142,101 @@ namespace TkoolLauncher
                     });
                 }
             });
-            rows.Add(new Row { Kind = Kind.Action, Title = "팬 · 조명 · TDP", Sub = "다음 업데이트에서 추가돼요 (드라이버 필요)", Act = null });
+            // ── 팬·조명·TDP (PawnIO) ──
+            if (Hardware.SmuReady)
+            {
+                var tdpNames = new List<string> { "기본" };
+                for (int w = Hardware.TdpMin; w <= Hardware.TdpMax; w++) tdpNames.Add(w + "W");
+                int ti = Settings.Tdp <= 0 ? 0 : Settings.Tdp - Hardware.TdpMin + 1;
+                rows.Add(new Row
+                {
+                    Kind = Kind.Choice, Title = "TDP (전력 한계)", Choices = tdpNames.ToArray(), ChoiceIndex = ti,
+                    Change = v =>
+                    {
+                        Settings.Tdp = v == 0 ? 0 : Hardware.TdpMin + v - 1;
+                        Settings.Save();
+                        int w2 = Settings.Tdp == 0 ? 12 : Settings.Tdp; // 기본 = 이 칩의 기본값 12W
+                        Task.Run(() => Hardware.SetTdp(w2));
+                    }
+                });
+            }
+            if (Hardware.EcReady)
+            {
+                var fanNames = new List<string> { "자동" };
+                for (int f = 20; f <= 100; f += 10) fanNames.Add(f + "%");
+                int fi = Settings.Fan < 0 ? 0 : (Settings.Fan - 20) / 10 + 1;
+                rows.Add(new Row
+                {
+                    Kind = Kind.Choice, Title = "팬 속도", Choices = fanNames.ToArray(), ChoiceIndex = fi,
+                    Change = v =>
+                    {
+                        Settings.Fan = v == 0 ? -1 : 20 + (v - 1) * 10;
+                        Settings.Save();
+                        int fan = Settings.Fan;
+                        Task.Run(() => Hardware.SetFan(fan));
+                    }
+                });
+                rows.Add(new Row { Kind = Kind.Toggle, Title = "조이스틱 조명", On = Settings.LedOn, Change = v => { Settings.LedOn = v == 1; ApplyLed(); } });
+                if (Settings.LedOn)
+                {
+                    int ci = Array.FindIndex(LedColors, c => c.R == Settings.LedR && c.G == Settings.LedG && c.B == Settings.LedB);
+                    rows.Add(new Row
+                    {
+                        Kind = Kind.Choice, Title = "조명 색", Choices = LedNames, ChoiceIndex = Math.Max(0, ci),
+                        Change = v => { Settings.LedR = LedColors[v].R; Settings.LedG = LedColors[v].G; Settings.LedB = LedColors[v].B; ApplyLed(); }
+                    });
+                    rows.Add(new Row { Kind = Kind.Slider, Title = "조명 밝기", Num = Settings.LedBright, Change = v => { Settings.LedBright = v; ApplyLed(); } });
+                }
+            }
+            if (!Hardware.Ready)
+            {
+                rows.Add(new Row
+                {
+                    Kind = Kind.Action, Title = "팬 · 조명 · TDP",
+                    Sub = Settings.HardwareControl ? Hardware.Problem : "설정 → 고급 하드웨어 제어를 켜면 쓸 수 있어요",
+                    Act = () => { Hide(); Shell.GoHome(); Shell.Push(new SettingsScreen()); }
+                });
+            }
+
+            // ── 빠른 버튼 ──
+            rows.Add(new Row { Kind = Kind.Action, Title = "ESC 보내기", Act = () => Shell.SendToGame(() => KeySender.Combo(KeySender.Esc)) });
+            rows.Add(new Row { Kind = Kind.Action, Title = "전체 화면 전환 (Alt+Enter)", Act = () => Shell.SendToGame(() => KeySender.Combo(KeySender.Alt, KeySender.Enter)) });
+            rows.Add(new Row { Kind = Kind.Action, Title = "스크린샷", Sub = "사진 › 스크린샷 폴더에 저장돼요", Act = () => Shell.SendToGame(() => KeySender.Combo(KeySender.Win, KeySender.PrtSc)) });
+            rows.Add(new Row { Kind = Kind.Action, Title = "화상 키보드", Act = () => Shell.SendToGame(() => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("osk.exe") { UseShellExecute = true })) });
+            rows.Add(new Row { Kind = Kind.Action, Title = "작업 전환 (멀티태스킹)", Act = () => Shell.SendToGame(() => KeySender.Combo(KeySender.Win, KeySender.Tab)) });
+            rows.Add(new Row { Kind = Kind.Action, Title = "윈도우 시작 메뉴", Act = () => Shell.SendToGame(() => KeySender.Combo(KeySender.Win)) });
+            rows.Add(new Row
+            {
+                Kind = Kind.Toggle, Title = "비행기 모드", Sub = "와이파이·블루투스 모두 끄기", On = radiosLoaded && !wifi && !bt && (hasWifi || hasBt),
+                Change = v =>
+                {
+                    bool on = v == 0; // 비행기 모드 켜기 = 무선 끄기
+                    wifi = hasWifi && on; bt = hasBt && on;
+                    Task.Run(() => { SystemControls.SetRadio("WiFi", on); SystemControls.SetRadio("Bluetooth", on); });
+                }
+            });
             if (focus >= rows.Count) focus = rows.Count - 1;
+        }
+
+        static readonly string[] LedNames = { "흰색", "빨강", "주황", "노랑", "초록", "하늘", "파랑", "보라", "분홍" };
+        static readonly Color[] LedColors =
+        {
+            Color.FromArgb(255, 255, 255), Color.FromArgb(255, 0, 0), Color.FromArgb(255, 110, 0), Color.FromArgb(255, 210, 0),
+            Color.FromArgb(0, 255, 40), Color.FromArgb(0, 200, 255), Color.FromArgb(0, 40, 255), Color.FromArgb(150, 0, 255), Color.FromArgb(255, 60, 160)
+        };
+
+        System.Threading.Timer ledTimer;
+
+        /// <summary>조명은 여러 번 바꿔도 마지막 것만 적용 (밝기 끌 때 EC에 너무 많이 안 쓰게)</summary>
+        void ApplyLed()
+        {
+            Settings.LedSet = true;
+            Settings.Save();
+            ledTimer?.Dispose();
+            ledTimer = new System.Threading.Timer(_ =>
+            {
+                Hardware.SetLed(Settings.LedOn, Settings.LedR, Settings.LedG, Settings.LedB, Settings.LedBright);
+            }, null, 250, System.Threading.Timeout.Infinite);
         }
 
         public bool Tick(float dt)
@@ -171,7 +264,9 @@ namespace TkoolLauncher
 
             // 머리: 시간·배터리
             Draw.Text(g, DateTime.Now.ToString("HH:mm"), Draw.H1, new Rectangle(x + S(28), S(18), w, S(36)), Theme.Text);
-            Draw.Text(g, SystemControls.BatteryText(), Draw.Body, new Rectangle(x + S(28), S(56), w - S(40), S(22)), Theme.SubText);
+            string head = SystemControls.BatteryText();
+            if (Hardware.TempReady) { float tc = Hardware.CpuTemp(); if (tc > 0) head += " · CPU " + (int)tc + "°C"; }
+            Draw.Text(g, head, Draw.Body, new Rectangle(x + S(28), S(56), w - S(40), S(22)), Theme.SubText);
 
             int top = S(96), bottom = full.Height - S(60);
             var clip = g.Clip;

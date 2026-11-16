@@ -11,5 +11,6 @@
 - 게임 종류: GameKind(Tkool·Steam·Epic·Gog·Pc). 스토어는 StoreScanner, PC 폴더 게임은 GameScanner.DetectPc(폴더 하나=게임 하나), 직접 추가는 Settings.ManualGames. 실행 감시는 GameWatch(게임 폴더 안 프로세스가 다 꺼질 때까지). 검색은 SearchScreen(초성·알파벳·가나 줄).
 - 기기: 사용자 기기는 AYANEO AIR Plus (AMD 7320U 멘도시노, 보드명 AB05-Mendocino). 팬은 리눅스 oxp-sensors와 같은 EC 레지스터(pwm 0~100) — 윈도우에선 EC 접근 드라이버 필요.
 - 빠른 설정판: Shell/QuickPanel(메뉴 버튼·오른쪽 위 탭·위에서 쓸어내리기), 기능은 SystemControls(WMI 밝기, Core Audio, PowerShell WinRT 무선, 전원 오버레이, DEVMODE). 성능 표시 OverlayForm. AYA 버튼은 Hotkeys(저수준 키보드 훅 배우기), 패드 가이드 버튼은 XInput #100, 게임 중 보기+메뉴 = 홈.
-- 팬·조명·TDP는 PawnIO(서명 드라이버, LpcACPIEC 모듈) 경로로 다음 단계 예정.
+- 팬·조명·TDP·온도: Hardware.cs (PawnIO, res/*.bin 서명 모듈 내장: LpcIO=EC 0x4E/0x4F CEii 방식, RyzenSMU=MP1 우편함 0x3B10528/578/998 명령 0x14·0x15·0x16 mW, AMDFamily17=SMN 0x59800 온도). 값 출처는 Handheld Companion. 보드명 AB05-Mendocino일 때만 동작. 관리자 권한은 작업 스케줄러 TkoolLauncherAdmin(--elevated)로 재실행.
+- AYA 버튼 기본값: 큰 버튼 Ctrl+Win+F17(빠른 설정), 작은 버튼 Win+D(홈). 위 LC/RC는 Ctrl+Win+F15/F16.
 - 진행 순서: 1) 폴더 검색·제목/버전 인식·목록 2) 스팀식 표지 화면·플레이 시간 3) 게임패드·전체 화면·일본어 환경 실행·RTP 확인 4) 상태 표시줄·빠른 설정판 5) 최소화 반복 감시.

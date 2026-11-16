@@ -7,10 +7,16 @@ namespace TkoolLauncher
 {
     static class Program
     {
+        static bool IsAdmin()
+        {
+            try { return new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent()).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator); }
+            catch { return false; }
+        }
+
         [STAThread]
         static void Main(string[] args)
         {
-            bool updated = args.Contains("--updated");
+            bool updated = args.Contains("--updated") || args.Contains("--elevated");
             using (var mutex = new Mutex(true, "TkoolLauncher_SingleInstance", out bool first))
             {
                 if (!first)
@@ -24,6 +30,8 @@ namespace TkoolLauncher
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
                 Settings.Load();
+                // 하드웨어 제어를 켜 뒀는데 관리자가 아니면, 관리자 작업으로 다시 켜고 이건 끝냄 (허락 창 없음)
+                if (Settings.HardwareControl && !updated && !IsAdmin() && Hardware.RunAdminTask()) return;
                 GameData.Load();
                 Gamepad.Start();
                 Application.Run(new ShellForm());
