@@ -8,6 +8,8 @@
     <RootNamespace>TkoolLauncher</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Nullable>disable</Nullable>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
     <Version>0.1.0</Version>
     <Product>쯔꾸르 런처</Product>
     <DebugType>none</DebugType>

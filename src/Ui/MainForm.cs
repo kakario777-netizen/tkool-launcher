@@ -8,7 +8,7 @@ using System.Windows.Forms;
 
 namespace TkoolLauncher
 {
-    class MainForm : Form
+    class MainForm : Form, IPadTarget
     {
         readonly TouchGrid grid;
         readonly Label countLabel;
@@ -40,11 +40,28 @@ namespace TkoolLauncher
             grid = new TouchGrid { Dock = DockStyle.Fill, MinTileWidth = 300, TileHeight = 150, Gap = 16, ShowSelection = true };
             grid.ItemClicked += it => Launch((GameInfo)it.Tag);
 
+            var bottom = new Label
+            {
+                Dock = DockStyle.Bottom,
+                Height = Theme.S(40),
+                BackColor = Theme.Bar,
+                ForeColor = Theme.SubText,
+                Font = Theme.F(10f),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Text = "Ⓐ 실행      Ⓧ 폴더 설정      Ⓨ 새로고침        v" + Updater.Current,
+            };
+
             Controls.Add(grid);
+            Controls.Add(bottom);
             Controls.Add(top);
 
             Shown += (s, e) =>
             {
+                Updater.CheckAsync(this, msg => countLabel.Text = msg, () =>
+                {
+                    // 게임 중이면 게임 끝나고 다시 켬
+                    if (Gamepad.Game == null || Gamepad.Game.HasExited) Updater.Restart();
+                });
                 if (Settings.GameFolders.Count == 0) OpenFolders(true);
                 else Rescan();
             };
@@ -117,9 +134,14 @@ namespace TkoolLauncher
                 WindowState = FormWindowState.Minimized; // 게임하는 동안 런처는 쉬기
                 if (p != null)
                 {
+                    // MV·MZ는 게임 자체가 패드를 잘 읽으므로 키 변환은 2000~VX Ace만
+                    Gamepad.Game = p;
+                    Gamepad.MapKeys = g.Version != TkoolVersion.MV && g.Version != TkoolVersion.MZ;
                     p.EnableRaisingEvents = true;
                     p.Exited += (s, e) => BeginInvoke(new Action(() =>
                     {
+                        if (Gamepad.Game == p) Gamepad.Game = null;
+                        if (Updater.RestartPending) { Updater.Restart(); return; }
                         WindowState = FormWindowState.Maximized;
                         Activate();
                     }));
@@ -132,29 +154,42 @@ namespace TkoolLauncher
             }
         }
 
-        // 방향키·엔터로도 고를 수 있게 (게임패드 연결은 3단계)
+        void MoveSel(int dx, int dy)
+        {
+            if (grid.Items.Count == 0) return;
+            grid.MoveSelection(dx + dy * grid.ColumnCount);
+        }
+
+        void LaunchSelected()
+        {
+            int i = grid.SelectedIndex;
+            if (i >= 0 && i < grid.Items.Count) Launch((GameInfo)grid.Items[i].Tag);
+        }
+
+        public void OnPad(Pad b)
+        {
+            switch (b)
+            {
+                case Pad.Left: MoveSel(-1, 0); break;
+                case Pad.Right: MoveSel(1, 0); break;
+                case Pad.Up: MoveSel(0, -1); break;
+                case Pad.Down: MoveSel(0, 1); break;
+                case Pad.A: LaunchSelected(); break;
+                case Pad.X: OpenFolders(); break;
+                case Pad.Y: Rescan(); break;
+            }
+        }
+
+        // 키보드 방향키·엔터
         protected override bool ProcessCmdKey(ref Message msg, Keys key)
         {
-            if (grid.Items.Count > 0)
+            switch (key)
             {
-                int i = Math.Max(0, grid.SelectedIndex);
-                int cols = Math.Max(1, (grid.Width - Theme.S(16)) / (Theme.S(300) + Theme.S(16)));
-                int n = i;
-                switch (key)
-                {
-                    case Keys.Left: n = i - 1; break;
-                    case Keys.Right: n = i + 1; break;
-                    case Keys.Up: n = i - cols; break;
-                    case Keys.Down: n = i + cols; break;
-                    case Keys.Enter:
-                        Launch((GameInfo)grid.Items[i].Tag);
-                        return true;
-                    default: return base.ProcessCmdKey(ref msg, key);
-                }
-                n = Math.Max(0, Math.Min(grid.Items.Count - 1, n));
-                grid.SelectedIndex = n;
-                grid.EnsureVisible(n);
-                return true;
+                case Keys.Left: MoveSel(-1, 0); return true;
+                case Keys.Right: MoveSel(1, 0); return true;
+                case Keys.Up: MoveSel(0, -1); return true;
+                case Keys.Down: MoveSel(0, 1); return true;
+                case Keys.Enter: LaunchSelected(); return true;
             }
             return base.ProcessCmdKey(ref msg, key);
         }

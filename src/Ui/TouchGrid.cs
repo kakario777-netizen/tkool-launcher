@@ -113,6 +113,22 @@ namespace TkoolLauncher
             Invalidate();
         }
 
+        /// <summary>패드 A 버튼: 선택된 칸을 누른 것과 같게</summary>
+        public void ActivateSelected()
+        {
+            if (SelectedIndex >= 0 && SelectedIndex < Items.Count) ItemClicked?.Invoke(Items[SelectedIndex]);
+        }
+
+        public void MoveSelection(int delta)
+        {
+            if (Items.Count == 0) return;
+            int n = SelectedIndex < 0 ? 0 : SelectedIndex + delta;
+            SelectedIndex = Math.Max(0, Math.Min(Items.Count - 1, n));
+            EnsureVisible(SelectedIndex);
+        }
+
+        public int ColumnCount => Cols;
+
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
@@ -193,7 +209,7 @@ namespace TkoolLauncher
 
                 bool hot = i == pressIndex;
                 Theme.FillRound(g, r, radius, hot ? Theme.TileHot : Theme.Tile);
-                if (ShowSelection && i == SelectedIndex)
+                if ((ShowSelection || Gamepad.Used) && i == SelectedIndex)
                 {
                     using (var path = Theme.Round(r, radius))
                     using (var pen = new Pen(Theme.Accent, Theme.S(3)))

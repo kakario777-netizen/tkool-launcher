@@ -8,12 +8,23 @@ using System.Windows.Forms;
 namespace TkoolLauncher
 {
     /// <summary>전체 화면 어두운 창의 공통 틀: 위 제목줄 + 가운데 목록 + 아래 버튼줄</summary>
-    class TouchDialog : Form
+    class TouchDialog : Form, IPadTarget
     {
         protected readonly Label Header;
         protected readonly Label SubHeader;
         protected readonly TouchGrid Grid;
         protected readonly FlowLayoutPanel Buttons;
+        readonly Label hint;
+        Button primary;
+
+        /// <summary>Ⓧ 버튼으로 바로 누를 주요 버튼</summary>
+        protected void SetPrimary(Button b)
+        {
+            primary = b;
+            hint.Text = "Ⓐ 선택   Ⓑ 뒤로   Ⓧ " + b.Text;
+        }
+        bool onButtons;      // 패드 포커스가 아래 버튼줄에 있는지
+        int buttonIndex;     // Buttons.Controls 순서 (0 = 맨 오른쪽)
 
         public TouchDialog(string title)
         {
@@ -43,6 +54,17 @@ namespace TkoolLauncher
 
             Grid = new TouchGrid { Dock = DockStyle.Fill, SingleColumn = true, TileHeight = 76, Gap = 10 };
 
+            // 버튼줄 왼쪽 끝에 패드 안내
+            hint = new Label
+            {
+                Text = "Ⓐ 선택   Ⓑ 뒤로   ▼ 버튼으로",
+                ForeColor = Theme.SubText,
+                Font = Theme.F(10f),
+                AutoSize = true,
+                Margin = new Padding(Theme.S(8), Theme.S(14), Theme.S(16), 0),
+            };
+
+            Buttons.Controls.Add(hint);
             Controls.Add(Grid);
             Controls.Add(Buttons);
             Controls.Add(top);
@@ -55,13 +77,86 @@ namespace TkoolLauncher
             b.Margin = new Padding(Theme.S(8), 0, 0, 0);
             b.Click += (s, e) => onClick();
             Buttons.Controls.Add(b);
+            Buttons.Controls.SetChildIndex(hint, Buttons.Controls.Count - 1);
             return b;
+        }
+
+        Button[] ButtonList()
+        {
+            var list = new System.Collections.Generic.List<Button>();
+            foreach (Control c in Buttons.Controls)
+                if (c is Button b && b.Enabled) list.Add(b);
+            return list.ToArray();
+        }
+
+        void PaintFocus()
+        {
+            var bs = ButtonList();
+            if (buttonIndex >= bs.Length) buttonIndex = bs.Length - 1;
+            foreach (Control c in Buttons.Controls)
+                if (c is Button b) b.FlatAppearance.BorderSize = 0;
+            if (onButtons && buttonIndex >= 0 && buttonIndex < bs.Length)
+            {
+                bs[buttonIndex].FlatAppearance.BorderColor = Theme.Accent;
+                bs[buttonIndex].FlatAppearance.BorderSize = Theme.S(3);
+            }
+            Grid.Invalidate();
+        }
+
+        /// <summary>Ⓑ 버튼 동작. 기본은 닫기</summary>
+        protected virtual void OnBack()
+        {
+            DialogResult = DialogResult.Cancel;
+            Close();
+        }
+
+        protected void FocusGrid()
+        {
+            onButtons = false;
+            PaintFocus();
+        }
+
+        public void OnPad(Pad b)
+        {
+            var bs = ButtonList();
+            if (b == Pad.B) { OnBack(); return; }
+            if ((b == Pad.X || b == Pad.Start) && primary != null && primary.Enabled) { primary.PerformClick(); return; }
+
+            if (!onButtons)
+            {
+                switch (b)
+                {
+                    case Pad.Up: Grid.MoveSelection(-1); break;
+                    case Pad.Down:
+                        if (Grid.Items.Count == 0 || Grid.SelectedIndex >= Grid.Items.Count - 1)
+                        {
+                            onButtons = bs.Length > 0;
+                            buttonIndex = bs.Length - 1; // 왼쪽 끝 버튼부터
+                        }
+                        else Grid.MoveSelection(1);
+                        break;
+                    case Pad.A: Grid.ActivateSelected(); break;
+                }
+            }
+            else
+            {
+                switch (b)
+                {
+                    case Pad.Left: buttonIndex = Math.Min(bs.Length - 1, buttonIndex + 1); break;
+                    case Pad.Right: buttonIndex = Math.Max(0, buttonIndex - 1); break;
+                    case Pad.Up: if (Grid.Items.Count > 0) onButtons = false; break;
+                    case Pad.A:
+                        if (buttonIndex >= 0 && buttonIndex < bs.Length) bs[buttonIndex].PerformClick();
+                        break;
+                }
+            }
+            PaintFocus();
         }
 
         protected override void OnKeyDown(KeyEventArgs e)
         {
             base.OnKeyDown(e);
-            if (e.KeyCode == Keys.Escape) { DialogResult = DialogResult.Cancel; Close(); }
+            if (e.KeyCode == Keys.Escape) OnBack();
         }
     }
 
@@ -83,9 +178,16 @@ namespace TkoolLauncher
                 Close();
             }, Theme.Accent);
             upBtn = AddButton("▲ 위로", GoUp);
+            SetPrimary(pickBtn);
 
             Grid.ItemClicked += it => Navigate((string)it.Tag);
             Navigate(start != null && Directory.Exists(start) ? start : null);
+        }
+
+        protected override void OnBack()
+        {
+            if (current == null) base.OnBack();
+            else GoUp();
         }
 
         void GoUp()
@@ -140,7 +242,9 @@ namespace TkoolLauncher
             }
             Grid.TileHeight = 76;
             Grid.EmptyText = "하위 폴더가 없어요";
+            Grid.SelectedIndex = items.Count > 0 ? 0 : -1;
             Grid.SetItems(items);
+            FocusGrid();
             if (upBtn != null) upBtn.Enabled = path != null;
             if (pickBtn != null) pickBtn.Enabled = path != null;
         }
@@ -157,9 +261,10 @@ namespace TkoolLauncher
             Grid.EmptyText = "아직 등록된 폴더가 없어요.\n[폴더 추가]를 눌러 쯔꾸르 게임이 들어있는 폴더를 골라 주세요.";
             SubHeader.Text = "여기 등록한 폴더 안의 게임을 자동으로 찾아요 (폴더 속 폴더까지)";
 
-            AddButton("완료", () => { DialogResult = DialogResult.OK; Close(); }, Theme.Accent);
+            var done = AddButton("완료", () => { DialogResult = DialogResult.OK; Close(); }, Theme.Accent);
             AddButton("선택 삭제", RemoveSelected, Theme.Danger);
             AddButton("+ 폴더 추가", AddFolder);
+            SetPrimary(done);
             Refill();
             if (firstRun) Shown += (s, e) => AddFolder();
         }
