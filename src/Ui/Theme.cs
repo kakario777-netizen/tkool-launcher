@@ -7,14 +7,22 @@ namespace TkoolLauncher
 {
     static class Theme
     {
-        public static readonly Color Bg = Color.FromArgb(18, 20, 26);
-        public static readonly Color Bar = Color.FromArgb(26, 29, 37);
-        public static readonly Color Tile = Color.FromArgb(34, 38, 48);
-        public static readonly Color TileHot = Color.FromArgb(48, 54, 68);
-        public static readonly Color Accent = Color.FromArgb(76, 154, 255);
-        public static readonly Color Text = Color.FromArgb(236, 238, 242);
-        public static readonly Color SubText = Color.FromArgb(140, 148, 162);
-        public static readonly Color Danger = Color.FromArgb(232, 92, 92);
+        // 스팀OS(게임 모드) 색
+        public static readonly Color Bg = Color.FromArgb(14, 20, 27);
+        public static readonly Color BgTop = Color.FromArgb(30, 38, 52);
+        public static readonly Color BgBottom = Color.FromArgb(9, 12, 16);
+        public static readonly Color Bar = Color.FromArgb(14, 18, 24);
+        public static readonly Color Panel = Color.FromArgb(23, 29, 37);
+        public static readonly Color Tile = Color.FromArgb(35, 41, 51);
+        public static readonly Color TileHot = Color.FromArgb(61, 68, 80);
+        public static readonly Color Accent = Color.FromArgb(26, 159, 255);
+        public static readonly Color Focus = Color.FromArgb(240, 244, 248);
+        public static readonly Color Text = Color.FromArgb(255, 255, 255);
+        public static readonly Color SubText = Color.FromArgb(139, 146, 154);
+        public static readonly Color Dim = Color.FromArgb(92, 100, 110);
+        public static readonly Color PlayTop = Color.FromArgb(112, 214, 29);
+        public static readonly Color PlayBottom = Color.FromArgb(1, 167, 91);
+        public static readonly Color Danger = Color.FromArgb(214, 72, 72);
 
         public static float Scale = 1f;
         public static int S(float v) => (int)Math.Round(v * Scale);
@@ -27,6 +35,10 @@ namespace TkoolLauncher
             // 작은 화면(7인치)에서 터치하기 좋게 기본을 조금 키움
             Scale *= 1.1f;
         }
+
+        /// <summary>픽셀 크기 글꼴 (화면 배율 적용)</summary>
+        public static Font Px(float px, bool bold = false) =>
+            new Font(FontName, px * Scale, bold ? FontStyle.Bold : FontStyle.Regular, GraphicsUnit.Pixel);
 
         public static Font F(float pt, bool bold = false) =>
             new Font(FontName, pt, bold ? FontStyle.Bold : FontStyle.Regular, GraphicsUnit.Point);

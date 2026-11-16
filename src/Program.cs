@@ -24,8 +24,9 @@ namespace TkoolLauncher
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
                 Settings.Load();
+                GameData.Load();
                 Gamepad.Start();
-                Application.Run(new MainForm());
+                Application.Run(new ShellForm());
             }
         }
     }
