@@ -17,6 +17,8 @@ namespace TkoolLauncher
         static void Main(string[] args)
         {
             bool updated = args.Contains("--updated") || args.Contains("--elevated");
+            string trayFlag = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "쯔꾸르 런처", "tray.flag");
+            bool tray = args.Contains("--tray");
             using (var mutex = new Mutex(true, "TkoolLauncher_SingleInstance", out bool first))
             {
                 if (!first)
@@ -43,9 +45,13 @@ namespace TkoolLauncher
                         else Settings.AdminTaskExe = "거절:" + exe;   // 허락 안 하면 다시 묻지 않음
                         Settings.Save();
                     }
+                    // 관리자로 다시 켤 때 '알림 영역으로 시작'을 넘겨줌 (작업엔 인수를 못 붙여서 표시 파일로)
+                    if (tray) try { System.IO.File.WriteAllText(trayFlag, "1"); } catch { }
                     if (string.Equals(Settings.AdminTaskExe, exe, StringComparison.OrdinalIgnoreCase) && Hardware.RunAdminTask())
                     { Log.Info("관리자 권한으로 다시 켬"); return; }
                 }
+                if (System.IO.File.Exists(trayFlag)) { tray = true; try { System.IO.File.Delete(trayFlag); } catch { } }
+                ShellForm.StartInTray = tray;
                 GameData.Load();
                 Gamepad.Start();
                 Application.ApplicationExit += (s, e) => { try { Log.Info("프로그램 종료 신호"); } catch { } };

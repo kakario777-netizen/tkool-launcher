@@ -363,7 +363,7 @@ namespace TkoolLauncher
             {
                 using (var k = Registry.CurrentUser.OpenSubKey(RunKey, true))
                 {
-                    if (on) k.SetValue("TkoolLauncher", "\"" + Application.ExecutablePath + "\"");
+                    if (on) k.SetValue("TkoolLauncher", "\"" + Application.ExecutablePath + "\" --tray");   // 부팅 땐 알림 영역으로 조용히
                     else k.DeleteValue("TkoolLauncher", false);
                 }
             }

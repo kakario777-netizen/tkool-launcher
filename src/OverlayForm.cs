@@ -111,8 +111,9 @@ namespace TkoolLauncher
             else SetEditing(false);   // 움직이지 않고 톡 누르면 고정
         }
 
-        public static void Toggle(bool on)
+        public static void Toggle(bool on, bool remember = true)
         {
+            if (remember && Settings.OvOn != on) { Settings.OvOn = on; Settings.Save(); }   // 다음에 켤 때도 그대로
             if (on && inst == null) { inst = new OverlayForm(); inst.Show(); inst.Render(); }
             else if (!on && inst != null) { inst.Close(); inst = null; }
         }

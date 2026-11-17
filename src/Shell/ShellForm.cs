@@ -57,6 +57,7 @@ namespace TkoolLauncher
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
             FormBorderStyle = FormBorderStyle.None;
             WindowState = FormWindowState.Maximized;
+            if (StartInTray) Opacity = 0;
             BackColor = Theme.Bg;
             KeyPreview = true;
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
@@ -72,6 +73,10 @@ namespace TkoolLauncher
             Theme.ApplyAccent();
             LoadBackground();
             try { Hotkeys.Start(); } catch { }
+            SetupTray();
+            if (StartInTray) trayTipShown = true;
+            try { if (SystemControls.GetAutoStart()) SystemControls.SetAutoStart(true); } catch { }   // 예전 등록도 --tray로 고침
+            if (Settings.OvOn) { try { OverlayForm.Toggle(true); } catch { } }
             anim.Tick += OnAnim;
             clock.Tick += (s, e) => Invalidate();
             clock.Start();
@@ -112,9 +117,11 @@ namespace TkoolLauncher
                 var fpsTimer = new Timer { Interval = 1000 };
                 fpsTimer.Tick += (s3, e3) =>
                 {
-                    bool need = GameWatch.Running && (OverlayForm.IsOn || Settings.SmartFps > 0);
+                    // 런처 밖에서 켠 게임(스팀 등)도 재도록: 런처 화면이 앞에 있을 때만 쉼
+                    bool launcherFront = Visible && WindowState != FormWindowState.Minimized && Form.ActiveForm == this;
+                    bool need = (OverlayForm.IsOn || Settings.SmartFps > 0) && (GameWatch.Running || !launcherFront);
                     if (need) { Fps.Start(); Fps.Tick(); } else if (Fps.Running) Fps.Stop();
-                    if (++sec % 3 == 0 && need) Task.Run(() => SmartTdp.Tick());
+                    if (++sec % 3 == 0 && need && Settings.SmartFps > 0) Task.Run(() => SmartTdp.Tick());
                     Bgm.Update(!GameWatch.Running && WindowState != FormWindowState.Minimized && Visible && mini == null);
                 };
                 fpsTimer.Start();
@@ -229,7 +236,7 @@ namespace TkoolLauncher
                 CameFromGame = true;
                 scaleWas = Scaler.Mode;
                 if (scaleWas != 0) Scaler.Stop();
-                WindowState = FormWindowState.Maximized;
+                Bring();
                 Show();
                 Activate();
                 SetForegroundWindow(Handle);
@@ -239,7 +246,7 @@ namespace TkoolLauncher
             }
             if (WindowState == FormWindowState.Minimized)
             {
-                WindowState = FormWindowState.Maximized;
+                Bring();
                 Activate();
                 menu.Open = false;
                 quick.Show();
@@ -251,10 +258,17 @@ namespace TkoolLauncher
         /// <summary>AYA 작은 버튼: 게임 중이면 런처 홈 화면을, 런처 안이면 홈으로</summary>
         public void SmallAction()
         {
-            if (WindowState == FormWindowState.Minimized || Form.ActiveForm == null)
+            // 런처 화면이 앞에 떠 있으면 내림(알림 영역으로), 아니면 올림 — 라이브러리만 올렸다 내렸다
+            if (Visible && WindowState != FormWindowState.Minimized && Form.ActiveForm == this && !PopupOpen)
+            {
+                quick.Open = false; menu.Open = false;
+                ToTray();
+                return;
+            }
+            if (!Visible || WindowState == FormWindowState.Minimized || Form.ActiveForm == null)
             {
                 if (GameWatch.Running) { gameHwnd = GetForegroundWindow(); CameFromGame = true; }
-                WindowState = FormWindowState.Maximized;
+                Bring();
                 Show(); Activate(); SetForegroundWindow(Handle);
             }
             quick.Open = false; menu.Open = false;
@@ -302,7 +316,7 @@ namespace TkoolLauncher
         {
             if (mini != null) { mini.Close(); mini = null; }
             if (GameWatch.Running) { gameHwnd = GetForegroundWindow(); CameFromGame = true; }
-            WindowState = FormWindowState.Maximized;
+            Bring();
             Show(); Activate(); SetForegroundWindow(Handle);
         }
 
@@ -379,7 +393,7 @@ namespace TkoolLauncher
             BeginInvoke(new Action(() =>
             {
                 WindowState = FormWindowState.Normal;
-                WindowState = FormWindowState.Maximized;
+                Bring();
                 LayoutScreens();
                 foreach (var sc in stack) sc.OnGamesChanged();
                 Invalidate();
@@ -515,8 +529,73 @@ namespace TkoolLauncher
         }
 
         // ───────── 그리기 ─────────
+        // ───────── 알림 영역(트레이) 상주 ─────────
+        // 런처 '종료'는 화면만 닫고 알림 영역으로 내려감 (TDP·팬·AYA 버튼·오버레이는 계속 동작).
+        // 진짜 종료는 알림 아이콘 메뉴의 '완전히 종료'.
+        NotifyIcon tray;
+        bool realExit, trayTipShown;
+        public static bool StartInTray;
+
+        void SetupTray()
+        {
+            if (tray != null) return;
+            tray = new NotifyIcon { Text = "쯔꾸르 런처", Visible = true };
+            try { tray.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { tray.Icon = SystemIcons.Application; }
+            var menu = new ContextMenuStrip { Font = Theme.F(11f) };
+            menu.Items.Add("런처 열기", null, (s, e) => Bring());
+            menu.Items.Add("빠른 설정", null, (s, e) => { try { ShowPopup(); } catch (Exception ex) { Log.Error("트레이 빠른 설정", ex); } });
+            var ov = new ToolStripMenuItem("성능 표시");
+            ov.Click += (s, e) => OverlayForm.Toggle(!OverlayForm.IsOn);
+            menu.Items.Add(ov);
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("완전히 종료", null, (s, e) => ExitForReal());
+            menu.Opening += (s, e) => ov.Checked = OverlayForm.IsOn;
+            foreach (ToolStripItem it in menu.Items) it.Padding = new Padding(Theme.S(6), Theme.S(8), Theme.S(6), Theme.S(8));
+            tray.ContextMenuStrip = menu;
+            tray.MouseClick += (s, e) => { if (e.Button == MouseButtons.Left) Bring(); };
+        }
+
+        /// <summary>런처 화면 띄우기 (알림 영역에 숨어 있어도)</summary>
+        public void Bring()
+        {
+            if (!Visible) { Show(); Log.Info("알림 영역에서 런처 열기"); }
+            if (Opacity < 1) Opacity = 1;
+            WindowState = FormWindowState.Maximized;
+            try { Activate(); } catch { }
+        }
+
+        public void ToTray()
+        {
+            Hide();
+            Log.Info("런처 화면 닫음 — 알림 영역에서 계속 실행");
+            if (!trayTipShown && tray != null)
+            {
+                trayTipShown = true;
+                try { tray.ShowBalloonTip(3000, "쯔꾸르 런처", "알림 영역에서 계속 돌아가요. AYA 버튼으로 빠른 설정, 완전히 끄려면 이 아이콘 메뉴에서 '완전히 종료'.", ToolTipIcon.Info); } catch { }
+            }
+        }
+
+        public void ExitForReal()
+        {
+            realExit = true;
+            Log.Info("알림 아이콘에서 완전히 종료");
+            Close();
+        }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            if (StartInTray) { StartInTray = false; BeginInvoke(new Action(() => { ToTray(); Opacity = 1; })); }
+        }
+
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            if (!realExit && e.CloseReason == CloseReason.UserClosing)
+            {
+                e.Cancel = true;
+                ToTray();
+                return;
+            }
             // 왜 꺼졌는지 기록 (사용자·윈도우·코드 중 누가 닫았는지)
             try
             {
@@ -538,6 +617,7 @@ namespace TkoolLauncher
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            try { if (tray != null) { tray.Visible = false; tray.Dispose(); } } catch { }
             Hotkeys.Stop();
             try { Scaler.Stop(); } catch { }
             try { VirtualPad.Stop(); } catch { }
@@ -545,7 +625,7 @@ namespace TkoolLauncher
             Fps.Stop();
             Bgm.Close();
             Hardware.Shutdown();
-            OverlayForm.Toggle(false);
+            OverlayForm.Toggle(false, false);
             base.OnFormClosed(e);
         }
 
@@ -791,7 +871,7 @@ namespace TkoolLauncher
                 n => BeginInvoke(new Action(() =>
                 {
                     tip.Close();
-                    WindowState = FormWindowState.Maximized;
+                    Bring();
                     Activate();
                     RefreshLists();
                     ShowToast(list.Count + "개 중 " + n + "개의 표지·이름을 채웠어요", 5000);
@@ -862,7 +942,7 @@ namespace TkoolLauncher
                         {
                             t.Stop(); t.Dispose();
                             var issues = GameDoctor.Check(g, seen);
-                            if (alive) { WindowState = FormWindowState.Maximized; Activate(); }
+                            if (alive) { Bring(); Activate(); }
                             using (var d = new FixDialog(g, issues, false, seen))
                             {
                                 d.ShowDialog(this);
@@ -913,7 +993,7 @@ namespace TkoolLauncher
                 Gamepad.MapKeys = false;
                 if (Updater.RestartPending) { Updater.Restart(); return; }
                 foreach (var sc in stack) if (!(sc is DetailScreen)) sc.OnGamesChanged();
-                WindowState = FormWindowState.Maximized;
+                Bring();
                 Activate();
                 Invalidate();
             })));
