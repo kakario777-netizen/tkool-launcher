@@ -19,5 +19,6 @@
 - 화면 확대(FSR 용도): Scaler.cs (Magnification API MagSetFullscreenTransform, 부드럽게/도트 정수배, 검은 판을 게임 뒤에, 런처 불러낼 땐 잠시 해제). 쯔꾸르 자동 확대 옵션.
 - 조명 효과: Hardware.UpdateEffect (1.5초 간격 숨쉬기·무지개). 전압: 배터리 전압(WMI BatteryStatus.Voltage) — CPU 코어 전압은 미구현.
 - 시작 영상은 사용자가 필요 없다고 함.
+- AYA 버튼 팝업: Shell/QuickPopup.cs — 런처가 앞에 없으면(게임·바탕화면) 런처 전체 대신 오른쪽 좁은 맨 위 창에 QuickPanel(Popup=true) 표시, 닫으면 원래 창으로 포커스(Alt 눌러 SetForegroundWindow). 사용자는 AYASpace 완전 대용으로 씀.
 - 표지·이름 채우기: GameCapture.cs (게임 켜고 12초 뒤 PrintWindow 캡처 → covers\폴더.auto.png, 창 제목으로 이름 교체 → GameStat.Title, 설정의 "한 번에 찾기"는 하나씩 15초 켜고 끔). 소개 글: GameDesc.cs (스팀 상점 한국어 짧은 소개, 그 외 readme·説明書 txt).
 - 진행 순서: 1) 폴더 검색·제목/버전 인식·목록 2) 스팀식 표지 화면·플레이 시간 3) 게임패드·전체 화면·일본어 환경 실행·RTP 확인 4) 상태 표시줄·빠른 설정판 5) 최소화 반복 감시.

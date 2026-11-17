@@ -163,11 +163,58 @@ namespace TkoolLauncher
             Animate();
         }
 
+        // ───────── 게임 위 오른쪽 팝업 (AYASpace처럼) ─────────
+        QuickPopup popup;
+        public bool PopupClosing;
+        public bool PopupOpen => popup != null && popup.Visible;
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern void keybd_event(byte vk, byte scan, uint flags, IntPtr extra);
+
+        /// <summary>다른 창이 앞에 있어도 확실히 앞으로 (Alt를 살짝 눌러 윈도우의 포커스 제한을 풂)</summary>
+        static void ForceForeground(IntPtr h)
+        {
+            keybd_event(0x12, 0, 0, IntPtr.Zero);
+            keybd_event(0x12, 0, 2, IntPtr.Zero);
+            SetForegroundWindow(h);
+        }
+
+        public void ShowPopup()
+        {
+            IntPtr fg = GetForegroundWindow();
+            if (fg != Handle) gameHwnd = fg;
+            CameFromGame = GameWatch.Running;
+            scaleWas = Scaler.Mode;
+            if (scaleWas != 0) Scaler.Stop();   // 확대 중이면 팝업까지 커지니 잠시 풂
+            if (popup == null || popup.IsDisposed) popup = new QuickPopup(this);
+            popup.Open();
+            ForceForeground(popup.Handle);
+        }
+
+        /// <summary>팝업 닫기. backToGame이면 원래 앞에 있던 게임으로 포커스를 돌려줌</summary>
+        public void ClosePopup(bool backToGame = true)
+        {
+            if (popup == null || !popup.Visible) return;
+            PopupClosing = true;
+            popup.Hide();
+            PopupClosing = false;
+            if (backToGame && gameHwnd != IntPtr.Zero && gameHwnd != Handle)
+            {
+                ShowWindow(gameHwnd, 9);
+                ForceForeground(gameHwnd);
+            }
+            if (scaleWas != 0 && gameHwnd != IntPtr.Zero && GameWatch.Running) { int m = scaleWas; scaleWas = 0; Scaler.Start(m, gameHwnd); }
+            scaleWas = 0;
+            CameFromGame = false;
+        }
+
         // ───────── 홈 버튼·빠른 설정 ─────────
         /// <summary>AYA 버튼·가이드 버튼·보기+메뉴: 게임 중이면 런처를 불러와 빠른 설정을, 런처 안이면 빠른 설정 열고 닫기</summary>
         public void HomeAction()
         {
             if (GameCapture.Finding) { GameCapture.Cancel = true; return; }
+            if (PopupOpen) { ClosePopup(); return; }
+            // 런처가 앞에 없으면(게임·바탕화면 등) 런처를 띄우지 않고 오른쪽 팝업만
+            if (Form.ActiveForm == null || WindowState == FormWindowState.Minimized) { ShowPopup(); return; }
             if (GameWatch.Running && (WindowState == FormWindowState.Minimized || Form.ActiveForm == null))
             {
                 gameHwnd = GetForegroundWindow();
@@ -209,6 +256,14 @@ namespace TkoolLauncher
         /// <summary>빠른 버튼: 게임에서 불려 나왔으면 게임으로 돌아간 뒤 실행</summary>
         public void SendToGame(Action a)
         {
+            if (PopupOpen)
+            {
+                ClosePopup();
+                var tp = new Timer { Interval = 350 };
+                tp.Tick += (s, e) => { tp.Stop(); tp.Dispose(); try { a(); } catch { } };
+                tp.Start();
+                return;
+            }
             if (CameFromGame && GameWatch.Running)
             {
                 ReturnToGame();
@@ -228,6 +283,7 @@ namespace TkoolLauncher
 
         public void EnterMini()
         {
+            if (PopupOpen) ClosePopup();
             quick.Open = false; quick.T = 0; menu.Open = false;
             if (mini == null) { mini = new MiniBubble(this); mini.Show(); }
             if (CameFromGame && GameWatch.Running) ReturnToGame();
@@ -284,6 +340,7 @@ namespace TkoolLauncher
 
         public void ReturnToGame()
         {
+            if (PopupOpen) { ClosePopup(); return; }
             quick.Open = false;
             quick.T = 0;
             CameFromGame = false;
@@ -294,6 +351,7 @@ namespace TkoolLauncher
 
         public void QuitGame()
         {
+            if (PopupOpen) ClosePopup(false);
             string dir = GameWatch.Dir;
             if (dir == null) return;
             foreach (var p in Process.GetProcesses())

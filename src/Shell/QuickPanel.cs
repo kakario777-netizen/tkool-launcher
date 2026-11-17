@@ -13,7 +13,11 @@ namespace TkoolLauncher
     class QuickPanel
     {
         public ShellForm Shell;
+        public Control Host;        // 그려질 곳 (런처 화면 또는 오른쪽 팝업 창)
+        public bool Popup;          // 게임 위에 뜬 오른쪽 팝업인지
         public bool Open;
+
+        void Redraw() { if (Host != null) Host.Invalidate(); else Redraw(); }
         public float T;
         int focus;
         float scroll;
@@ -54,6 +58,7 @@ namespace TkoolLauncher
 
         public void Hide()
         {
+            if (Popup) { Shell.ClosePopup(); return; }
             Open = false;
             Shell.Animate();
         }
@@ -74,7 +79,7 @@ namespace TkoolLauncher
                     hasWifi = r.ContainsKey("WiFi"); wifi = hasWifi && r["WiFi"];
                     hasBt = r.ContainsKey("Bluetooth"); bt = hasBt && r["Bluetooth"];
                     radiosLoaded = true;
-                    Shell.Invalidate();
+                    Redraw();
                 }));
             });
         }
@@ -83,6 +88,8 @@ namespace TkoolLauncher
         {
             rows = new List<Row>();
             bool game = GameWatch.Running;
+            if (Popup)
+                rows.Add(new Row { Kind = Kind.Action, Title = "런처 열기", Sub = "게임 목록·설정 화면으로", Act = () => { Shell.ClosePopup(false); Shell.SmallAction(); } });
             if (game)
             {
                 rows.Add(new Row { Kind = Kind.Action, Title = "게임으로 돌아가기", Act = Shell.ReturnToGame });
@@ -137,7 +144,7 @@ namespace TkoolLauncher
                         Shell.BeginInvoke(new Action(() =>
                         {
                             memNote = mb + "MB 비웠어요 · 남은 메모리 " + (m.Avail / 1048576) + "MB";
-                            Shell.Invalidate();
+                            Redraw();
                         }));
                     });
                 }
@@ -445,7 +452,7 @@ namespace TkoolLauncher
             if (r.Kind == Kind.Slider) r.Change(Math.Max(0, Math.Min(100, r.Num + dir * 5)));
             else if (r.Kind == Kind.Choice) r.Change((r.ChoiceIndex + dir + r.Choices.Length) % r.Choices.Length);
             else if (r.Kind == Kind.Toggle && (dir > 0) != r.On) r.Change(dir > 0 ? 1 : 0);
-            Shell.Invalidate();
+            Redraw();
         }
 
         void Activate(Row r)
@@ -453,7 +460,7 @@ namespace TkoolLauncher
             if (r.Kind == Kind.Toggle) r.Change(r.On ? 0 : 1);
             else if (r.Kind == Kind.Choice) r.Change((r.ChoiceIndex + 1) % r.Choices.Length);
             else if (r.Kind == Kind.Action) r.Act?.Invoke();
-            Shell.Invalidate();
+            Redraw();
         }
 
         public void OnPad(Pad b)
@@ -466,17 +473,19 @@ namespace TkoolLauncher
                 case Pad.Left: Adjust(-1); break;
                 case Pad.Right: Adjust(1); break;
                 case Pad.A: if (focus < rows.Count) Activate(rows[focus]); break;
-                case Pad.B: case Pad.Start:
+                case Pad.B: case Pad.Start: case Pad.Guide:
+                    if (Popup) { Shell.ClosePopup(); return; }
                     if (GameWatch.Running && Shell.CameFromGame) Shell.ReturnToGame(); else Hide();
                     return;
             }
-            Shell.Invalidate();
+            Redraw();
         }
 
         public void OnTap(Point p)
         {
             if (!panel.Contains(p))
             {
+                if (Popup) { Shell.ClosePopup(); return; }
                 if (GameWatch.Running && Shell.CameFromGame) Shell.ReturnToGame(); else Hide();
                 return;
             }
@@ -496,7 +505,7 @@ namespace TkoolLauncher
                     else r.Change((r.ChoiceIndex + 1) % r.Choices.Length);
                 }
                 else Activate(r);
-                Shell.Invalidate();
+                Redraw();
                 return;
             }
         }
@@ -511,7 +520,7 @@ namespace TkoolLauncher
                 int tx = r.Rect.X + S(18), tw = r.Rect.Width - S(36);
                 int v = Math.Max(0, Math.Min(100, (p.X - tx) * 100 / Math.Max(1, tw)));
                 if (v != r.Num) r.Change(v);
-                Shell.Invalidate();
+                Redraw();
                 return;
             }
         }
@@ -521,7 +530,7 @@ namespace TkoolLauncher
             return new List<Hint>
             {
                 new Hint(Pad.A, "선택", () => OnPad(Pad.A)),
-                new Hint(Pad.B, GameWatch.Running && Shell.CameFromGame ? "게임으로" : "닫기", () => OnPad(Pad.B)),
+                new Hint(Pad.B, Popup || (GameWatch.Running && Shell.CameFromGame) ? (GameWatch.Running ? "게임으로" : "닫기") : "닫기", () => OnPad(Pad.B)),
             };
         }
     }
