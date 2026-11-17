@@ -204,6 +204,11 @@ namespace TkoolLauncher
 
         static void OnEvent(IntPtr h, uint ev, IntPtr hwnd, int obj, int child, uint thread, uint time)
         {
+            try { OnEvent2(obj); } catch (Exception ex) { Log.Error("최소화 감시", ex); }
+        }
+
+        static void OnEvent2(int obj)
+        {
             if (!Settings.LoopGuard || obj != 0) return;
             int now = Environment.TickCount;
             times.Enqueue(now);
@@ -219,6 +224,7 @@ namespace TkoolLauncher
             else cause = "직전 입력 없음 (유령 터치 또는 작업 표시줄 모서리 의심)";
             Hotkeys.SmallBlockedUntil = now + 60000;
             LastReport = DateTime.Now.ToString("HH:mm") + " · " + cause;
+            Log.Info("최소화 반복 감지: " + cause);
             Alert?.Invoke("최소화 반복을 감지했어요 · 원인: " + cause + " · AYA 작은 버튼을 1분 막았어요");
         }
 

@@ -27,6 +27,8 @@ namespace TkoolLauncher
                     catch (AbandonedMutexException) { }
                 }
                 Updater.CleanupOld();
+                Log.Hook();
+                Log.Start();
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
                 Settings.Load();
@@ -34,7 +36,9 @@ namespace TkoolLauncher
                 if (Settings.HardwareControl && !updated && !IsAdmin() && Hardware.RunAdminTask()) return;
                 GameData.Load();
                 Gamepad.Start();
-                Application.Run(new ShellForm());
+                try { Application.Run(new ShellForm()); }
+                catch (Exception ex) { Log.Error("실행", ex); throw; }
+                finally { Log.Stop(); }
             }
         }
     }

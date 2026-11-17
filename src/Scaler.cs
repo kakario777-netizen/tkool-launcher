@@ -55,7 +55,7 @@ namespace TkoolLauncher
                 if (fn != IntPtr.Zero)
                     ((BoolFn)Marshal.GetDelegateForFunctionPointer(fn, typeof(BoolFn)))(mode == 1);
             }
-            catch (Exception ex) { Problem = "확대 기능 오류: " + ex.Message; return false; }
+            catch (Exception ex) { Problem = "확대 기능 오류: " + ex.Message; Log.Error("화면 확대", ex); return false; }
 
             // 게임 창 뒤에 검은 판을 깔아 남는 테두리를 가림
             backdrop = new Form

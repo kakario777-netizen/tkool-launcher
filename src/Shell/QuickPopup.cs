@@ -30,7 +30,7 @@ namespace TkoolLauncher
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
 
             var sc = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
-            int w = Theme.S(460);
+            int w = Theme.S(560);
             targetX = sc.Right - w;
             Bounds = new Rectangle(sc.Right, sc.Top, w, sc.Height);
 
@@ -59,6 +59,11 @@ namespace TkoolLauncher
 
         protected override void OnPaint(PaintEventArgs e)
         {
+            try { PaintAll(e); } catch (Exception ex) { Log.Error("팝업 그리기", ex); }
+        }
+
+        void PaintAll(PaintEventArgs e)
+        {
             var g = e.Graphics;
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             Draw.EnsureFonts();
@@ -76,7 +81,7 @@ namespace TkoolLauncher
             {
                 var hn = hints[i];
                 int lw = Draw.Measure(g, hn.Label, Draw.Body);
-                int gw = Theme.S(22);
+                int gw = hn.Button == Pad.A || hn.Button == Pad.B || hn.Button == Pad.X || hn.Button == Pad.Y ? Theme.S(22) : Theme.S(30);
                 int x0 = x - gw - Theme.S(8) - lw;
                 Draw.PadGlyph(g, hn.Button, x0, cy);
                 Draw.Text(g, hn.Label, Draw.Body, new Rectangle(x0 + gw + Theme.S(8), r.Y, lw + 2, h), Theme.Text);

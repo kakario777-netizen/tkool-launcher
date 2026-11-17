@@ -163,6 +163,7 @@ namespace TkoolLauncher
             catch (Exception ex) { Problem = "가상 패드 오류: " + ex.Message; Cleanup(); return false; }
 
             Running = true;
+            Log.Info("가상 패드 시작: 진짜 패드 " + physIndex + "번, 가상 " + VirtualIndex + "번, 숨김 " + hidden.Count + "개");
             loop = new Thread(Loop) { IsBackground = true, Priority = ThreadPriority.AboveNormal, Name = "VirtualPad" };
             loop.SetApartmentState(ApartmentState.MTA);
             loop.Start();

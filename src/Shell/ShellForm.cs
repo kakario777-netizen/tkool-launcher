@@ -53,6 +53,7 @@ namespace TkoolLauncher
         public ShellForm()
         {
             Text = "쯔꾸르 런처";
+            try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
             FormBorderStyle = FormBorderStyle.None;
             WindowState = FormWindowState.Maximized;
             BackColor = Theme.Bg;
@@ -83,12 +84,18 @@ namespace TkoolLauncher
 
             Shown += (s, e) =>
             {
+                if (Log.PreviousCrash != null)
+                    ErrorPopup.Show2("지난번에 런처가 갑자기 꺼졌어요",
+                        Log.PreviousCrash + "\n\n기록: 내 문서\\쯔꾸르 런처\\logs (log.txt, errors.txt)\n이 기록을 Claude에게 보여주면 원인을 찾아 고칠 수 있어요.");
                 // 팬·조명·TDP 드라이버 준비 (느릴 수 있어 뒤에서)
                 Task.Run(() =>
                 {
-                    try { Hardware.Init(); Hardware.ApplySaved(); } catch { }
+                    try { Hardware.Init(); Hardware.ApplySaved(); } catch (Exception ex) { Log.Error("하드웨어 준비", ex); }
+                    Log.Info("관리자=" + Hardware.IsAdmin + " PawnIO=" + Hardware.PawnInstalled + " 기기일치=" + Hardware.IsAirPlusMendocino +
+                             " EC=" + Hardware.EcReady + " SMU=" + Hardware.SmuReady + " 온도=" + Hardware.TempReady + (Hardware.Problem != "" ? " 문제=" + Hardware.Problem : ""));
                     // 가상 패드: 켜 뒀으면 다시 켜고, 아니면 혹시 숨겨진 채 남은 진짜 패드를 풀어줌 (런처가 비정상 종료됐을 때 대비)
-                    try { if (Settings.VPadOn) VirtualPad.Start(); else VirtualPad.Stop(); } catch { }
+                    try { if (Settings.VPadOn) { bool ok = VirtualPad.Start(); Log.Info("가상 패드 " + (ok ? "켜짐" : "실패: " + VirtualPad.Problem)); } else VirtualPad.Stop(); }
+                    catch (Exception ex) { Log.Error("가상 패드", ex); }
                     try { BeginInvoke(new Action(Invalidate)); } catch { }
                 });
                 var hw = new Timer { Interval = 15000 };
@@ -496,7 +503,19 @@ namespace TkoolLauncher
             base.OnFormClosed(e);
         }
 
+        int paintErrAt;
+
         protected override void OnPaint(PaintEventArgs e)
+        {
+            try { PaintAll(e); }
+            catch (Exception ex)
+            {
+                // 그리기 오류가 계속 나도 런처가 꺼지지 않게: 1분에 한 번만 기록
+                if (Environment.TickCount - paintErrAt > 60000) { paintErrAt = Environment.TickCount; Log.Error("화면 그리기", ex); ErrorPopup.ShowError(ex); }
+            }
+        }
+
+        void PaintAll(PaintEventArgs e)
         {
             if (stack.Count == 0) return;
             if (Cur.Area.Width == 0) LayoutScreens();
@@ -750,6 +769,7 @@ namespace TkoolLauncher
         public void Launch(GameInfo g)
         {
             if (GameWatch.Running) { ShowToast("다른 게임이 아직 실행 중이에요", 3000); return; }
+            Log.Info("게임 실행: " + g.Title + " (" + g.Kind + " " + g.VersionLabel + ") " + (g.LaunchUri ?? g.Exe));
             Process p = null;
             try
             {
@@ -760,6 +780,7 @@ namespace TkoolLauncher
             }
             catch (Exception ex)
             {
+                Log.Error("게임 실행 " + g.Title, ex);
                 ShowToast("실행하지 못했어요: " + ex.Message, 5000);
                 return;
             }

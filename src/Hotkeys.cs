@@ -67,6 +67,12 @@ namespace TkoolLauncher
 
         static IntPtr Callback(int code, IntPtr w, IntPtr l)
         {
+            try { return Callback2(code, w, l); }
+            catch (Exception ex) { Log.Error("키 신호", ex); return CallNextHookEx(hook, code, w, l); }
+        }
+
+        static IntPtr Callback2(int code, IntPtr w, IntPtr l)
+        {
             if (code >= 0 && (w.ToInt32() == 0x100 || w.ToInt32() == 0x104)) // KEYDOWN / SYSKEYDOWN
             {
                 var k = (KBD)Marshal.PtrToStructure(l, typeof(KBD));
