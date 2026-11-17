@@ -26,7 +26,9 @@ namespace TkoolLauncher
         // 항목 (Settings.OvItems 비트 순서)
         public static readonly string[] ItemNames = { "FPS", "CPU 사용률", "CPU 온도", "TDP", "GPU", "메모리", "소모 전력", "전압", "배터리", "시간" };
         public static readonly string[] StyleNames = { "가로 한 줄", "세로 목록", "FPS만 크게" };
-        public static readonly string[] PosNames = { "왼쪽 위", "가운데 위", "오른쪽 위", "왼쪽 아래", "오른쪽 아래" };
+        public static readonly string[] PosNames = { "왼쪽 위", "가운데 위", "오른쪽 위", "왼쪽 아래", "오른쪽 아래", "왼쪽 가운데", "오른쪽 가운데", "가운데 아래", "직접 옮긴 곳" };
+        public const int PosCustom = 8;
+        public static readonly string[] MarginNames = { "바짝 붙이기", "조금 띄우기", "넉넉히 띄우기" };
         public static readonly string[] SizeNames = { "작게", "보통", "크게" };
         public static readonly string[] ColorNames = { "초록", "흰색", "노랑", "하늘", "분홍", "주황", "빨강" };
         static readonly Color[] Colors =
@@ -40,6 +42,74 @@ namespace TkoolLauncher
         bool measured;
 
         public static bool IsOn => inst != null;
+
+        // ── 끌어서 옮기기 모드 ──
+        // 평소엔 클릭이 게임으로 통과(WS_EX_TRANSPARENT). 옮기기 모드에서만 마우스·터치로 잡을 수 있음.
+        bool editing, dragging, moved;
+        Point dragPos, grabOff, downAt;
+        readonly Timer editTimer = new Timer { Interval = 15000 };
+        public static bool Editing => inst != null && inst.editing;
+
+        /// <summary>옮기기 모드 켜기 (꺼져 있으면 켜고 시작). 놓은 뒤 한 번 톡 누르거나 15초 지나면 끝.</summary>
+        public static void StartMove()
+        {
+            if (inst == null) Toggle(true);
+            inst.SetEditing(true);
+        }
+
+        public static void StopMove() { inst?.SetEditing(false); }
+
+        [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int i);
+        [DllImport("user32.dll")] static extern int SetWindowLong(IntPtr h, int i, int v);
+
+        void SetEditing(bool on)
+        {
+            editing = on;
+            int ex = GetWindowLong(Handle, -20);
+            ex = on ? ex & ~0x20 : ex | 0x20;
+            SetWindowLong(Handle, -20, ex);
+            editTimer.Stop();
+            if (on) editTimer.Start();
+            Render();
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            if (!editing) return;
+            editTimer.Stop();
+            dragging = true; moved = false;
+            downAt = Cursor.Position;
+            grabOff = new Point(Cursor.Position.X - Left, Cursor.Position.Y - Top);
+            dragPos = Location;
+            Capture = true;
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            if (!dragging) return;
+            var c = Cursor.Position;
+            if (Math.Abs(c.X - downAt.X) + Math.Abs(c.Y - downAt.Y) > Theme.S(6)) moved = true;
+            dragPos = new Point(c.X - grabOff.X, c.Y - grabOff.Y);
+            Render();
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            if (!dragging) return;
+            dragging = false;
+            Capture = false;
+            if (moved)
+            {
+                var wa = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
+                Settings.OvPos = PosCustom;
+                Settings.OvX = (float)(Left - wa.X) / wa.Width;
+                Settings.OvY = (float)(Top - wa.Y) / wa.Height;
+                Settings.Save();
+                editTimer.Start();
+                Render();
+            }
+            else SetEditing(false);   // 움직이지 않고 톡 누르면 고정
+        }
 
         public static void Toggle(bool on)
         {
@@ -60,6 +130,7 @@ namespace TkoolLauncher
             Size = new Size(Theme.S(100), Theme.S(30));
             try { cpu = new PerformanceCounter("Processor", "% Processor Time", "_Total"); cpu.NextValue(); } catch { }
             timer.Tick += (s, e) => Measure();
+            editTimer.Tick += (s, e) => SetEditing(false);
             timer.Start();
         }
 
@@ -145,15 +216,28 @@ namespace TkoolLauncher
             using (var bmp = Paint2())
             {
                 var wa = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
-                int m = Theme.S(10), x, y;
+                int m = Settings.OvMargin <= 0 ? 0 : Settings.OvMargin == 2 ? Theme.S(28) : Theme.S(10), x, y;
+                int cx = wa.X + (wa.Width - bmp.Width) / 2, cy = wa.Y + (wa.Height - bmp.Height) / 2;
+                int l = wa.X + m, r = wa.Right - bmp.Width - m, t = wa.Y + m, b = wa.Bottom - bmp.Height - m;
                 switch (Settings.OvPos)
                 {
-                    case 1: x = wa.X + (wa.Width - bmp.Width) / 2; y = wa.Y + m; break;
-                    case 2: x = wa.Right - bmp.Width - m; y = wa.Y + m; break;
-                    case 3: x = wa.X + m; y = wa.Bottom - bmp.Height - m; break;
-                    case 4: x = wa.Right - bmp.Width - m; y = wa.Bottom - bmp.Height - m; break;
-                    default: x = wa.X + m; y = wa.Y + m; break;
+                    case 1: x = cx; y = t; break;
+                    case 2: x = r; y = t; break;
+                    case 3: x = l; y = b; break;
+                    case 4: x = r; y = b; break;
+                    case 5: x = l; y = cy; break;
+                    case 6: x = r; y = cy; break;
+                    case 7: x = cx; y = b; break;
+                    case PosCustom:
+                        if (Settings.OvX < 0) goto default;
+                        x = wa.X + (int)(Settings.OvX * wa.Width); y = wa.Y + (int)(Settings.OvY * wa.Height);
+                        break;
+                    default: x = l; y = t; break;
                 }
+                if (dragging) { x = dragPos.X; y = dragPos.Y; }
+                // 화면 밖으로 안 나가게
+                x = Math.Max(wa.X, Math.Min(wa.Right - bmp.Width, x));
+                y = Math.Max(wa.Y, Math.Min(wa.Bottom - bmp.Height, y));
                 Push(bmp, new Point(x, y));
             }
         }
@@ -166,6 +250,7 @@ namespace TkoolLauncher
             var txt = Color.FromArgb(ta, col);
             var lab = Color.FromArgb((int)(ta * 0.62f), Color.White);
             int bga = (int)(255 * Math.Max(0, Math.Min(100, Settings.OvBg)) / 100f);
+            if (editing) bga = Math.Max(bga, 170);   // 옮기는 동안은 잡을 수 있게 배경을 깔아 둠 (투명한 곳은 눌리지 않음)
             bool outline = bga < 90;   // 배경이 옅으면 글자에 검은 테두리 (밝은 화면에서도 보이게)
 
             // 보일 항목 (FPS는 측정 전이면 "-")
@@ -283,6 +368,12 @@ namespace TkoolLauncher
                             x += W(cells[i][1], fV);
                         }
                     }
+                    if (editing)
+                    {
+                        using (var pen = new Pen(Color.FromArgb(255, 26, 159, 255), Math.Max(2f, Theme.S(2.5f))) { DashStyle = DashStyle.Dash })
+                        using (var path = Round(new Rectangle(1, 1, bw - 3, bh - 3), (int)(Theme.S(8) * k)))
+                            g.DrawPath(pen, path);
+                    }
                 }
                 return bmp;
             }
@@ -337,7 +428,7 @@ namespace TkoolLauncher
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
-            timer.Stop(); timer.Dispose(); cpu?.Dispose();
+            timer.Stop(); timer.Dispose(); editTimer.Stop(); editTimer.Dispose(); cpu?.Dispose();
             base.OnFormClosed(e);
         }
     }

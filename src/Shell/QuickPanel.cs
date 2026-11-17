@@ -331,6 +331,13 @@ namespace TkoolLauncher
             rows.Add(new Row { FixCat = 6, Kind = Kind.Toggle, Title = "성능 표시 켜기", On = OverlayForm.IsOn, Change = v => OverlayForm.Toggle(v == 1) });
             rows.Add(new Row { FixCat = 6, Kind = Kind.Choice, Title = "모양", Choices = OverlayForm.StyleNames, ChoiceIndex = Clamp(Settings.OvStyle, OverlayForm.StyleNames), Change = v => { Settings.OvStyle = v; apply(); } });
             rows.Add(new Row { FixCat = 6, Kind = Kind.Choice, Title = "위치", Choices = OverlayForm.PosNames, ChoiceIndex = Clamp(Settings.OvPos, OverlayForm.PosNames), Change = v => { Settings.OvPos = v; apply(); } });
+            rows.Add(new Row { FixCat = 6, Kind = Kind.Choice, Title = "가장자리 여백", Choices = OverlayForm.MarginNames, ChoiceIndex = Clamp(Settings.OvMargin, OverlayForm.MarginNames), Change = v => { Settings.OvMargin = v; apply(); } });
+            rows.Add(new Row
+            {
+                FixCat = 6, Kind = Kind.Action, Title = OverlayForm.Editing ? "옮기는 중 — 끝내기" : "끌어서 위치 옮기기",
+                Sub = "마우스나 손가락으로 끌어 놓고, 한 번 톡 누르면 고정",
+                Act = () => { if (OverlayForm.Editing) OverlayForm.StopMove(); else { OverlayForm.StartMove(); Hide(); } }
+            });
             rows.Add(new Row { FixCat = 6, Kind = Kind.Choice, Title = "크기", Choices = OverlayForm.SizeNames, ChoiceIndex = Clamp(Settings.OvSize, OverlayForm.SizeNames), Change = v => { Settings.OvSize = v; apply(); } });
             rows.Add(new Row { FixCat = 6, Kind = Kind.Choice, Title = "글자 색", Choices = OverlayForm.ColorNames, ChoiceIndex = Clamp(Settings.OvColor, OverlayForm.ColorNames), Change = v => { Settings.OvColor = v; apply(); } });
             rows.Add(new Row { FixCat = 6, Kind = Kind.Slider, Title = "배경 진하기", Num = Settings.OvBg, Change = v => { Settings.OvBg = v; apply(); } });
