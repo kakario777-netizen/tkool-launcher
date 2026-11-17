@@ -74,6 +74,7 @@ namespace TkoolLauncher
             LoadBackground();
             try { Hotkeys.Start(); } catch { }
             SetupTray();
+            ResForce.Start(() => GameDoctor.Library);
             if (StartInTray) trayTipShown = true;
             try { if (SystemControls.GetAutoStart()) SystemControls.SetAutoStart(true); } catch { }   // 예전 등록도 --tray로 고침
             if (Settings.OvOn) { try { OverlayForm.Toggle(true); } catch { } }
@@ -619,6 +620,7 @@ namespace TkoolLauncher
         {
             try { if (tray != null) { tray.Visible = false; tray.Dispose(); } } catch { }
             Hotkeys.Stop();
+            try { ResForce.Restore(); } catch { }
             try { Scaler.Stop(); } catch { }
             try { VirtualPad.Stop(); } catch { }
             LoopGuard.Stop();
@@ -913,6 +915,7 @@ namespace TkoolLauncher
                 }
             }
             Log.Info("게임 실행: " + g.Title + " (" + g.Kind + " " + g.VersionLabel + ") " + (g.LaunchUri ?? (g.Launcher != null ? g.Launcher + " " + g.Args : g.Exe)));
+            ResForce.Apply(g);   // 이 게임에 정해 둔 해상도가 있으면 먼저 바꿈
             Process p = null;
             try
             {
@@ -991,6 +994,7 @@ namespace TkoolLauncher
                 st.LastPlayed = DateTime.Now.Ticks;
                 GameData.Save();
                 Gamepad.MapKeys = false;
+                ResForce.Restore();
                 if (Updater.RestartPending) { Updater.Restart(); return; }
                 foreach (var sc in stack) if (!(sc is DetailScreen)) sc.OnGamesChanged();
                 Bring();

@@ -428,8 +428,8 @@ namespace TkoolLauncher
     class DetailScreen : Screen
     {
         readonly GameInfo game;
-        int focus; // 0 플레이, 1 즐겨찾기, 2 숨기기
-        Rectangle playBtn, favBtn, hideBtn;
+        int focus; // 0 플레이, 1 즐겨찾기, 2 숨기기, 3 해상도
+        Rectangle playBtn, favBtn, hideBtn, resBtn;
 
         public DetailScreen(GameInfo g) { game = g; }
         public override GameInfo FocusedGame => game;
@@ -485,8 +485,15 @@ namespace TkoolLauncher
             Draw.Text(g, "숨기기", Draw.BodyBold, hideBtn, Theme.SubText, Draw.Center);
             if (focus == 2 && Shell.ShowFocus) Draw.FocusGlow(g, hideBtn, S(4));
 
+            // 이 게임만 해상도 강제 (예: 디아블로 → 1280×720)
+            resBtn = new Rectangle(hideBtn.Right + S(12), rowY, S(200), S(64));
+            Draw.Fill(g, resBtn, S(4), string.IsNullOrEmpty(st.Res) ? Theme.Tile : Color.FromArgb(40, 90, 150));
+            Draw.Text(g, "해상도", Draw.Small, new Rectangle(resBtn.X, resBtn.Y + S(6), resBtn.Width, S(22)), Theme.SubText, Draw.Center);
+            Draw.Text(g, string.IsNullOrEmpty(st.Res) ? "그대로" : st.Res, Draw.BodyBold, new Rectangle(resBtn.X, resBtn.Y + S(28), resBtn.Width, S(30)), Theme.Text, Draw.Center);
+            if (focus == 3 && Shell.ShowFocus) Draw.FocusGlow(g, resBtn, S(4));
+
             // 기록
-            int ix = hideBtn.Right + S(44);
+            int ix = resBtn.Right + S(44);
             InfoBlock(g, ref ix, rowY + S(6), "마지막 플레이", GameData.LastPlayedText(st.LastPlayed));
             InfoBlock(g, ref ix, rowY + S(6), "플레이 시간", GameData.PlayTimeText(st.TotalSeconds));
 
@@ -561,8 +568,8 @@ namespace TkoolLauncher
             switch (b)
             {
                 case Pad.Left: focus = Math.Max(0, focus - 1); break;
-                case Pad.Right: focus = Math.Min(2, focus + 1); break;
-                case Pad.A: if (focus == 0) Shell.Launch(game); else if (focus == 1) ToggleFav(); else Hide(); break;
+                case Pad.Right: focus = Math.Min(3, focus + 1); break;
+                case Pad.A: if (focus == 0) Shell.Launch(game); else if (focus == 1) ToggleFav(); else if (focus == 2) Hide(); else NextRes(); break;
                 case Pad.Y: ToggleFav(); break;
                 case Pad.B: Shell.Pop(); break;
             }
@@ -574,11 +581,29 @@ namespace TkoolLauncher
             if (playBtn.Contains(p)) { focus = 0; Shell.Launch(game); }
             else if (favBtn.Contains(p)) { focus = 1; ToggleFav(); }
             else if (hideBtn.Contains(p)) { focus = 2; Hide(); }
+            else if (resBtn.Contains(p)) { focus = 3; NextRes(); }
+        }
+
+        // 그대로 → 화면이 지원하는 해상도들 → 그대로 … 차례로
+        void NextRes()
+        {
+            var st = GameData.Get(game);
+            List<string> list;
+            try { list = SystemControls.Resolutions(out _); } catch { list = new List<string>(); }
+            // 지금 해상도는 빼고(원래 값이니) 큰 것부터
+            string cur = ResForce.CurrentRes();
+            var opts = new List<string> { null };
+            foreach (var r in list) if (r != cur && !opts.Contains(r)) opts.Add(r);
+            int i = opts.IndexOf(st.Res);
+            st.Res = opts[(i + 1) % opts.Count];
+            GameData.Save();
+            Shell.ShowToast(st.Res == null ? "이 게임은 해상도를 바꾸지 않아요" : "이 게임을 켜면 " + st.Res + "로 바꾸고, 끄면 되돌려요", 2500);
+            Shell.Invalidate();
         }
 
         public override List<Hint> Hints() => new List<Hint>
         {
-            new Hint(Pad.A, focus == 0 ? "플레이" : focus == 1 ? "즐겨찾기" : "숨기기", () => OnPad(Pad.A)),
+            new Hint(Pad.A, focus == 0 ? "플레이" : focus == 1 ? "즐겨찾기" : focus == 2 ? "숨기기" : "해상도 바꾸기", () => OnPad(Pad.A)),
             new Hint(Pad.Y, "즐겨찾기", ToggleFav),
             new Hint(Pad.B, "뒤로", Shell.Pop),
         };

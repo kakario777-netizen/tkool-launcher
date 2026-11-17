@@ -42,7 +42,7 @@ namespace TkoolLauncher
             return p != null && p.StartsWith(dir.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase);
         }
 
-        static bool AnyInDir(string dir)
+        public static bool AnyInDir(string dir)
         {
             foreach (var p in Process.GetProcesses())
             {
