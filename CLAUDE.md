@@ -23,6 +23,9 @@
 - 실행 문제 해결: GameDoctor.cs — 쯔꾸르 켜기 전 확실한 문제(엔진 dll 없음→라이브러리의 다른 게임에서 복사, 막힌 파일 Zone.Identifier 풀기, MV/MZ package.json 없음·main 틀림, 경로 # % ?)는 FixDialog로 묻고 고침. 켠 뒤 12초 안에 꺼지거나 메시지 상자(#32770)·MV 폴더 목록 화면이 뜨면 글을 읽어 RTP·일본어 글꼴(DISM)·DirectX 등 원인 안내 후 고칠지 물음.
 - 상주(트레이): 런처 종료·작은 AYA 버튼 = 화면만 숨김(ShellForm.ToTray), 기능(TDP·팬·AYA 팝업·오버레이·가상 패드)은 계속. 진짜 종료는 알림 아이콘 메뉴 "완전히 종료"(ExitForReal). 자동 실행은 --tray(관리자 재실행 땐 tray.flag로 전달). 성능 표시 켬 상태는 Settings.OvOn로 기억, FPS는 런처가 앞이 아닐 때 항상 측정(런처 밖에서 켠 게임도).
 - 게임별 해상도 강제: ResForce.cs + GameStat.Res(games.ini 7번째 칸). 상세 화면 "해상도" 버튼으로 그대로/해상도 차례로 고름. 런처로 켜면 켜기 전 바꿈, 런처 밖(배틀넷 등)에서 켜도 3초마다 앞 창이 그 게임 폴더면 바꿈, 폴더 프로그램 다 꺼지면 되돌림.
+- 게임 동기화(ShellForm.Track): 플레이 시간 1분마다 저장, 런처 밖에서 켠 라이브러리 게임도 앞 창 폴더로 알아서 붙잡음(TrackedExternal). 3초마다 응답 없음(IsHungAppWindow 12초)·오류 창(#32770, 쯔꾸르 제외)·WerFault 감지 → GameProblem, 알림+팝업(바로가기 탭). 런처로 켠 게임 끝나면 라이브러리 다시 올림. 팝업 "게임 끝내기"는 런처로 안 켠 앞 프로그램도(ForegroundAppDir, 윈도우·탐색기 제외).
+- AYA 큰 버튼: 짧게=라이브러리 앞이면 내림/아니면 팝업, 길게(0.6초, 키 뗄 때까지 기다림 — Hotkeys.HomeLong)=라이브러리 전체 화면. 길게 누를 때 다른 신호 오는 기기면 설정에서 HomeLongKey 배우기.
+- 치트 에디터: 사용자의 mini-cheat(MiniCheat.exe, 인수 없음). 팝업 바로가기 "치트 에디터" → Settings.CheatExe/런처 옆·바탕화면·문서·다운로드에서 찾고 없으면 GitHub 최신 릴리스에서 tools로 받음.
 - 시작 영상은 사용자가 필요 없다고 함.
 - 오류 기록: Log.cs (내 문서\쯔꾸르 런처\logs: log.txt·errors.txt·running.flag). 화면 오류는 ErrorPopup 띄우고 계속, 다음 시작 때 지난 비정상 종료 알림. 사용자가 기록을 보여주면 그걸로 고칠 것.
 - 빠른 설정 모양: AYASpace식 — 위 빠른 타일(와이파이·블투·음소거·성능 표시·마우스), 왼쪽 탭(성능·화면·소리연결·컨트롤러·조명·바로가기, LB/RB), 오른쪽 기능, 성능 탭 맨 위 팬·TDP. 바로가기는 2열 단추판.

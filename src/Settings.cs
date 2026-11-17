@@ -19,6 +19,8 @@ namespace TkoolLauncher
         public static bool StoreScan = true;
         public static string HomeKey = "Win+Ctrl+128";   // AYA 큰 버튼 (Ctrl+Win+F17)
         public static string SmallKey = "Win+68";        // AYA 작은 버튼 (Win+D)
+        public static string HomeLongKey = "";            // AYA 큰 버튼 길게 누를 때 다른 신호가 오면 그 키
+        public static string CheatExe = "";               // 치트 에디터(MiniCheat.exe) 위치
         public static bool HardwareControl;
         // 성능 표시(오버레이) 꾸미기
         public static int OvStyle = 0, OvPos = 0, OvSize = 1, OvColor = 0, OvBg = 60, OvText = 100, OvItems = 0x3FF, OvMargin = 1;
@@ -63,6 +65,8 @@ namespace TkoolLauncher
                         ManualGames.Add(val);
                     else if (key == "HomeKey") HomeKey = val;
                     else if (key == "SmallKey") SmallKey = val;
+                    else if (key == "HomeLongKey") HomeLongKey = val;
+                    else if (key == "CheatExe") CheatExe = val;
                     else if (key == "HardwareControl") HardwareControl = val == "1";
                     else if (key == "OvStyle") int.TryParse(val, out OvStyle);
                     else if (key == "OvPos") int.TryParse(val, out OvPos);
@@ -129,6 +133,8 @@ namespace TkoolLauncher
                 sb.AppendLine("StoreScan=" + (StoreScan ? "1" : "0"));
                 sb.AppendLine("HomeKey=" + HomeKey);
                 sb.AppendLine("SmallKey=" + SmallKey);
+                sb.AppendLine("HomeLongKey=" + HomeLongKey);
+                sb.AppendLine("CheatExe=" + CheatExe);
                 sb.AppendLine("HardwareControl=" + (HardwareControl ? "1" : "0"));
                 sb.AppendLine("OvStyle=" + OvStyle); sb.AppendLine("OvPos=" + OvPos); sb.AppendLine("OvSize=" + OvSize);
                 sb.AppendLine("OvColor=" + OvColor); sb.AppendLine("OvBg=" + OvBg); sb.AppendLine("OvText=" + OvText); sb.AppendLine("OvItems=" + OvItems);

@@ -24,6 +24,9 @@ namespace TkoolLauncher
         static IntPtr hook;
         static HookProc proc;      // 가비지 수집 안 되게 붙잡아 둠
         public static Action Home;
+        public static Action HomeLong;           // AYA 큰 버튼 길게 누름
+        static int pendingVk = -1, pendingAt;
+        static System.Threading.Timer longTimer;
         public static Action Small;
         public static Action<int> Button;     // 위쪽 LC(1)/RC(2) 버튼
         public static string LastCombo = "";
@@ -90,8 +93,22 @@ namespace TkoolLauncher
                     }
                     if (!string.IsNullOrEmpty(Settings.HomeKey) && combo == Settings.HomeKey)
                     {
-                        Home?.Invoke();
+                        // 짧게/길게 구분: 뗄 때까지 기다림. 0.6초 넘게 누르고 있으면 '길게'
+                        if (pendingVk == k.vk) return (IntPtr)1;      // 누르고 있는 동안 반복 신호는 무시
+                        if (HomeLong == null) { Home?.Invoke(); return (IntPtr)1; }
+                        pendingVk = k.vk; pendingAt = Environment.TickCount;
+                        int mine = pendingAt;
+                        longTimer?.Dispose();
+                        longTimer = new System.Threading.Timer(_ =>
+                        {
+                            if (pendingVk >= 0 && pendingAt == mine) { pendingVk = -1; Log.Info("AYA 큰 버튼 길게"); HomeLong?.Invoke(); }
+                        }, null, 600, System.Threading.Timeout.Infinite);
                         return (IntPtr)1; // 다른 프로그램엔 안 넘김
+                    }
+                    if (!string.IsNullOrEmpty(Settings.HomeLongKey) && combo == Settings.HomeLongKey && HomeLong != null)
+                    {
+                        HomeLong();   // 길게 누를 때 다른 신호를 보내는 기기용 (설정에서 배운 키)
+                        return (IntPtr)1;
                     }
                     if (!string.IsNullOrEmpty(Settings.SmallKey) && combo == Settings.SmallKey && Small != null)
                     {
@@ -104,6 +121,17 @@ namespace TkoolLauncher
                         Button(combo == LcCombo ? 1 : 2);
                         return (IntPtr)1;
                     }
+                }
+            }
+            if (code >= 0 && (w.ToInt32() == 0x101 || w.ToInt32() == 0x105) && pendingVk >= 0)   // KEYUP
+            {
+                var k = (KBD)Marshal.PtrToStructure(l, typeof(KBD));
+                if (k.vk == pendingVk)
+                {
+                    pendingVk = -1;
+                    longTimer?.Dispose(); longTimer = null;
+                    Home?.Invoke();
+                    return (IntPtr)1;
                 }
             }
             return CallNextHookEx(hook, code, w, l);

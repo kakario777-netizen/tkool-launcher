@@ -65,7 +65,8 @@ namespace TkoolLauncher
             menu.Shell = this;
             quick.Shell = this;
             Gamepad.Home = HomeAction;
-            Hotkeys.Home = () => BeginInvoke(new Action(HomeAction));
+            Hotkeys.Home = () => BeginInvoke(new Action(AyaAction));
+            Hotkeys.HomeLong = () => BeginInvoke(new Action(AyaLongAction));
             Hotkeys.Small = () => BeginInvoke(new Action(SmallAction));
             Hotkeys.Button = which => BeginInvoke(new Action(() => ButtonActions.Run(this, which == 1 ? Settings.LcAction : Settings.RcAction)));
             LoopGuard.Alert = msg => { try { BeginInvoke(new Action(() => ShowToast(msg, 8000))); } catch { } };
@@ -75,6 +76,7 @@ namespace TkoolLauncher
             try { Hotkeys.Start(); } catch { }
             SetupTray();
             ResForce.Start(() => GameDoctor.Library);
+            StartHealth();
             if (StartInTray) trayTipShown = true;
             try { if (SystemControls.GetAutoStart()) SystemControls.SetAutoStart(true); } catch { }   // 예전 등록도 --tray로 고침
             if (Settings.OvOn) { try { OverlayForm.Toggle(true); } catch { } }
@@ -221,6 +223,39 @@ namespace TkoolLauncher
             if (scaleWas != 0 && gameHwnd != IntPtr.Zero && GameWatch.Running) { int m = scaleWas; scaleWas = 0; Scaler.Start(m, gameHwnd); }
             scaleWas = 0;
             CameFromGame = false;
+        }
+
+        // ───────── AYA 큰 버튼 ─────────
+        bool LauncherFront => Visible && WindowState != FormWindowState.Minimized && Form.ActiveForm == this;
+
+        /// <summary>짧게: 라이브러리가 앞에 있으면 라이브러리를 내림, 아니면(게임·바탕화면) 오른쪽 팝업</summary>
+        public void AyaAction()
+        {
+            if (GameCapture.Finding) { GameCapture.Cancel = true; return; }
+            if (PopupOpen) { ClosePopup(); return; }
+            if (LauncherFront)
+            {
+                if (quick.Open) { quick.Hide(); return; }
+                menu.Open = false;
+                if (CameFromGame && GameWatch.Running) { ReturnToGame(); return; }
+                ToTray();
+                return;
+            }
+            ShowPopup();
+        }
+
+        /// <summary>길게: 라이브러리 전체 화면</summary>
+        public void AyaLongAction()
+        {
+            if (PopupOpen) ClosePopup(false);
+            if (LauncherFront) { quick.Open = false; menu.Open = false; GoHome(); return; }
+            if (GameWatch.Running || TrackedExternal) { gameHwnd = GetForegroundWindow(); CameFromGame = true; }
+            scaleWas = Scaler.Mode;
+            if (scaleWas != 0) Scaler.Stop();
+            Bring();
+            ForceForeground(Handle);
+            quick.Open = false; menu.Open = false;
+            GoHome();
         }
 
         // ───────── 홈 버튼·빠른 설정 ─────────
@@ -375,8 +410,9 @@ namespace TkoolLauncher
         public void QuitGame()
         {
             if (PopupOpen) ClosePopup(false);
-            string dir = GameWatch.Dir;
-            if (dir == null) return;
+            string dir = GameWatch.Dir ?? ForegroundAppDir();
+            if (dir == null) { ShowToast("끝낼 게임을 못 찾았어요", 2500); return; }
+            Log.Info("게임 끝내기: " + dir);
             foreach (var p in Process.GetProcesses())
             {
                 try { if (p.Id != Process.GetCurrentProcess().Id && GameWatch.InDir(p.Id, dir)) p.Kill(); }
@@ -386,6 +422,107 @@ namespace TkoolLauncher
             quick.Hide();
             CameFromGame = false;
             ShowToast("게임을 끝냈어요", 2500);
+        }
+
+        /// <summary>팝업을 부르기 전 앞에 있던 프로그램의 폴더 (런처로 안 켠 게임도 끝낼 수 있게). 윈도우·탐색기·런처는 제외</summary>
+        public string ForegroundAppDir()
+        {
+            try
+            {
+                if (gameHwnd == IntPtr.Zero || gameHwnd == Handle) return null;
+                GetWindowThreadProcessId(gameHwnd, out uint pid);
+                if ((int)pid == Process.GetCurrentProcess().Id) return null;
+                string path = GameWatch.PathOf((int)pid);
+                if (path == null) return null;
+                string win = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+                if (path.StartsWith(win, StringComparison.OrdinalIgnoreCase)) return null;
+                string dir = System.IO.Path.GetDirectoryName(path);
+                if (dir == null || dir.Length < 8) return null;
+                if (dir.Equals(System.IO.Path.GetDirectoryName(Application.ExecutablePath), StringComparison.OrdinalIgnoreCase)) return null;
+                return dir;
+            }
+            catch { return null; }
+        }
+
+        public bool CanQuitForeground => !GameWatch.Running && ForegroundAppDir() != null;
+
+        // ───────── 치트 에디터 (MiniCheat) ─────────
+        public void OpenCheat()
+        {
+            if (PopupOpen) ClosePopup(false);
+            string exe = FindCheat();
+            if (exe != null) { RunCheat(exe); return; }
+            // 없으면 GitHub 최신 릴리스에서 받아 tools 폴더에 둠
+            string dest = System.IO.Path.Combine(Settings.Dir, "tools", "MiniCheat.exe");
+            ShowToast("치트 에디터를 받는 중...", 8000);
+            Task.Run(() =>
+            {
+                try
+                {
+                    System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12;
+                    using (var wc = new System.Net.WebClient())
+                    {
+                        wc.Headers[System.Net.HttpRequestHeader.UserAgent] = "TkoolLauncher";
+                        string json = wc.DownloadString("https://api.github.com/repos/kakario777-netizen/mini-cheat/releases/latest");
+                        string url = TextDecode.JsonString(json, "browser_download_url");
+                        if (url == null) throw new Exception("릴리스를 못 찾음");
+                        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(dest));
+                        wc.Headers[System.Net.HttpRequestHeader.UserAgent] = "TkoolLauncher";
+                        wc.DownloadFile(url, dest);
+                    }
+                    BeginInvoke(new Action(() => { Settings.CheatExe = dest; Settings.Save(); RunCheat(dest); }));
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("치트 에디터 받기", ex);
+                    try { BeginInvoke(new Action(() => ShowToast("치트 에디터를 받지 못했어요 — 인터넷 연결을 확인해 주세요", 5000))); } catch { }
+                }
+            });
+        }
+
+        static string FindCheat()
+        {
+            if (!string.IsNullOrEmpty(Settings.CheatExe) && System.IO.File.Exists(Settings.CheatExe)) return Settings.CheatExe;
+            var dirs = new List<string>();
+            string me = System.IO.Path.GetDirectoryName(Application.ExecutablePath);
+            dirs.Add(me);
+            try { dirs.Add(System.IO.Path.GetDirectoryName(me)); } catch { }
+            dirs.Add(System.IO.Path.Combine(Settings.Dir, "tools"));
+            dirs.Add(Environment.GetFolderPath(Environment.SpecialFolder.Desktop));
+            dirs.Add(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
+            dirs.Add(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"));
+            foreach (var d in dirs)
+            {
+                if (string.IsNullOrEmpty(d) || !System.IO.Directory.Exists(d)) continue;
+                try
+                {
+                    string f = System.IO.Path.Combine(d, "MiniCheat.exe");
+                    if (System.IO.File.Exists(f)) { Settings.CheatExe = f; Settings.Save(); return f; }
+                    foreach (var sub in System.IO.Directory.GetDirectories(d))
+                    {
+                        f = System.IO.Path.Combine(sub, "MiniCheat.exe");
+                        if (System.IO.File.Exists(f)) { Settings.CheatExe = f; Settings.Save(); return f; }
+                    }
+                }
+                catch { }
+            }
+            return null;
+        }
+
+        void RunCheat(string exe)
+        {
+            try
+            {
+                // 이미 켜져 있으면 앞으로
+                foreach (var p in Process.GetProcessesByName("MiniCheat"))
+                {
+                    try { if (p.MainWindowHandle != IntPtr.Zero) { ShowWindow(p.MainWindowHandle, 9); ForceForeground(p.MainWindowHandle); return; } }
+                    finally { p.Dispose(); }
+                }
+                Process.Start(new ProcessStartInfo(exe) { WorkingDirectory = System.IO.Path.GetDirectoryName(exe), UseShellExecute = true });
+                Log.Info("치트 에디터 실행: " + exe);
+            }
+            catch (Exception ex) { Log.Error("치트 에디터 실행", ex); ShowToast("치트 에디터를 켜지 못했어요: " + ex.Message, 5000); }
         }
 
         public void AfterDisplayChange()
@@ -858,6 +995,147 @@ namespace TkoolLauncher
 
         public GameInfo PlayingGame;
 
+        // ───────── 지금 하는 게임과 맞추기 (플레이 시간·끝남·오류) ─────────
+        public bool TrackedExternal;          // 런처 밖에서 켠 게임을 알아서 붙잡은 경우
+        public string GameProblem;            // 응답 없음·오류 창 등 (팝업 맨 위에 표시)
+        GameStat playStat; DateTime playStart;
+        Timer playTimer, healthTimer;
+        int hungCount; bool healthBusy;
+
+        public TimeSpan PlayingFor => PlayingGame != null ? DateTime.Now - sessionStart : TimeSpan.Zero;
+        DateTime sessionStart;
+
+        void Track(GameInfo g, Process p, bool ours)
+        {
+            var st = GameData.Get(g);
+            st.LastPlayed = DateTime.Now.Ticks;
+            GameData.Save();
+            playStat = st; playStart = sessionStart = DateTime.Now;
+            PlayingGame = g; TrackedExternal = !ours; GameProblem = null; hungCount = 0;
+            Log.Info((ours ? "게임 시작: " : "런처 밖에서 켠 게임 확인: ") + g.Title);
+            playTimer?.Dispose();
+            playTimer = new Timer { Interval = 60000 };   // 1분마다 플레이 시간 저장 (꺼져도 안 잃게)
+            playTimer.Tick += (o, e) => FlushPlayTime();
+            playTimer.Start();
+            string dir = g.InstallDir ?? g.Folder;
+            GameWatch.Start(p, dir, () => BeginInvoke(new Action(() =>
+            {
+                FlushPlayTime();
+                playTimer?.Dispose(); playTimer = null;
+                Log.Info("게임 끝: " + g.Title + " (이번 " + (int)(DateTime.Now - sessionStart).TotalMinutes + "분, 총 " + st.TotalSeconds / 60 + "분)");
+                playStat = null; PlayingGame = null; TrackedExternal = false; GameProblem = null;
+                CameFromGame = false;
+                quick.Open = false; quick.T = 0;
+                if (PopupOpen) ClosePopup(false);
+                Gamepad.MapKeys = false;
+                ResForce.Restore();
+                if (Updater.RestartPending) { Updater.Restart(); return; }
+                foreach (var sc in stack) if (!(sc is DetailScreen)) sc.OnGamesChanged();
+                if (ours) { Bring(); ForceForeground(Handle); }   // 런처로 켠 게임이 끝나면 라이브러리 다시 올림
+                Invalidate();
+            })));
+        }
+
+        void FlushPlayTime()
+        {
+            if (playStat == null) return;
+            var now = DateTime.Now;
+            playStat.TotalSeconds += (long)(now - playStart).TotalSeconds;
+            playStart = now;
+            playStat.LastPlayed = now.Ticks;
+            GameData.Save();
+        }
+
+        delegate bool EnumWinProc(IntPtr h, IntPtr l);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool EnumWindows(EnumWinProc f, IntPtr l);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool IsHungAppWindow(IntPtr h);
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] static extern int GetWindowText(IntPtr h, System.Text.StringBuilder s, int n);
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] static extern int GetClassName(IntPtr h, System.Text.StringBuilder s, int n);
+
+        /// <summary>3초마다: 런처 밖에서 켠 게임 붙잡기 + 하는 게임이 멈췄는지·오류 창이 떴는지 보기</summary>
+        void StartHealth()
+        {
+            healthTimer = new Timer { Interval = 3000 };
+            healthTimer.Tick += (o, e) =>
+            {
+                if (healthBusy) return;
+                healthBusy = true;
+                var g = PlayingGame;
+                string dir = g != null ? (g.InstallDir ?? g.Folder) : null;
+                bool front = LauncherFront;
+                IntPtr fg = GetForegroundWindow();
+                var lib = Games;
+                bool tk = g != null && g.IsTkool;
+                Task.Run(() =>
+                {
+                    GameInfo attach = null; string problem = null; bool hung = false;
+                    try
+                    {
+                        if (g == null && !front && !GameWatch.Running)
+                        {
+                            GetWindowThreadProcessId(fg, out uint pid);
+                            string path = GameWatch.PathOf((int)pid);
+                            if (path != null && (int)pid != Process.GetCurrentProcess().Id)
+                                attach = lib.FirstOrDefault(x =>
+                                {
+                                    string d = (x.InstallDir ?? x.Folder ?? "").TrimEnd('\\');
+                                    return d.Length > 8 && path.StartsWith(d + "\\", StringComparison.OrdinalIgnoreCase);
+                                });
+                        }
+                        else if (g != null)
+                        {
+                            var pids = new Dictionary<uint, bool>();
+                            EnumWindows((h, l) =>
+                            {
+                                if (!IsWindowVisible(h)) return true;
+                                GetWindowThreadProcessId(h, out uint wp);
+                                bool mine;
+                                if (!pids.TryGetValue(wp, out mine)) { mine = GameWatch.InDir((int)wp, dir); pids[wp] = mine; }
+                                var cls = new System.Text.StringBuilder(64); GetClassName(h, cls, 64);
+                                var tt = new System.Text.StringBuilder(256); GetWindowText(h, tt, 256);
+                                if (mine)
+                                {
+                                    if (IsHungAppWindow(h)) hung = true;
+                                    if (!tk && cls.ToString() == "#32770" && tt.Length > 0) problem = "게임에 오류 창이 떴어요: " + tt;
+                                }
+                                else
+                                {
+                                    // 윈도우 '프로그램이 멈췄어요' 창 (WerFault)
+                                    string pp = GameWatch.PathOf((int)wp) ?? "";
+                                    if (pp.EndsWith("\\WerFault.exe", StringComparison.OrdinalIgnoreCase) && tt.Length > 0)
+                                        problem = "게임이 오류로 멈췄어요 (" + tt + ")";
+                                }
+                                return true;
+                            }, IntPtr.Zero);
+                        }
+                    }
+                    catch { }
+                    try
+                    {
+                        BeginInvoke(new Action(() =>
+                        {
+                            healthBusy = false;
+                            if (attach != null && PlayingGame == null && !GameWatch.Running) { SmartTdp.Reset(); Track(attach, null, false); ResForce.Apply(attach); return; }
+                            if (PlayingGame == null) return;
+                            hungCount = hung ? hungCount + 1 : 0;
+                            if (problem == null && hungCount >= 4) problem = "게임이 응답하지 않아요 (12초 넘게 멈춤)";
+                            if (problem != null && problem != GameProblem)
+                            {
+                                GameProblem = problem;
+                                Log.Info("게임 문제 감지: " + PlayingGame.Title + " — " + problem);
+                                try { tray?.ShowBalloonTip(5000, PlayingGame.Title, problem + "\nAYA 버튼 → 게임 끝내기", ToolTipIcon.Warning); } catch { }
+                                if (!PopupOpen && !LauncherFront) { QuickPanel.GoShortcuts(); ShowPopup(); }   // 바로 끝낼 수 있게 팝업을 띄움
+                            }
+                            else if (problem == null && hungCount == 0 && GameProblem != null && GameProblem.StartsWith("게임이 응답하지")) GameProblem = null;
+                        }));
+                    }
+                    catch { healthBusy = false; }
+                });
+            };
+            healthTimer.Start();
+        }
+
         /// <summary>표지·이름 없는 게임을 하나씩 잠깐 켜서 채우기</summary>
         public void FindCovers()
         {
@@ -959,18 +1237,13 @@ namespace TkoolLauncher
                 catch { }
             });
 
-            var st = GameData.Get(g);
-            st.LastPlayed = DateTime.Now.Ticks;
-            GameData.Save();
-            var started = DateTime.Now;
             WindowState = FormWindowState.Minimized; // 게임하는 동안 런처는 쉬기
 
             // 키보드 변환은 패드를 못 읽는 쯔꾸르(2000~VX Ace)만
             Gamepad.MapKeys = g.IsTkool && g.Version != TkoolVersion.MV && g.Version != TkoolVersion.MZ;
-            string dir = g.InstallDir ?? g.Folder;
             CameFromGame = false;
             SmartTdp.Reset();
-            PlayingGame = g;
+            Track(g, p, true);
             if (Settings.AutoCover) GameCapture.Watch(this, g);
             if (Settings.AutoScaleTkool && Gamepad.MapKeys)
             {
@@ -986,21 +1259,6 @@ namespace TkoolLauncher
                 };
                 st2.Start();
             }
-            GameWatch.Start(p, dir, () => BeginInvoke(new Action(() =>
-            {
-                CameFromGame = false;
-                quick.Open = false; quick.T = 0;
-                st.TotalSeconds += (long)(DateTime.Now - started).TotalSeconds;
-                st.LastPlayed = DateTime.Now.Ticks;
-                GameData.Save();
-                Gamepad.MapKeys = false;
-                ResForce.Restore();
-                if (Updater.RestartPending) { Updater.Restart(); return; }
-                foreach (var sc in stack) if (!(sc is DetailScreen)) sc.OnGamesChanged();
-                Bring();
-                Activate();
-                Invalidate();
-            })));
         }
     }
 }

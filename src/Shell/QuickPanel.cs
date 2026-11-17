@@ -93,14 +93,16 @@ namespace TkoolLauncher
             bool game = GameWatch.Running;
             if (Popup)
                 rows.Add(new Row { Kind = Kind.Action, Title = "런처 열기", Sub = "게임 목록·설정 화면으로", Act = () => { Shell.ClosePopup(false); Shell.SmallAction(); } });
-            if (game)
+            bool fgApp = !game && Popup && Shell.CanQuitForeground;   // 런처로 안 켠 프로그램이 앞에 있었음
+            if (game || fgApp)
             {
-                rows.Add(new Row { Kind = Kind.Action, Title = "게임으로 돌아가기", Act = Shell.ReturnToGame });
+                var pg = Shell.PlayingGame;
+                if (game) rows.Add(new Row { Kind = Kind.Action, Title = "게임으로 돌아가기", Sub = pg != null ? pg.Title + " · " + PlayText(Shell.PlayingFor) + " 하는 중" : null, Act = Shell.ReturnToGame });
                 rows.Add(new Row
                 {
                     Kind = Kind.Action, Danger = true,
-                    Title = confirmQuit ? "한 번 더 누르면 게임을 끝내요" : "게임 끝내기",
-                    Sub = confirmQuit ? "저장 안 한 내용은 사라져요" : null,
+                    Title = confirmQuit ? "한 번 더 누르면 게임을 끝내요" : Shell.GameProblem != null ? "게임 끝내기 (문제 생김)" : "게임 끝내기",
+                    Sub = confirmQuit ? "저장 안 한 내용은 사라져요" : Shell.GameProblem ?? (fgApp ? "앞에 있던 프로그램을 끝내요" : null),
                     Act = () => { if (!confirmQuit) { confirmQuit = true; } else { confirmQuit = false; Shell.QuitGame(); } }
                 });
             }
@@ -135,6 +137,7 @@ namespace TkoolLauncher
                 Kind = Kind.Choice, Title = "화면 회전", Choices = SystemControls.RotationNames, ChoiceIndex = rot,
                 Change = v => { rot = v; SystemControls.SetRotation(v); try { resList = SystemControls.Resolutions(out resIndex); } catch { } Shell.AfterDisplayChange(); }
             });
+            rows.Add(new Row { Kind = Kind.Action, Title = "치트 에디터", Sub = "미니 치트 켜기", Act = () => Shell.OpenCheat() });
             rows.Add(new Row
             {
                 Kind = Kind.Action, Title = "메모리 정리", Sub = memNote,
@@ -354,6 +357,10 @@ namespace TkoolLauncher
             }
         }
 
+        public static void GoShortcuts() { tab = 5; }
+
+        static string PlayText(TimeSpan t) => t.TotalMinutes < 1 ? "방금 시작" : t.TotalHours >= 1 ? (int)t.TotalHours + "시간 " + t.Minutes + "분째" : (int)t.TotalMinutes + "분째";
+
         static int Clamp(int v, string[] a) => Math.Max(0, Math.Min(a.Length - 1, v));
 
         void AddChoice(string title, int[] vals, string unit, int cur, Action<int> set)
@@ -415,7 +422,7 @@ namespace TkoolLauncher
             new[] { "소리", "음소거", "와이파이", "블루투스", "비행기 모드" },
             new[] { "가상 패드", "컨트롤러 끄기", "진동 세기", "조이스틱 데드존", "조이스틱 감도", "연사 (", "연사 속도", "자이로 (", "자이로 감도", "자이로 켜는 법", "좌우 회전 축", "자이로 좌우", "자이로 상하", "조이스틱 마우스 모드" },
             new[] { "조이스틱 조명", "조명 색", "조명 밝기", "조명 효과" },
-            new[] { "게임으로 돌아가기", "게임 끝내기", "한 번 더 누르면", "지금 화면을 표지로", "런처 열기", "스크린샷", "ESC 보내기", "전체 화면 전환", "화상 키보드", "작업 전환", "윈도우 시작 메뉴", "메모리 정리", "미니 모드" },
+            new[] { "게임으로 돌아가기", "게임 끝내기", "한 번 더 누르면", "치트 에디터", "지금 화면을 표지로", "런처 열기", "스크린샷", "ESC 보내기", "전체 화면 전환", "화상 키보드", "작업 전환", "윈도우 시작 메뉴", "메모리 정리", "미니 모드" },
             new string[0],   // 오버레이 (FixCat으로 들어감)
         };
 

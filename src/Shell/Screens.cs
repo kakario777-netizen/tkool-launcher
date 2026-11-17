@@ -759,6 +759,8 @@ namespace TkoolLauncher
                           Act = () => { Settings.AutoScaleTkool = !Settings.AutoScaleTkool; Settings.Save(); } },
                 new Row { Title = "AYA 큰 버튼 연결", Sub = learning == 1 ? "지금 AYA 큰 버튼을 누르세요..." : "빠른 설정 열기 · 패드 가이드 버튼, 보기+메뉴 동시 누름도 돼요",
                           Value = Hotkeys.Describe(Settings.HomeKey), Act = () => Learn(1) },
+                new Row { Title = "AYA 큰 버튼 길게 누르기", Sub = learning == 3 ? "지금 AYA 큰 버튼을 길게 누르세요..." : "라이브러리 전체 화면 · 길게 눌러도 안 되면 여기서 배워 주세요",
+                          Value = string.IsNullOrEmpty(Settings.HomeLongKey) ? "0.6초 누름" : Hotkeys.Describe(Settings.HomeLongKey), Act = () => Learn(3) },
                 new Row { Title = "AYA 작은 버튼 연결", Sub = learning == 2 ? "지금 AYA 작은 버튼을 누르세요..." : "런처 홈 화면으로", Value = Hotkeys.Describe(Settings.SmallKey), Act = () => Learn(2) },
                 new Row { Title = "윈도우 시작할 때 자동 실행", Sub = "켜면 부팅하자마자 런처가 떠요", Toggle = SystemControls.GetAutoStart(),
                           Act = () => SystemControls.SetAutoStart(!SystemControls.GetAutoStart()) },
@@ -805,7 +807,9 @@ namespace TkoolLauncher
             learning = which;
             Hotkeys.Learned = combo => Shell.BeginInvoke(new Action(() =>
             {
-                if (learning == 2) Settings.SmallKey = combo; else Settings.HomeKey = combo;
+                if (learning == 2) Settings.SmallKey = combo;
+                else if (learning == 3) { if (combo != Settings.HomeKey) Settings.HomeLongKey = combo; }
+                else Settings.HomeKey = combo;
                 learning = 0;
                 Settings.Save();
                 Shell.ShowToast("연결했어요: " + Hotkeys.Describe(combo), 4000);
