@@ -84,6 +84,8 @@ namespace TkoolLauncher
                 Task.Run(() =>
                 {
                     try { Hardware.Init(); Hardware.ApplySaved(); } catch { }
+                    // 가상 패드: 켜 뒀으면 다시 켜고, 아니면 혹시 숨겨진 채 남은 진짜 패드를 풀어줌 (런처가 비정상 종료됐을 때 대비)
+                    try { if (Settings.VPadOn) VirtualPad.Start(); else VirtualPad.Stop(); } catch { }
                     try { BeginInvoke(new Action(Invalidate)); } catch { }
                 });
                 var hw = new Timer { Interval = 15000 };
@@ -419,6 +421,7 @@ namespace TkoolLauncher
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             Hotkeys.Stop();
+            try { VirtualPad.Stop(); } catch { }
             LoopGuard.Stop();
             Fps.Stop();
             Bgm.Close();

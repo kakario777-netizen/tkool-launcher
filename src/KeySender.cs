@@ -28,6 +28,12 @@ namespace TkoolLauncher
             SendInput((uint)list.Length, list, Marshal.SizeOf(typeof(INPUT)));
         }
 
+        public static void MouseMove(int dx, int dy)
+        {
+            var i = new INPUT { type = 0, u = new U { mi = new MI { dx = dx, dy = dy, flags = 0x0001 } } };
+            SendInput(1, new[] { i }, Marshal.SizeOf(typeof(INPUT)));
+        }
+
         public const ushort Esc = 0x1B, Enter = 0x0D, Alt = 0x12, Win = 0x5B, Tab = 0x09, PrtSc = 0x2C, Ctrl = 0x11, Shift = 0x10;
     }
 }

@@ -209,6 +209,52 @@ namespace TkoolLauncher
                 });
             }
 
+            // ── 컨트롤러 (가상 패드) ──
+            rows.Add(new Row
+            {
+                Kind = Kind.Toggle, Title = "가상 패드 (감도·연사·자이로·진동)", On = VirtualPad.Running,
+                Sub = VirtualPad.Problem != "" ? VirtualPad.Problem : (VirtualPad.Running ? "켜짐 · 게임은 가상 패드를 봐요" : "켜면 컨트롤러 세부 설정이 열려요"),
+                Change = v =>
+                {
+                    Settings.VPadOn = v == 1;
+                    Settings.Save();
+                    if (v == 1)
+                    {
+                        if (!VirtualPad.HasViGEm || !VirtualPad.HasHidHide) { VirtualPad.InstallDrivers(); Shell.ShowToast("드라이버 설치가 끝나면 다시 켜 주세요", 6000); Settings.VPadOn = false; Settings.Save(); return; }
+                        Task.Run(() => { VirtualPad.Start(); Shell.BeginInvoke(new Action(Shell.Invalidate)); });
+                    }
+                    else Task.Run(() => { VirtualPad.Stop(); Shell.BeginInvoke(new Action(Shell.Invalidate)); });
+                }
+            });
+            if (VirtualPad.Running)
+            {
+                rows.Add(new Row { Kind = Kind.Toggle, Title = "컨트롤러 끄기", Sub = "게임에 패드 입력을 안 보내요 (홈 버튼은 됨)", On = VirtualPad.ControllerOff, Change = v => VirtualPad.ControllerOff = v == 1 });
+                rows.Add(new Row { Kind = Kind.Slider, Title = "진동 세기", Num = Settings.Vibration, Change = v => { Settings.Vibration = v; Settings.Save(); } });
+                AddChoice("조이스틱 데드존", new[] { 0, 3, 5, 8, 10, 15, 20, 25 }, "%", Settings.StickDeadzone, v => Settings.StickDeadzone = v);
+                AddChoice("조이스틱 감도", new[] { 60, 70, 80, 90, 100, 110, 120, 135, 150 }, "%", Settings.StickSens, v => Settings.StickSens = v);
+                var turboNames = new[] { "끔", "A", "A·B", "A·B·X·Y", "RB" };
+                var turboMasks = new[] { 0, 0x1000, 0x3000, 0xF000, 0x0200 };
+                rows.Add(new Row
+                {
+                    Kind = Kind.Choice, Title = "연사 (버튼 오토)", Choices = turboNames, ChoiceIndex = Math.Max(0, Array.IndexOf(turboMasks, Settings.TurboMask)),
+                    Change = v => { Settings.TurboMask = turboMasks[v]; Settings.Save(); }
+                });
+                if (Settings.TurboMask != 0) AddChoice("연사 속도", new[] { 6, 8, 10, 12, 15, 20 }, "회/초", Settings.TurboHz, v => Settings.TurboHz = v);
+                rows.Add(new Row
+                {
+                    Kind = Kind.Choice, Title = "자이로 (모션)", Choices = new[] { "끔", "오른쪽 스틱", "마우스" }, ChoiceIndex = Settings.GyroMode,
+                    Change = v => { Settings.GyroMode = v; Settings.Save(); }
+                });
+                if (Settings.GyroMode != 0)
+                {
+                    AddChoice("자이로 감도", new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, "", Settings.GyroSens, v => Settings.GyroSens = v);
+                    rows.Add(new Row { Kind = Kind.Choice, Title = "자이로 켜는 법", Choices = new[] { "항상", "LB 누를 때", "LT 누를 때" }, ChoiceIndex = Settings.GyroHold, Change = v => { Settings.GyroHold = v; Settings.Save(); } });
+                    rows.Add(new Row { Kind = Kind.Choice, Title = "좌우 회전 축", Choices = new[] { "기본", "다른 축" }, ChoiceIndex = Settings.GyroAxis, Change = v => { Settings.GyroAxis = v; Settings.Save(); } });
+                    rows.Add(new Row { Kind = Kind.Toggle, Title = "자이로 좌우 반전", On = Settings.GyroInvertX, Change = v => { Settings.GyroInvertX = v == 1; Settings.Save(); } });
+                    rows.Add(new Row { Kind = Kind.Toggle, Title = "자이로 상하 반전", On = Settings.GyroInvertY, Change = v => { Settings.GyroInvertY = v == 1; Settings.Save(); } });
+                }
+            }
+
             // ── 빠른 버튼 ──
             rows.Add(new Row { Kind = Kind.Toggle, Title = "조이스틱 마우스 모드", Sub = "왼쪽 스틱 이동 · A 클릭 · B 오른쪽 클릭 · 오른쪽 스틱 휠", On = Gamepad.MouseMode,
                                Change = v => Gamepad.MouseMode = v == 1 });
@@ -230,6 +276,15 @@ namespace TkoolLauncher
                 }
             });
             if (focus >= rows.Count) focus = rows.Count - 1;
+        }
+
+        void AddChoice(string title, int[] vals, string unit, int cur, Action<int> set)
+        {
+            var names = new string[vals.Length];
+            for (int i = 0; i < vals.Length; i++) names[i] = vals[i] + unit;
+            int idx = Array.IndexOf(vals, cur);
+            if (idx < 0) { idx = 0; for (int i = 0; i < vals.Length; i++) if (vals[i] <= cur) idx = i; }
+            rows.Add(new Row { Kind = Kind.Choice, Title = title, Choices = names, ChoiceIndex = idx, Change = v => { set(vals[v]); Settings.Save(); } });
         }
 
         static readonly string[] LedNames = { "흰색", "빨강", "주황", "노랑", "초록", "하늘", "파랑", "보라", "분홍" };

@@ -25,6 +25,11 @@ namespace TkoolLauncher
         public static bool UseBgImage = true, Bgm;
         public static int LcAction = 1, RcAction = 3;   // 위쪽 LC/RC 버튼 기능 (ButtonActions 번호)
         public static bool LoopGuard = true;
+        // 가상 패드
+        public static bool VPadOn;
+        public static int Vibration = 100, StickDeadzone = 5, StickSens = 100, TurboMask, TurboHz = 12;
+        public static int GyroMode, GyroSens = 5, GyroHold, GyroAxis;
+        public static bool GyroInvertX, GyroInvertY;
         public static int Tdp;          // 0 = 기기 기본
         public static int Fan = -1;     // -1 = 자동
         public static bool LedSet, LedOn = true;
@@ -59,6 +64,18 @@ namespace TkoolLauncher
                     else if (key == "LcAction") int.TryParse(val, out LcAction);
                     else if (key == "RcAction") int.TryParse(val, out RcAction);
                     else if (key == "LoopGuard") LoopGuard = val != "0";
+                    else if (key == "VPad")
+                    {
+                        var q = val.Split(',');
+                        if (q.Length >= 13)
+                        {
+                            VPadOn = q[0] == "1";
+                            int.TryParse(q[1], out Vibration); int.TryParse(q[2], out StickDeadzone); int.TryParse(q[3], out StickSens);
+                            int.TryParse(q[4], out TurboMask); int.TryParse(q[5], out TurboHz); int.TryParse(q[6], out GyroMode);
+                            int.TryParse(q[7], out GyroSens); int.TryParse(q[8], out GyroHold); int.TryParse(q[9], out GyroAxis);
+                            GyroInvertX = q[10] == "1"; GyroInvertY = q[11] == "1";
+                        }
+                    }
                     else if (key == "Fan") int.TryParse(val, out Fan);
                     else if (key == "Led")
                     {
@@ -98,6 +115,8 @@ namespace TkoolLauncher
                 sb.AppendLine("LcAction=" + LcAction);
                 sb.AppendLine("RcAction=" + RcAction);
                 sb.AppendLine("LoopGuard=" + (LoopGuard ? "1" : "0"));
+                sb.AppendLine("VPad=" + string.Join(",", new object[] { VPadOn ? 1 : 0, Vibration, StickDeadzone, StickSens, TurboMask, TurboHz,
+                    GyroMode, GyroSens, GyroHold, GyroAxis, GyroInvertX ? 1 : 0, GyroInvertY ? 1 : 0, 0 }));
                 sb.AppendLine("Fan=" + Fan);
                 if (LedSet) sb.AppendLine("Led=" + (LedOn ? "1" : "0") + "," + LedR + "," + LedG + "," + LedB + "," + LedBright);
                 foreach (var f in GameFolders) sb.AppendLine("GameFolder=" + f);

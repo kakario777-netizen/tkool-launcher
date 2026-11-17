@@ -223,10 +223,10 @@ namespace TkoolLauncher
                 if (now - nextProbe < 0) return Pad.None;
                 nextProbe = now + 2000;
                 for (int i = 0; i < 4; i++)
-                    if (Read(i, out _)) { index = i; break; }
+                    if (i != VirtualPad.VirtualIndex && Read(i, out _)) { index = i; break; }
                 if (index < 0) return Pad.None;
             }
-            if (!Read(index, out XState s)) { index = -1; return Pad.None; }
+            if (index == VirtualPad.VirtualIndex || !Read(index, out XState s)) { index = -1; return Pad.None; }
             raw = s;
 
             var p = (Pad)s.Buttons;
