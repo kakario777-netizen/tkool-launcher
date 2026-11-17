@@ -800,6 +800,7 @@ namespace TkoolLauncher
 
         public void SetGames(List<GameInfo> found)
         {
+            GameDoctor.Library = found;
             // 게임 창 제목에서 가져와 저장해 둔 진짜 이름 적용
             foreach (var g in found)
             {
@@ -815,6 +816,22 @@ namespace TkoolLauncher
         public void Launch(GameInfo g)
         {
             if (GameWatch.Running) { ShowToast("다른 게임이 아직 실행 중이에요", 3000); return; }
+            // 쯔꾸르: 켜기 전에 확실한 문제(빠진 dll·RTP·막힌 파일 등)가 보이면 먼저 물어봄
+            if (g.IsTkool)
+            {
+                List<GameDoctor.Issue> pre = null;
+                try { pre = GameDoctor.Check(g).Where(i => i.Sure).ToList(); } catch { }
+                if (pre != null && pre.Count > 0)
+                {
+                    Log.Info("실행 전 문제: " + g.Title + " — " + string.Join(" / ", pre.Select(i => i.Title)));
+                    using (var d = new FixDialog(g, pre, true, ""))
+                    {
+                        d.ShowDialog(this);
+                        if (d.Result != "") ShowToast(d.Result, 5000);
+                        if (!d.RunAfter) return;
+                    }
+                }
+            }
             Log.Info("게임 실행: " + g.Title + " (" + g.Kind + " " + g.VersionLabel + ") " + (g.LaunchUri ?? (g.Launcher != null ? g.Launcher + " " + g.Args : g.Exe)));
             Process p = null;
             try
@@ -832,6 +849,32 @@ namespace TkoolLauncher
                 ShowToast("실행하지 못했어요: " + ex.Message, 5000);
                 return;
             }
+
+            // 켠 뒤: 금방 꺼지거나 오류 창·폴더 목록이 뜨면 원인 찾아서 물어봄
+            GameDoctor.Watch(g, p, (seen, alive) =>
+            {
+                try
+                {
+                    BeginInvoke(new Action(() =>
+                    {
+                        var t = new Timer { Interval = alive ? 300 : 1500 };   // 런처가 다시 앞에 나온 뒤에
+                        t.Tick += (o, e) =>
+                        {
+                            t.Stop(); t.Dispose();
+                            var issues = GameDoctor.Check(g, seen);
+                            if (alive) { WindowState = FormWindowState.Maximized; Activate(); }
+                            using (var d = new FixDialog(g, issues, false, seen))
+                            {
+                                d.ShowDialog(this);
+                                if (d.DialogResult == DialogResult.OK && alive) { try { if (!p.HasExited) p.Kill(); } catch { } }
+                                if (d.Result != "") ShowToast(d.Result + " — 다시 실행해 보세요", 6000);
+                            }
+                        };
+                        t.Start();
+                    }));
+                }
+                catch { }
+            });
 
             var st = GameData.Get(g);
             st.LastPlayed = DateTime.Now.Ticks;

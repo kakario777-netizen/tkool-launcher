@@ -20,6 +20,7 @@
 - 조명 효과: Hardware.UpdateEffect (1.5초 간격 숨쉬기·무지개). 전압: 배터리 전압(WMI BatteryStatus.Voltage) — CPU 코어 전압은 미구현.
 - 버벅임 대책: 배경은 한 장으로 미리 합쳐 캐시(ShellForm.bgCache), 표지는 화면 크기로 줄인 PArgb 캐시(Draw.Image, 그림당 3크기). 오버레이 GPU 카운터는 10초마다만 목록 갱신.
 - 빠른 설정판 폭은 런처 안·게임 위 팝업 모두 QuickPanel.PanelWidth()(화면 가로 26%).
+- 실행 문제 해결: GameDoctor.cs — 쯔꾸르 켜기 전 확실한 문제(엔진 dll 없음→라이브러리의 다른 게임에서 복사, 막힌 파일 Zone.Identifier 풀기, MV/MZ package.json 없음·main 틀림, 경로 # % ?)는 FixDialog로 묻고 고침. 켠 뒤 12초 안에 꺼지거나 메시지 상자(#32770)·MV 폴더 목록 화면이 뜨면 글을 읽어 RTP·일본어 글꼴(DISM)·DirectX 등 원인 안내 후 고칠지 물음.
 - 시작 영상은 사용자가 필요 없다고 함.
 - 오류 기록: Log.cs (내 문서\쯔꾸르 런처\logs: log.txt·errors.txt·running.flag). 화면 오류는 ErrorPopup 띄우고 계속, 다음 시작 때 지난 비정상 종료 알림. 사용자가 기록을 보여주면 그걸로 고칠 것.
 - 빠른 설정 모양: AYASpace식 — 위 빠른 타일(와이파이·블투·음소거·성능 표시·마우스), 왼쪽 탭(성능·화면·소리연결·컨트롤러·조명·바로가기, LB/RB), 오른쪽 기능, 성능 탭 맨 위 팬·TDP. 바로가기는 2열 단추판.

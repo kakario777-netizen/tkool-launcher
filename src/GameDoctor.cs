@@ -1,0 +1,447 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading;
+using System.Windows.Forms;
+using Microsoft.Win32;
+
+namespace TkoolLauncher
+{
+    /// <summary>
+    /// 쯔꾸르 게임이 실행 안 될 때 원인 찾기 + 고치기.
+    /// - 켜기 전: 확실히 문제인 것(빠진 dll·RTP·막힌 파일·package.json 등)을 미리 보고 물어봄
+    /// - 켠 뒤: 금방 꺼지거나 오류 창이 뜨거나(MV/MZ 폴더 목록 화면 포함) 하면 그 글을 읽어 원인을 찾아 물어봄
+    /// </summary>
+    static class GameDoctor
+    {
+        public class Issue
+        {
+            public string Title, Explain, FixLabel;
+            public Func<string> Fix;     // 고치고 결과 글 돌려줌 (null이면 고칠 방법 없음, 안내만)
+            public bool Sure = true;     // 켜기 전에도 물어볼 만큼 확실한지
+        }
+
+        public static List<GameInfo> Library = new List<GameInfo>();
+        const string RtpPage = "https://www.rpgmakerweb.com/run-time-package";
+
+        // ───────── 원인 찾기 ─────────
+        public static List<Issue> Check(GameInfo g, string seen = "")
+        {
+            var list = new List<Issue>();
+            if (g == null || !g.IsTkool || !Directory.Exists(g.Folder)) return list;
+            seen = seen ?? "";
+            string low = seen.ToLowerInvariant();
+            try { CheckBlocked(g, list); } catch { }
+            try
+            {
+                switch (g.Version)
+                {
+                    case TkoolVersion.RM2000: Check2k(g, list, low); break;
+                    case TkoolVersion.XP:
+                    case TkoolVersion.VX:
+                    case TkoolVersion.VXAce: CheckRgss(g, list, low); break;
+                    case TkoolVersion.MV:
+                    case TkoolVersion.MZ: CheckMv(g, list, low); break;
+                }
+            }
+            catch (Exception ex) { Log.Error("실행 문제 확인", ex); }
+            try { CheckFont(g, list, low); } catch { }
+            if (low.Contains("d3dx9") || low.Contains("directx") || low.Contains("d3d9"))
+                list.Add(new Issue
+                {
+                    Title = "DirectX 9 부품이 없어요",
+                    Explain = "이 게임은 옛날 DirectX 9 파일(d3dx9)을 써요. 마이크로소프트 'DirectX 최종 사용자 런타임'을 설치하면 돼요.",
+                    FixLabel = "설치 페이지 열기",
+                    Fix = () => { Open("https://www.microsoft.com/download/details.aspx?id=35"); return "설치 페이지를 열었어요. 설치 후 다시 실행해 보세요"; },
+                });
+            return list;
+        }
+
+        // 인터넷에서 받은 압축을 풀면 파일에 '다운로드한 파일' 표시가 붙어 dll을 못 읽는 경우가 있음
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern uint GetFileAttributes(string p);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool DeleteFile(string p);
+        static bool Blocked(string f) => GetFileAttributes(f + ":Zone.Identifier") != 0xFFFFFFFF;
+
+        static void CheckBlocked(GameInfo g, List<Issue> list)
+        {
+            bool any = Blocked(g.Exe);
+            if (!any)
+                foreach (var f in SafeFiles(g.Folder, "*.dll", false).Take(30))
+                    if (Blocked(f)) { any = true; break; }
+            if (!any) return;
+            list.Add(new Issue
+            {
+                Title = "윈도우가 게임 파일을 막아 두었어요",
+                Explain = "인터넷에서 받은 압축을 풀면 '다운로드한 파일' 표시가 붙어서, 게임이 dll을 못 읽고 꺼지는 일이 있어요. 표시를 지우면 돼요.",
+                FixLabel = "막힘 풀기",
+                Fix = () =>
+                {
+                    int n = 0;
+                    foreach (var f in SafeFiles(g.Folder, "*", true).Take(50000))
+                        if (Blocked(f) && DeleteFile(f + ":Zone.Identifier")) n++;
+                    return "파일 " + n + "개의 막힘을 풀었어요";
+                },
+            });
+        }
+
+        static void Check2k(GameInfo g, List<Issue> list, string low)
+        {
+            // harmony.dll: 게임 폴더나 시스템 폴더에 있어야 함 (RTP 설치 때 같이 들어감)
+            if (!File.Exists(Path.Combine(g.Folder, "harmony.dll")) && SysFile("harmony.dll") == null)
+                list.Add(CopyIssue(g, "harmony.dll", Path.Combine(g.Folder, "harmony.dll"),
+                    "2000/2003 게임은 harmony.dll이 있어야 켜져요."));
+            bool rtpOk = Rtp2kInstalled();
+            if (g.NeedsRtp && !rtpOk && (low == "" || low.Contains("rtp") || low.Contains("見つかりません") || low.Contains("not found") || low.Contains("찾을 수")))
+                list.Add(RtpIssue("RPG 쯔꾸르 2000/2003 RTP", "이 게임은 그림·소리 같은 기본 자료(RTP)를 따로 설치해야 돌아가요."));
+        }
+
+        static void CheckRgss(GameInfo g, List<Issue> list, string low)
+        {
+            string ini = TextDecode.ReadFile(Path.Combine(g.Folder, "Game.ini"), out _);
+            string lib = TextDecode.IniValue(ini, "Game", "Library");
+            if (string.IsNullOrWhiteSpace(lib))
+                lib = g.Version == TkoolVersion.XP ? "RGSS104J.dll" : g.Version == TkoolVersion.VX ? "RGSS202J.dll" : "System\\RGSS301.dll";
+            lib = lib.Trim();
+            string want = Path.Combine(g.Folder, lib);
+            string name = Path.GetFileName(lib);
+            if (!File.Exists(want) && SysFile(name) == null)
+                list.Add(CopyIssue(g, name, want, "게임 엔진 파일(" + name + ")이 없어서 실행이 안 돼요."));
+            if (g.NeedsRtp && !RgssRtpInstalled(g.Version, g.RtpName))
+                list.Add(RtpIssue("RPG 쯔꾸르 " + g.VersionLabel + " RTP", "이 게임은 기본 자료(RTP: " + g.RtpName + ")를 따로 설치해야 돌아가요."));
+        }
+
+        static void CheckMv(GameInfo g, List<Issue> list, string low)
+        {
+            string dir = g.Folder;
+            bool www = Directory.Exists(Path.Combine(dir, "www"));
+            string main = www ? "www/index.html" : "index.html";
+            if (!File.Exists(Path.Combine(dir, "package.json")))
+                list.Add(new Issue
+                {
+                    Title = "시작 설정 파일(package.json)이 없어요",
+                    Explain = "이 파일이 없으면 게임 대신 폴더 목록이나 빈 화면이 떠요. 기본 설정 파일을 만들면 돼요.",
+                    FixLabel = "설정 파일 만들기",
+                    Fix = () =>
+                    {
+                        File.WriteAllText(Path.Combine(dir, "package.json"),
+                            "{\n  \"name\": \"rmmv-game\",\n  \"main\": \"" + main + "\",\n  \"js-flags\": \"--expose-gc\",\n  \"window\": { \"title\": \"\", \"toolbar\": false, \"width\": 816, \"height\": 624, \"icon\": \"" + (www ? "www/" : "") + "icon/icon.png\" }\n}\n",
+                            new UTF8Encoding(false));
+                        return "package.json을 만들었어요";
+                    },
+                });
+            else
+            {
+                // main 이 가리키는 파일이 없으면 폴더 목록이 뜸
+                string pkg = TextDecode.ReadFile(Path.Combine(dir, "package.json"), out _) ?? "";
+                string m = TextDecode.JsonString(pkg, "main");
+                if (!string.IsNullOrEmpty(m) && !m.Contains("://") && !File.Exists(Path.Combine(dir, m.Replace('/', '\\'))) && File.Exists(Path.Combine(dir, main.Replace('/', '\\'))))
+                    list.Add(new Issue
+                    {
+                        Title = "시작 설정이 엉뚱한 파일을 가리켜요",
+                        Explain = "package.json의 시작 파일(" + m + ")이 없어서 게임 대신 폴더 목록이 떠요. " + main + "로 바로잡으면 돼요.",
+                        FixLabel = "바로잡기",
+                        Fix = () =>
+                        {
+                            string p = Path.Combine(dir, "package.json");
+                            File.Copy(p, p + ".bak", true);
+                            File.WriteAllText(p, pkg.Replace("\"" + m + "\"", "\"" + main + "\""), new UTF8Encoding(false));
+                            return "시작 파일을 " + main + "로 바꿨어요 (원래 파일은 package.json.bak)";
+                        },
+                    });
+            }
+            // 폴더 이름에 # % 가 있으면 nw.js가 주소를 잘못 읽어 폴더 목록·빈 화면이 뜸
+            string bad = new string(dir.Where(c => c == '#' || c == '%' || c == '?').Distinct().ToArray());
+            if (bad.Length > 0)
+                list.Add(new Issue
+                {
+                    Title = "폴더 이름에 쓰면 안 되는 글자(" + string.Join(" ", bad.ToCharArray()) + ")가 있어요",
+                    Explain = "MV·MZ 게임은 경로에 # % ? 가 있으면 게임 대신 폴더 목록이나 검은 화면이 떠요. 그 글자를 _ 로 바꾸면 돼요.",
+                    FixLabel = "폴더 이름 고치기",
+                    Fix = () => RenamePath(g, dir),
+                });
+            if (!File.Exists(Path.Combine(dir, "nw.pak")) && !File.Exists(Path.Combine(dir, "resources.pak")) && Path.GetFileName(g.Exe).Equals("Game.exe", StringComparison.OrdinalIgnoreCase))
+                list.Add(new Issue
+                {
+                    Title = "게임 실행 부품(nw.js)이 빠져 있어요",
+                    Explain = "Game.exe 옆에 있어야 할 nw.pak 같은 파일이 없어요. 배포 파일이 덜 풀렸거나 빠진 거라, 게임을 다시 받아야 해요.",
+                    Sure = false,
+                });
+        }
+
+        static void CheckFont(GameInfo g, List<Issue> list, string low)
+        {
+            bool fontMsg = low.Contains("font") || low.Contains("フォント") || low.Contains("글꼴");
+            bool needJp = g.Japanese && (g.Version == TkoolVersion.RM2000 || g.Version == TkoolVersion.XP);
+            if (!fontMsg && !needJp) return;
+            string fonts = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
+            if (File.Exists(Path.Combine(fonts, "msgothic.ttc")) && !fontMsg) return;
+            if (File.Exists(Path.Combine(fonts, "msgothic.ttc")) && fontMsg && !needJp) return;
+            list.Add(new Issue
+            {
+                Title = "일본어 글꼴(MS 고딕)이 없어요",
+                Explain = "옛날 일본 쯔꾸르 게임은 MS 고딕 글꼴이 없으면 글자가 안 보이거나 오류로 꺼져요. 윈도우 '일본어 추가 글꼴'을 설치하면 돼요 (몇 분 걸려요).",
+                FixLabel = "일본어 글꼴 설치",
+                Sure = fontMsg,
+                Fix = () =>
+                {
+                    var p = Process.Start(new ProcessStartInfo("dism.exe", "/online /add-capability /capabilityname:Language.Fonts.Jpan~~~und-JPAN~0.0.1.0 /norestart")
+                    { UseShellExecute = true, Verb = "runas", WindowStyle = ProcessWindowStyle.Hidden });
+                    p.WaitForExit(15 * 60 * 1000);
+                    return p.HasExited && (p.ExitCode == 0 || p.ExitCode == 3010) ? "일본어 글꼴을 설치했어요" : "글꼴 설치가 끝나지 않았어요 (코드 " + (p.HasExited ? p.ExitCode.ToString() : "시간 초과") + ")";
+                },
+            });
+        }
+
+        // ── 빠진 파일은 내 라이브러리의 다른 게임에서 같은 파일을 찾아 복사 ──
+        static Issue CopyIssue(GameInfo g, string name, string dest, string why)
+        {
+            string src = FindInLibrary(name, g);
+            if (src != null)
+                return new Issue
+                {
+                    Title = name + " 파일이 없어요",
+                    Explain = why + " 다른 게임 폴더(" + Path.GetFileName(Path.GetDirectoryName(src)) + ")에 같은 파일이 있어서 복사해 넣을 수 있어요.",
+                    FixLabel = "파일 복사해 넣기",
+                    Fix = () =>
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(dest));
+                        File.Copy(src, dest, true);
+                        return name + " 파일을 넣었어요";
+                    },
+                };
+            return new Issue
+            {
+                Title = name + " 파일이 없어요",
+                Explain = why + " 내 게임들 중엔 이 파일이 없어요. RTP를 설치하면 같이 들어와요.",
+                FixLabel = "RTP 받는 곳 열기",
+                Fix = () => { Open(RtpPage); return "RTP 받는 페이지를 열었어요. 설치 후 다시 실행해 보세요"; },
+            };
+        }
+
+        static Issue RtpIssue(string name, string why) => new Issue
+        {
+            Title = name + "가 설치돼 있지 않아요",
+            Explain = why + " 공식 페이지에서 받아 설치하면 돼요.",
+            FixLabel = "RTP 받는 곳 열기",
+            Fix = () => { Open(RtpPage); return "RTP 받는 페이지를 열었어요. 설치 후 다시 실행해 보세요"; },
+            Sure = false,   // RTP 없이도 도는 게임이 많아서, 켜 보고 오류가 났을 때만 물어봄
+        };
+
+        static string FindInLibrary(string name, GameInfo self)
+        {
+            foreach (var o in Library)
+            {
+                if (o == self || o.Folder == null) continue;
+                foreach (var c in new[] { Path.Combine(o.Folder, name), Path.Combine(o.Folder, "System", name) })
+                    try { if (File.Exists(c) && new FileInfo(c).Length > 10000) return c; } catch { }
+            }
+            return null;
+        }
+
+        static string SysFile(string name)
+        {
+            string win = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+            foreach (var d in new[] { "SysWOW64", "System32" })
+            {
+                string p = Path.Combine(win, d, name);
+                if (File.Exists(p)) return p;
+            }
+            return null;
+        }
+
+        static bool Rtp2kInstalled()
+        {
+            foreach (var k in new[] { @"Software\ASCII\RPG2000", @"Software\ASCII\RPG2003", @"Software\Enterbrain\RPG2003" })
+                foreach (var h in new[] { Registry.CurrentUser, Registry.LocalMachine })
+                {
+                    try
+                    {
+                        using (var key = h.OpenSubKey(k) ?? h.OpenSubKey(k.Replace("Software\\", "Software\\WOW6432Node\\")))
+                        {
+                            string p = key?.GetValue("RuntimePackagePath") as string;
+                            if (!string.IsNullOrEmpty(p) && Directory.Exists(p)) return true;
+                        }
+                    }
+                    catch { }
+                }
+            return false;
+        }
+
+        static bool RgssRtpInstalled(TkoolVersion v, string rtpName)
+        {
+            string sub = v == TkoolVersion.XP ? "RGSS" : v == TkoolVersion.VX ? "RGSS2" : "RGSS3";
+            foreach (var h in new[] { Registry.LocalMachine, Registry.CurrentUser })
+                foreach (var path in new[] { @"SOFTWARE\WOW6432Node\Enterbrain\" + sub + @"\RTP", @"SOFTWARE\Enterbrain\" + sub + @"\RTP" })
+                {
+                    try
+                    {
+                        using (var key = h.OpenSubKey(path))
+                        {
+                            if (key == null) continue;
+                            string p = key.GetValue(rtpName ?? "") as string;
+                            if (!string.IsNullOrEmpty(p) && Directory.Exists(p)) return true;
+                        }
+                    }
+                    catch { }
+                }
+            return false;
+        }
+
+        static string RenamePath(GameInfo g, string dir)
+        {
+            // 게임 폴더부터 위로 올라가며 # % ? 가 든 폴더 이름을 고침
+            string cur = dir;
+            var parts = new List<string>();
+            while (!string.IsNullOrEmpty(cur) && Path.GetDirectoryName(cur) != null) { parts.Insert(0, cur); cur = Path.GetDirectoryName(cur); }
+            string fixedDir = dir;
+            foreach (var p in parts)
+            {
+                string nm = Path.GetFileName(p);
+                if (nm.IndexOfAny(new[] { '#', '%', '?' }) < 0) continue;
+                string actual = fixedDir.Substring(0, fixedDir.Length - dir.Length + p.Length);
+                string target = Path.Combine(Path.GetDirectoryName(actual), nm.Replace('#', '_').Replace('%', '_').Replace('?', '_'));
+                if (Directory.Exists(target)) target += "_";
+                Directory.Move(actual, target);
+                fixedDir = target + fixedDir.Substring(actual.Length);
+            }
+            g.Folder = fixedDir;
+            g.Exe = Path.Combine(fixedDir, Path.GetFileName(g.Exe));
+            return "폴더 이름을 고쳤어요 → " + fixedDir;
+        }
+
+        static IEnumerable<string> SafeFiles(string dir, string pattern, bool deep)
+        {
+            try { return Directory.EnumerateFiles(dir, pattern, deep ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly); }
+            catch { return new string[0]; }
+        }
+
+        static void Open(string url) { try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch { } }
+
+        // ───────── 켠 뒤 지켜보기 ─────────
+        delegate bool EnumProc(IntPtr h, IntPtr l);
+        [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr l);
+        [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr p, EnumProc f, IntPtr l);
+        [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+        [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
+
+        static string Text(IntPtr h) { var sb = new StringBuilder(512); GetWindowText(h, sb, 512); return sb.ToString(); }
+        static string Cls(IntPtr h) { var sb = new StringBuilder(128); GetClassName(h, sb, 128); return sb.ToString(); }
+
+        /// <summary>게임 프로세스를 잠깐 지켜봄: 오류 창 글을 모으고, 금방 꺼지거나 폴더 목록이 뜨면 onProblem(본 글, 아직 켜져 있는지)</summary>
+        public static void Watch(GameInfo g, Process p, Action<string, bool> onProblem)
+        {
+            if (p == null || g == null || !g.IsTkool) return;
+            var th = new Thread(() =>
+            {
+                try
+                {
+                    var start = DateTime.Now;
+                    string seen = "";
+                    bool box = false;
+                    bool mv = g.Version == TkoolVersion.MV || g.Version == TkoolVersion.MZ;
+                    while (true)
+                    {
+                        Thread.Sleep(500);
+                        bool exited;
+                        try { exited = p.HasExited; } catch { exited = true; }
+                        double sec = (DateTime.Now - start).TotalSeconds;
+                        if (exited)
+                        {
+                            int code = 0; try { code = p.ExitCode; } catch { }
+                            if (box || sec < 12) { Log.Info("게임이 금방 꺼짐 (" + (int)sec + "초, 코드 " + code + ") " + seen.Replace("\n", " / ")); onProblem(seen, false); }
+                            return;
+                        }
+                        // 게임 창들 읽기
+                        int pid = p.Id;
+                        EnumWindows((h, l) =>
+                        {
+                            GetWindowThreadProcessId(h, out uint wp);
+                            if (wp != pid || !IsWindowVisible(h)) return true;
+                            string cls = Cls(h), title = Text(h);
+                            if (cls == "#32770")   // 메시지 상자
+                            {
+                                box = true;
+                                var sb = new StringBuilder(title + "\n");
+                                EnumChildWindows(h, (c, l2) => { string t = Text(c); if (t.Length > 2 && Cls(c) == "Static") sb.Append(t + "\n"); return true; }, IntPtr.Zero);
+                                if (!seen.Contains(sb.ToString())) seen += sb.ToString();
+                            }
+                            else if (mv)
+                            {
+                                string lt = title.ToLowerInvariant();
+                                if (lt.StartsWith("index of") || lt.Contains("file:///") || lt.Contains(":\\") || lt.Contains("chrome-extension://"))
+                                {
+                                    seen += "폴더 목록 화면: " + title + "\n";
+                                    Log.Info("MV/MZ 폴더 목록 화면이 뜸: " + title);
+                                    onProblem(seen, true);
+                                    sec = 9999;
+                                }
+                            }
+                            return true;
+                        }, IntPtr.Zero);
+                        if (sec >= 9999) return;
+                        if (sec > 15 && !box) return;   // 잘 켜졌음
+                        if (sec > 600) return;
+                    }
+                }
+                catch (Exception ex) { Log.Error("실행 지켜보기", ex); }
+            }) { IsBackground = true };
+            th.Start();
+        }
+    }
+
+    /// <summary>실행 문제 안내 + 고칠지 묻는 창</summary>
+    class FixDialog : TouchDialog
+    {
+        public bool RunAfter;
+
+        public FixDialog(GameInfo g, List<GameDoctor.Issue> issues, bool beforeRun, string seen)
+            : base(beforeRun ? "실행 전에 확인할 게 있어요" : "게임이 제대로 켜지지 않았어요")
+        {
+            SubHeader.Text = g.Title + (beforeRun ? " — 이대로면 실행이 안 될 수 있어요. 고칠까요?" : " — 원인과 해결 방법이에요");
+            Grid.TileHeight = 120;
+            var items = new List<TileItem>();
+            foreach (var i in issues)
+                items.Add(new TileItem { Title = i.Title, Sub = i.Explain + (i.Fix != null ? "  → " + i.FixLabel : "  (직접 해결 필요)"), Tag = i });
+            if (issues.Count == 0)
+                items.Add(new TileItem
+                {
+                    Title = "원인을 찾지 못했어요",
+                    Sub = (string.IsNullOrWhiteSpace(seen) ? "게임이 아무 말 없이 꺼졌어요." : "게임이 보여준 글: " + seen.Replace("\n", " ").Trim()) +
+                          "  내 문서\\쯔꾸르 런처\\logs\\log.txt 를 보내 주시면 고쳐 볼게요.",
+                });
+            Grid.SetItems(items);
+
+            var fixable = issues.Where(i => i.Fix != null).ToList();
+            AddButton("닫기", () => { DialogResult = DialogResult.Cancel; Close(); });
+            if (beforeRun) AddButton("그냥 실행", () => { RunAfter = true; DialogResult = DialogResult.OK; Close(); });
+            if (fixable.Count > 0)
+            {
+                var b = AddButton(beforeRun ? "고치고 실행" : "고쳐 주세요", () =>
+                {
+                    var res = new List<string>();
+                    Cursor = Cursors.WaitCursor;
+                    foreach (var i in fixable)
+                    {
+                        try { res.Add(i.Fix()); }
+                        catch (Exception ex) { Log.Error("실행 문제 고치기", ex); res.Add(i.Title + " — 고치지 못했어요: " + ex.Message); }
+                    }
+                    Cursor = Cursors.Default;
+                    Log.Info("실행 문제 고침: " + string.Join(" / ", res));
+                    Result = string.Join("\n", res);
+                    RunAfter = beforeRun;
+                    DialogResult = DialogResult.OK;
+                    Close();
+                }, Theme.Accent);
+                SetPrimary(b);
+            }
+        }
+
+        public string Result = "";
+    }
+}
