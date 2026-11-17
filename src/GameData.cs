@@ -12,6 +12,7 @@ namespace TkoolLauncher
         public long LastPlayed;     // DateTime.Ticks (0 = 안 해봄)
         public long TotalSeconds;
         public bool Hidden;
+        public string Title;     // 게임 창 제목에서 가져온 진짜 이름 (없으면 null)
     }
 
     static class GameData
@@ -58,6 +59,7 @@ namespace TkoolLauncher
                         LastPlayed = long.TryParse(p[2], out long lp) ? lp : 0,
                         TotalSeconds = long.TryParse(p[3], out long ts) ? ts : 0,
                         Hidden = p.Length > 4 && p[4] == "1",
+                        Title = p.Length > 5 && p[5].Length > 0 ? p[5].Replace("\u2502", "|") : null,
                     };
                     stats[p[0]] = s;
                 }
@@ -74,9 +76,10 @@ namespace TkoolLauncher
                 foreach (var kv in stats)
                 {
                     var s = kv.Value;
-                    if (!s.Favorite && s.LastPlayed == 0 && s.TotalSeconds == 0 && !s.Hidden) continue;
+                    if (!s.Favorite && s.LastPlayed == 0 && s.TotalSeconds == 0 && !s.Hidden && s.Title == null) continue;
                     sb.Append(kv.Key).Append('|').Append(s.Favorite ? "1" : "0").Append('|')
-                      .Append(s.LastPlayed).Append('|').Append(s.TotalSeconds).Append('|').Append(s.Hidden ? "1" : "0").AppendLine();
+                      .Append(s.LastPlayed).Append('|').Append(s.TotalSeconds).Append('|').Append(s.Hidden ? "1" : "0")
+                      .Append('|').Append((s.Title ?? "").Replace("|", "\u2502").Replace("\n", " ")).AppendLine();
                 }
                 File.WriteAllText(FilePath, sb.ToString(), new UTF8Encoding(false));
             }

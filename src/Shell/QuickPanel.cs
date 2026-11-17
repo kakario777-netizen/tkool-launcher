@@ -260,6 +260,21 @@ namespace TkoolLauncher
                 }
             }
 
+            if (game && Shell.PlayingGame != null)
+            {
+                var pg = Shell.PlayingGame;
+                rows.Add(new Row
+                {
+                    Kind = Kind.Action, Title = "지금 화면을 표지로", Sub = pg.Title + " 표지를 지금 게임 화면으로 바꿔요",
+                    Act = () => Shell.SendToGame(() =>
+                    {
+                        var tm = new System.Windows.Forms.Timer { Interval = 300 };
+                        tm.Tick += (s2, e2) => { tm.Stop(); tm.Dispose(); bool ok = GameCapture.ShotNow(pg); if (ok) Shell.RefreshLists(); };
+                        tm.Start();
+                    })
+                });
+            }
+
             // ── 화면 확대 (FSR 용도) ──
             rows.Add(new Row
             {

@@ -34,6 +34,30 @@ namespace TkoolLauncher
         }
     }
 
+    /// <summary>화면 위쪽에 잠깐 떠 있는 안내 (표지 찾는 중)</summary>
+    class OverlayTip : Form
+    {
+        string text = "";
+        public OverlayTip()
+        {
+            FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; TopMost = true;
+            StartPosition = FormStartPosition.Manual; BackColor = Color.FromArgb(23, 29, 37); Opacity = 0.92;
+            var sc = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
+            Size = new Size(Math.Min(sc.Width - 40, Theme.S(900)), Theme.S(44));
+            Location = new Point((sc.Width - Width) / 2, Theme.S(12));
+        }
+        protected override CreateParams CreateParams { get { var cp = base.CreateParams; cp.ExStyle |= 0x80 | 0x08000000 | 0x20 | 0x80000; return cp; } }
+        protected override bool ShowWithoutActivation => true;
+        public void SetText(string t) { text = t; Invalidate(); }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.Clear(BackColor);
+            using (var f = Theme.Px(15, true))
+                TextRenderer.DrawText(e.Graphics, text, f, ClientRectangle, Color.White,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        }
+    }
+
     /// <summary>미니 모드: 런처를 숨기고 화면 가장자리에 작은 동그라미만 남김. 누르면 런처가 돌아옴</summary>
     class MiniBubble : Form
     {

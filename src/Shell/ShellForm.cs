@@ -76,6 +76,7 @@ namespace TkoolLauncher
 
             CoverArt.Init(this);
             CoverArt.Changed = () => { UpdateBg(); Invalidate(); };
+            GameDesc.Changed = () => { try { BeginInvoke(new Action(Invalidate)); } catch { } };
 
             var home = new HomeScreen { Shell = this };
             stack.Add(home);
@@ -166,6 +167,7 @@ namespace TkoolLauncher
         /// <summary>AYA 버튼·가이드 버튼·보기+메뉴: 게임 중이면 런처를 불러와 빠른 설정을, 런처 안이면 빠른 설정 열고 닫기</summary>
         public void HomeAction()
         {
+            if (GameCapture.Finding) { GameCapture.Cancel = true; return; }
             if (GameWatch.Running && (WindowState == FormWindowState.Minimized || Form.ActiveForm == null))
             {
                 gameHwnd = GetForegroundWindow();
@@ -649,8 +651,38 @@ namespace TkoolLauncher
             FocusChanged();
         }
 
+        public GameInfo PlayingGame;
+
+        /// <summary>표지·이름 없는 게임을 하나씩 잠깐 켜서 채우기</summary>
+        public void FindCovers()
+        {
+            if (GameWatch.Running) { ShowToast("게임을 끈 다음에 해 주세요", 3000); return; }
+            var list = GameCapture.Missing(Games);
+            if (list.Count == 0) { ShowToast("표지·이름이 빠진 게임이 없어요", 3000); return; }
+            Gamepad.MapKeys = false;
+            WindowState = FormWindowState.Minimized;
+            var tip = new OverlayTip();
+            tip.Show();
+            GameCapture.FindAll(list,
+                msg => { try { BeginInvoke(new Action(() => tip.SetText("표지 찾는 중 " + msg))); } catch { } },
+                n => BeginInvoke(new Action(() =>
+                {
+                    tip.Close();
+                    WindowState = FormWindowState.Maximized;
+                    Activate();
+                    RefreshLists();
+                    ShowToast(list.Count + "개 중 " + n + "개의 표지·이름을 채웠어요", 5000);
+                })));
+        }
+
         public void SetGames(List<GameInfo> found)
         {
+            // 게임 창 제목에서 가져와 저장해 둔 진짜 이름 적용
+            foreach (var g in found)
+            {
+                string t = GameData.Get(g).Title;
+                if (!string.IsNullOrEmpty(t)) g.Title = t;
+            }
             Games = found;
             LayoutScreens();
             foreach (var s in stack) s.OnGamesChanged();
@@ -685,6 +717,8 @@ namespace TkoolLauncher
             string dir = g.InstallDir ?? g.Folder;
             CameFromGame = false;
             SmartTdp.Reset();
+            PlayingGame = g;
+            if (Settings.AutoCover) GameCapture.Watch(this, g);
             if (Settings.AutoScaleTkool && Gamepad.MapKeys)
             {
                 // 게임 창이 뜰 때까지 조금 기다렸다가 확대 (앞 창이 게임 폴더 프로그램일 때만)

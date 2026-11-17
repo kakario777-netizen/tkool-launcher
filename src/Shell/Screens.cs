@@ -440,7 +440,7 @@ namespace TkoolLauncher
         public override void Paint(Graphics g)
         {
             var full = Shell.ClientRectangle;
-            int heroBottom = Area.Top + (int)(Area.Height * 0.52f);
+            int heroBottom = Area.Top + (int)(Area.Height * 0.46f);
             var heroRect = new Rectangle(0, 0, full.Width, heroBottom);
             var art = CoverArt.Get(game);
 
@@ -494,21 +494,44 @@ namespace TkoolLauncher
             InfoBlock(g, ref ix, rowY + S(6), "플레이 시간", GameData.PlayTimeText(st.TotalSeconds));
 
             // 정보
-            int y = rowY + S(104);
-            Draw.Text(g, "정보", Draw.H2, new Rectangle(pad, y, S(300), S(30)), Theme.Text);
-            y += S(42);
-            int bx = pad;
+            // 아래: 왼쪽 소개 / 오른쪽 정보 (스팀 게임 화면처럼)
+            int y0 = rowY + S(100);
+            int bottom = Area.Bottom - S(12);
+            int infoW = Math.Min(S(380), (full.Width - pad * 2) / 3);
+            int descW = full.Width - pad * 2 - infoW - S(40);
+            int ix0 = pad + descW + S(40);
+
+            Draw.Text(g, "소개", Draw.H2, new Rectangle(pad, y0, S(300), S(30)), Theme.Text);
+            string desc = GameDesc.Get(game);
+            string dtext = desc == null ? "불러오는 중..." :
+                desc.Length > 0 ? desc : "소개 글이 없어요. 게임 폴더에 readme.txt 같은 설명 파일이 있으면 여기에 보여줘요.";
+            var dr = new Rectangle(pad, y0 + S(40), descW, bottom - y0 - S(40));
+            Draw.Fill(g, Rectangle.Inflate(dr, S(10), S(8)), S(6), Color.FromArgb(110, 23, 29, 37));
+            Draw.Text(g, dtext, Draw.Body, dr, desc != null && desc.Length > 0 ? Theme.Text : Theme.SubText,
+                TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+
+            Draw.Text(g, "정보", Draw.H2, new Rectangle(ix0, y0, S(300), S(30)), Theme.Text);
+            int y = y0 + S(42);
+            int bx = ix0;
             Draw.Badge(g, ref bx, y, game.IsTkool ? "RPG MAKER " + game.VersionLabel.ToUpperInvariant() : game.VersionLabel + " 게임", Theme.GameColor(game));
             if (game.Manual) Draw.Badge(g, ref bx, y, "직접 추가", Color.FromArgb(70, 80, 96));
+            y += S(30); bx = ix0;
             if (game.IsTkool || game.Japanese)
+            {
                 Draw.Badge(g, ref bx, y, game.Japanese ? "일본어 원어" : "한국어/기타", game.Japanese ? Color.FromArgb(186, 62, 62) : Color.FromArgb(70, 80, 96));
-            if (game.NeedsRtp) Draw.Badge(g, ref bx, y, "RTP 필요" + (string.IsNullOrEmpty(game.RtpName) ? "" : " (" + game.RtpName + ")"), Color.FromArgb(70, 80, 96));
-            y += S(36);
-            Draw.Text(g, game.Folder, Draw.Small, new Rectangle(pad, y, full.Width - pad * 2, S(20)), Theme.SubText,
-                Draw.Left | TextFormatFlags.PathEllipsis);
-            y += S(26);
-            Draw.Text(g, "표지 바꾸기: 내 문서\\쯔꾸르 런처\\covers 에 '" + System.IO.Path.GetFileName(game.Folder) + ".png' 그림을 넣으면 바뀌어요",
-                Draw.Small, new Rectangle(pad, y, full.Width - pad * 2, S(20)), Theme.Dim);
+                y += S(30); bx = ix0;
+            }
+            if (game.NeedsRtp)
+            {
+                Draw.Badge(g, ref bx, y, "RTP 필요" + (string.IsNullOrEmpty(game.RtpName) ? "" : " (" + game.RtpName + ")"), Color.FromArgb(70, 80, 96));
+                y += S(30);
+            }
+            y += S(8);
+            Draw.Text(g, game.Folder, Draw.Small, new Rectangle(ix0, y, infoW, S(40)), Theme.SubText,
+                TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+            y += S(48);
+            Draw.Text(g, "표지 바꾸기: 내 문서\\쯔꾸르 런처\\covers 에 '" + System.IO.Path.GetFileName(game.Folder) + ".png'",
+                Draw.Small, new Rectangle(ix0, y, infoW, S(40)), Theme.Dim, TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix);
         }
 
         void InfoBlock(Graphics g, ref int x, int y, string label, string value)
@@ -703,6 +726,10 @@ namespace TkoolLauncher
                           Act = () => { Settings.LoopGuard = !Settings.LoopGuard; Settings.Save(); } },
                 new Row { Title = "작업 표시줄 끝 눌러 바탕화면 보기", Toggle = LoopGuard.CornerPeekOn, Sub = "최소화 반복이 생기면 끄는 걸 추천해요",
                           Act = () => LoopGuard.CornerPeekOn = !LoopGuard.CornerPeekOn },
+                new Row { Title = "표지·이름 한 번에 찾기", Sub = "표지나 이름이 빠진 게임을 하나씩 15초씩 켜서 타이틀 화면을 찍어요 (홈 버튼으로 멈춤)",
+                          Value = GameCapture.Missing(Shell.Games).Count + "개", Act = Shell.FindCovers },
+                new Row { Title = "표지 없는 게임 자동 표지", Toggle = Settings.AutoCover, Sub = "처음 켤 때 타이틀 화면을 찍어 표지로, 이름이 'Game'이면 창 제목으로 바꿔요",
+                          Act = () => { Settings.AutoCover = !Settings.AutoCover; Settings.Save(); } },
                 new Row { Title = "쯔꾸르 게임 자동 확대", Toggle = Settings.AutoScaleTkool, Sub = "2000~VX Ace 게임을 켜면 작은 창을 도트 선명하게 꽉 채워요",
                           Act = () => { Settings.AutoScaleTkool = !Settings.AutoScaleTkool; Settings.Save(); } },
                 new Row { Title = "AYA 큰 버튼 연결", Sub = learning == 1 ? "지금 AYA 큰 버튼을 누르세요..." : "빠른 설정 열기 · 패드 가이드 버튼, 보기+메뉴 동시 누름도 돼요",

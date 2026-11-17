@@ -135,6 +135,17 @@ namespace TkoolLauncher
             return null;
         }
 
+        /// <summary>게임 화면을 찍어 둔 표지 원본 (covers\폴더이름.auto.png)</summary>
+        public static string AutoShotPath(GameInfo g) => Path.Combine(CoverDir, Path.GetFileName(g.Folder) + ".auto.png");
+
+        /// <summary>그림을 못 찾아 색깔 기본 표지로 만든 게임들 (자동 캡처 대상)</summary>
+        public static readonly HashSet<string> NeedsCover = new HashSet<string>();
+
+        public static bool Needs(GameInfo g)
+        {
+            lock (lk) return NeedsCover.Contains(GameData.IdOf(g));
+        }
+
         static Bitmap LoadPng(string p)
         {
             try
@@ -151,7 +162,9 @@ namespace TkoolLauncher
         {
             string id = GameData.IdOf(g);
             string custom = CustomCover(g);
-            string stamp = Version + "|" + (g.CoverHint ?? "") + "|" + (g.HeroHint ?? "") + "|" + (custom ?? "") + "|" + (custom != null ? File.GetLastWriteTimeUtc(custom).Ticks.ToString() : "") + "|" + g.Title;
+            string auto = AutoShotPath(g);
+            if (!File.Exists(auto)) auto = null;
+            string stamp = (auto != null ? File.GetLastWriteTimeUtc(auto).Ticks.ToString() : "") + "|" + Version + "|" + (g.CoverHint ?? "") + "|" + (g.HeroHint ?? "") + "|" + (custom ?? "") + "|" + (custom != null ? File.GetLastWriteTimeUtc(custom).Ticks.ToString() : "") + "|" + g.Title;
             string cPath = Path.Combine(CacheDir, id + "_c.png");
             string hPath = Path.Combine(CacheDir, id + "_h.png");
             string bPath = Path.Combine(CacheDir, id + "_b.png");
@@ -160,8 +173,10 @@ namespace TkoolLauncher
             // 저장된 게 있고 조건이 같으면 그대로
             try
             {
-                if (File.Exists(cPath) && File.Exists(bPath) && File.Exists(nPath) && File.ReadAllText(nPath) == stamp)
+                string[] mark = File.Exists(nPath) ? File.ReadAllLines(nPath) : new string[0];
+                if (File.Exists(cPath) && File.Exists(bPath) && mark.Length > 0 && mark[0] == stamp)
                 {
+                    lock (lk) { if (mark.Length > 1 && mark[1] == "NEED") NeedsCover.Add(id); else NeedsCover.Remove(id); }
                     return new GameArt { Capsule = LoadPng(cPath), Hero = LoadPng(hPath), Blur = LoadPng(bPath) };
                 }
             }
@@ -180,6 +195,8 @@ namespace TkoolLauncher
             else
             {
                 Bitmap src = custom != null ? LoadPng(custom) : ArtExtract.FindTitleImage(g);
+                if (src == null && auto != null) src = LoadPng(auto);   // 처음 켰을 때 찍어 둔 게임 화면
+                lock (lk) { if (src == null && custom == null && g.HeroHint == null) NeedsCover.Add(id); else NeedsCover.Remove(id); }
                 Bitmap heroOnly = src == null && g.HeroHint != null ? LoadPng(g.HeroHint) : null;
                 Bitmap icon = src == null && heroOnly == null && !g.IsTkool ? ArtExtract.ExeIcon(g.Exe) : null;
                 art = new GameArt
@@ -198,7 +215,9 @@ namespace TkoolLauncher
                 art.Blur.Save(bPath, ImageFormat.Png);
                 if (art.Hero != null) art.Hero.Save(hPath, ImageFormat.Png);
                 else try { File.Delete(hPath); } catch { }
-                File.WriteAllText(nPath, stamp);
+                bool need;
+                lock (lk) need = NeedsCover.Contains(id);
+                File.WriteAllText(nPath, stamp + (need ? "\nNEED" : ""));
             }
             catch { }
             return art;
