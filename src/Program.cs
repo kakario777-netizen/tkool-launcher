@@ -33,9 +33,10 @@ namespace TkoolLauncher
                 Application.SetCompatibleTextRenderingDefault(false);
                 Settings.Load();
                 // 하드웨어 제어를 켜 뒀는데 관리자가 아니면, 관리자 작업으로 다시 켜고 이건 끝냄 (허락 창 없음)
-                if (Settings.HardwareControl && !updated && !IsAdmin() && Hardware.RunAdminTask()) return;
+                if (Settings.HardwareControl && !updated && !IsAdmin() && Hardware.RunAdminTask()) { Log.Info("관리자 권한으로 다시 켬"); return; }
                 GameData.Load();
                 Gamepad.Start();
+                Application.ApplicationExit += (s, e) => { try { Log.Info("프로그램 종료 신호"); } catch { } };
                 try { Application.Run(new ShellForm()); }
                 catch (Exception ex) { Log.Error("실행", ex); throw; }
                 finally { Log.Stop(); }

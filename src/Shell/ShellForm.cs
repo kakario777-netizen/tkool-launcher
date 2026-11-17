@@ -490,6 +490,27 @@ namespace TkoolLauncher
         }
 
         // ───────── 그리기 ─────────
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            // 왜 꺼졌는지 기록 (사용자·윈도우·코드 중 누가 닫았는지)
+            try
+            {
+                var st = new System.Diagnostics.StackTrace().GetFrames();
+                var who = new System.Collections.Generic.List<string>();
+                if (st != null)
+                    foreach (var fr in st)
+                    {
+                        var m = fr.GetMethod();
+                        if (m != null && m.DeclaringType != null && m.DeclaringType.Namespace != null && m.DeclaringType.Namespace.StartsWith("TkoolLauncher"))
+                            who.Add(m.DeclaringType.Name + "." + m.Name);
+                        if (who.Count >= 6) break;
+                    }
+                Log.Info("창 닫힘: " + e.CloseReason + (who.Count > 1 ? " ← " + string.Join(" ← ", who.GetRange(1, who.Count - 1)) : ""));
+            }
+            catch { }
+            base.OnFormClosing(e);
+        }
+
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             Hotkeys.Stop();

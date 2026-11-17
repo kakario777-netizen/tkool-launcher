@@ -108,6 +108,7 @@ namespace TkoolLauncher
                 Process.Start(new ProcessStartInfo(ExePath, "--updated") { UseShellExecute = false });
             }
             catch { return; }
+            Log.Info("업데이트로 다시 켬");
             Application.Exit();
         }
     }
