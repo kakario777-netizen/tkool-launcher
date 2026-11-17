@@ -39,6 +39,7 @@ namespace TkoolLauncher
             public Rectangle Rect;
             public bool Danger;
             public int Cat;
+            public int FixCat = -1;         // 정해진 탭 (제목으로 분류하지 않음)
         }
 
         List<Row> rows = new List<Row>();
@@ -122,6 +123,7 @@ namespace TkoolLauncher
             });
             rows.Add(new Row { Kind = Kind.Choice, Title = "성능 모드", Choices = SystemControls.PowerNames, ChoiceIndex = power, Change = v => { power = v; SystemControls.SetPowerMode(v); } });
             rows.Add(new Row { Kind = Kind.Toggle, Title = "성능 표시 (화면 위)", On = OverlayForm.IsOn, Change = v => OverlayForm.Toggle(v == 1) });
+            AddOverlayRows();
             if (resList.Count > 1)
                 rows.Add(new Row
                 {
@@ -322,6 +324,31 @@ namespace TkoolLauncher
 
         [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "GetForegroundWindow")] static extern IntPtr GetFg();
 
+        // ── 오버레이 탭: 모양·위치·크기·색·진하기·보일 항목 ──
+        void AddOverlayRows()
+        {
+            Action apply = () => { Settings.Save(); OverlayForm.ApplyStyle(); };
+            rows.Add(new Row { FixCat = 6, Kind = Kind.Toggle, Title = "성능 표시 켜기", On = OverlayForm.IsOn, Change = v => OverlayForm.Toggle(v == 1) });
+            rows.Add(new Row { FixCat = 6, Kind = Kind.Choice, Title = "모양", Choices = OverlayForm.StyleNames, ChoiceIndex = Clamp(Settings.OvStyle, OverlayForm.StyleNames), Change = v => { Settings.OvStyle = v; apply(); } });
+            rows.Add(new Row { FixCat = 6, Kind = Kind.Choice, Title = "위치", Choices = OverlayForm.PosNames, ChoiceIndex = Clamp(Settings.OvPos, OverlayForm.PosNames), Change = v => { Settings.OvPos = v; apply(); } });
+            rows.Add(new Row { FixCat = 6, Kind = Kind.Choice, Title = "크기", Choices = OverlayForm.SizeNames, ChoiceIndex = Clamp(Settings.OvSize, OverlayForm.SizeNames), Change = v => { Settings.OvSize = v; apply(); } });
+            rows.Add(new Row { FixCat = 6, Kind = Kind.Choice, Title = "글자 색", Choices = OverlayForm.ColorNames, ChoiceIndex = Clamp(Settings.OvColor, OverlayForm.ColorNames), Change = v => { Settings.OvColor = v; apply(); } });
+            rows.Add(new Row { FixCat = 6, Kind = Kind.Slider, Title = "배경 진하기", Num = Settings.OvBg, Change = v => { Settings.OvBg = v; apply(); } });
+            rows.Add(new Row { FixCat = 6, Kind = Kind.Slider, Title = "글자 진하기", Num = Settings.OvText, Change = v => { Settings.OvText = Math.Max(20, v); apply(); } });
+            for (int i = 0; i < OverlayForm.ItemNames.Length; i++)
+            {
+                int bit = 1 << i;
+                rows.Add(new Row
+                {
+                    FixCat = 6, Kind = Kind.Toggle, Title = "보이기 · " + OverlayForm.ItemNames[i], On = (Settings.OvItems & bit) != 0,
+                    Sub = i == 0 && Settings.OvStyle == 2 ? "'FPS만 크게' 모양에선 FPS만 보여요" : null,
+                    Change = v => { Settings.OvItems = v == 1 ? Settings.OvItems | bit : Settings.OvItems & ~bit; apply(); }
+                });
+            }
+        }
+
+        static int Clamp(int v, string[] a) => Math.Max(0, Math.Min(a.Length - 1, v));
+
         void AddChoice(string title, int[] vals, string unit, int cur, Action<int> set)
         {
             var names = new string[vals.Length];
@@ -365,7 +392,7 @@ namespace TkoolLauncher
         int S(float v) => Theme.S(v);
 
         // ═════════ AYASpace 모양: 위 빠른 타일 줄 + 왼쪽 탭 + 오른쪽 기능 ═════════
-        public static readonly string[] TabNames = { "성능", "화면", "소리·연결", "컨트롤러", "조명", "바로가기" };
+        public static readonly string[] TabNames = { "성능", "화면", "소리·연결", "컨트롤러", "조명", "바로가기", "오버레이" };
         static int tab;                 // 지금 탭 (껐다 켜도 기억)
         int zone = 1;                   // 0 = 위 타일 줄, 1 = 오른쪽 기능
         int tileFocus;
@@ -382,6 +409,7 @@ namespace TkoolLauncher
             new[] { "가상 패드", "컨트롤러 끄기", "진동 세기", "조이스틱 데드존", "조이스틱 감도", "연사 (", "연사 속도", "자이로 (", "자이로 감도", "자이로 켜는 법", "좌우 회전 축", "자이로 좌우", "자이로 상하", "조이스틱 마우스 모드" },
             new[] { "조이스틱 조명", "조명 색", "조명 밝기", "조명 효과" },
             new[] { "게임으로 돌아가기", "게임 끝내기", "한 번 더 누르면", "지금 화면을 표지로", "런처 열기", "스크린샷", "ESC 보내기", "전체 화면 전환", "화상 키보드", "작업 전환", "윈도우 시작 메뉴", "메모리 정리", "미니 모드" },
+            new string[0],   // 오버레이 (FixCat으로 들어감)
         };
 
         static int Rank(int cat, string title)
@@ -395,7 +423,8 @@ namespace TkoolLauncher
         {
             foreach (var r in rows)
             {
-                r.Cat = -1;
+                r.Cat = r.FixCat;
+                if (r.Cat >= 0) continue;
                 for (int c = 0; c < Order.Length && r.Cat < 0; c++) if (Rank(c, r.Title) >= 0) r.Cat = c;
                 if (r.Cat < 0) r.Cat = r.Kind == Kind.Action ? 5 : 0;
             }
@@ -516,6 +545,10 @@ namespace TkoolLauncher
                     case 4: // 조명: 전구
                         g.DrawEllipse(p, cx - S(6), cy - S(9), S(12), S(12));
                         g.DrawLine(p, cx - S(3), cy + S(6), cx + S(3), cy + S(6)); g.DrawLine(p, cx - S(2), cy + S(9), cx + S(2), cy + S(9));
+                        break;
+                    case 6: // 오버레이: 화면 속 그래프
+                        g.DrawRectangle(p, cx - S(11), cy - S(8), S(22), S(16));
+                        g.DrawLines(p, new[] { new Point(cx - S(7), cy + S(4)), new Point(cx - S(2), cy - S(1)), new Point(cx + S(2), cy + S(2)), new Point(cx + S(7), cy - S(4)) });
                         break;
                     default: // 바로가기: 격자
                         for (int k = 0; k < 4; k++) g.FillRectangle(b, cx - S(9) + (k % 2) * S(10), cy - S(9) + (k / 2) * S(10), S(8), S(8));

@@ -20,6 +20,8 @@ namespace TkoolLauncher
         public static string HomeKey = "Win+Ctrl+128";   // AYA 큰 버튼 (Ctrl+Win+F17)
         public static string SmallKey = "Win+68";        // AYA 작은 버튼 (Win+D)
         public static bool HardwareControl;
+        // 성능 표시(오버레이) 꾸미기
+        public static int OvStyle = 0, OvPos = 0, OvSize = 1, OvColor = 0, OvBg = 60, OvText = 100, OvItems = 0x3FF;
         public static string AdminTaskExe = "";   // 관리자 작업이 가리키는 exe 경로 (옮기면 다시 만듦)
         public static int SmartFps;          // 0 = 끔
         public static int AccentIndex;       // 테마 색
@@ -60,6 +62,13 @@ namespace TkoolLauncher
                     else if (key == "HomeKey") HomeKey = val;
                     else if (key == "SmallKey") SmallKey = val;
                     else if (key == "HardwareControl") HardwareControl = val == "1";
+                    else if (key == "OvStyle") int.TryParse(val, out OvStyle);
+                    else if (key == "OvPos") int.TryParse(val, out OvPos);
+                    else if (key == "OvSize") int.TryParse(val, out OvSize);
+                    else if (key == "OvColor") int.TryParse(val, out OvColor);
+                    else if (key == "OvBg") int.TryParse(val, out OvBg);
+                    else if (key == "OvText") int.TryParse(val, out OvText);
+                    else if (key == "OvItems") int.TryParse(val, out OvItems);
                     else if (key == "AdminTaskExe") AdminTaskExe = val;
                     else if (key == "Tdp") int.TryParse(val, out Tdp);
                     else if (key == "SmartFps") int.TryParse(val, out SmartFps);
@@ -115,6 +124,8 @@ namespace TkoolLauncher
                 sb.AppendLine("HomeKey=" + HomeKey);
                 sb.AppendLine("SmallKey=" + SmallKey);
                 sb.AppendLine("HardwareControl=" + (HardwareControl ? "1" : "0"));
+                sb.AppendLine("OvStyle=" + OvStyle); sb.AppendLine("OvPos=" + OvPos); sb.AppendLine("OvSize=" + OvSize);
+                sb.AppendLine("OvColor=" + OvColor); sb.AppendLine("OvBg=" + OvBg); sb.AppendLine("OvText=" + OvText); sb.AppendLine("OvItems=" + OvItems);
                 sb.AppendLine("AdminTaskExe=" + AdminTaskExe);
                 sb.AppendLine("Tdp=" + Tdp);
                 sb.AppendLine("SmartFps=" + SmartFps);
