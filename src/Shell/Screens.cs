@@ -762,7 +762,7 @@ namespace TkoolLauncher
                 Settings.HardwareControl = true;
                 Settings.Save();
                 if (Hardware.IsAdmin) { System.Threading.Tasks.Task.Run(() => { Hardware.Init(); Hardware.ApplySaved(); }); return; }
-                if (Hardware.CreateAdminTask() && Hardware.RunAdminTask()) { Application.Exit(); return; }
+                if (Hardware.CreateAdminTask()) { Settings.AdminTaskExe = Application.ExecutablePath; Settings.Save(); if (Hardware.RunAdminTask()) { Application.Exit(); return; } }
                 Settings.HardwareControl = false;
                 Settings.Save();
                 Shell.ShowToast("관리자 허락을 받지 못했어요", 4000);

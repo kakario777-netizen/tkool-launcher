@@ -33,7 +33,19 @@ namespace TkoolLauncher
                 Application.SetCompatibleTextRenderingDefault(false);
                 Settings.Load();
                 // 하드웨어 제어를 켜 뒀는데 관리자가 아니면, 관리자 작업으로 다시 켜고 이건 끝냄 (허락 창 없음)
-                if (Settings.HardwareControl && !updated && !IsAdmin() && Hardware.RunAdminTask()) { Log.Info("관리자 권한으로 다시 켬"); return; }
+                // 그냥 더블클릭해도 관리자로: 처음 한 번만 허락 창으로 작업을 만들고, 그 뒤로는 창 없이 작업으로 다시 켬
+                if (!updated && !IsAdmin())
+                {
+                    string exe = Application.ExecutablePath;
+                    if (!string.Equals(Settings.AdminTaskExe, exe, StringComparison.OrdinalIgnoreCase) && Settings.AdminTaskExe != "거절:" + exe)
+                    {
+                        if (Hardware.CreateAdminTask()) { Settings.AdminTaskExe = exe; Settings.HardwareControl = true; }
+                        else Settings.AdminTaskExe = "거절:" + exe;   // 허락 안 하면 다시 묻지 않음
+                        Settings.Save();
+                    }
+                    if (string.Equals(Settings.AdminTaskExe, exe, StringComparison.OrdinalIgnoreCase) && Hardware.RunAdminTask())
+                    { Log.Info("관리자 권한으로 다시 켬"); return; }
+                }
                 GameData.Load();
                 Gamepad.Start();
                 Application.ApplicationExit += (s, e) => { try { Log.Info("프로그램 종료 신호"); } catch { } };
