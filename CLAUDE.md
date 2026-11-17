@@ -22,6 +22,6 @@
 - 오류 기록: Log.cs (내 문서\쯔꾸르 런처\logs: log.txt·errors.txt·running.flag). 화면 오류는 ErrorPopup 띄우고 계속, 다음 시작 때 지난 비정상 종료 알림. 사용자가 기록을 보여주면 그걸로 고칠 것.
 - 빠른 설정 모양: AYASpace식 — 위 빠른 타일(와이파이·블투·음소거·성능 표시·마우스), 왼쪽 탭(성능·화면·소리연결·컨트롤러·조명·바로가기, LB/RB), 오른쪽 기능, 성능 탭 맨 위 팬·TDP. 바로가기는 2열 단추판.
 - 아이콘: app.ico (사용자가 준 네온 조준선·헥스 그림).
-- AYA 버튼 팝업: Shell/QuickPopup.cs — 런처가 앞에 없으면(게임·바탕화면) 런처 전체 대신 오른쪽 좁은 맨 위 창에 QuickPanel(Popup=true) 표시, 닫으면 원래 창으로 포커스(Alt 눌러 SetForegroundWindow). 사용자는 AYASpace 완전 대용으로 씀.
+- AYA 버튼 팝업: Shell/QuickPopup.cs — 런처가 앞에 없으면(게임·바탕화면) 런처 전체 대신 오른쪽 좁은 맨 위 창(화면 가로 약 26%)에 QuickPanel(Popup=true) 표시, 닫으면 원래 창으로 포커스(Alt 눌러 SetForegroundWindow). 사용자는 AYASpace 완전 대용으로 씀.
 - 표지·이름 채우기: GameCapture.cs (게임 켜고 12초 뒤 PrintWindow 캡처 → covers\폴더.auto.png, 창 제목으로 이름 교체 → GameStat.Title, 설정의 "한 번에 찾기"는 하나씩 15초 켜고 끔). 소개 글: GameDesc.cs (스팀 상점 한국어 짧은 소개, 그 외 readme·説明書 txt).
 - 진행 순서: 1) 폴더 검색·제목/버전 인식·목록 2) 스팀식 표지 화면·플레이 시간 3) 게임패드·전체 화면·일본어 환경 실행·RTP 확인 4) 상태 표시줄·빠른 설정판 5) 최소화 반복 감시.

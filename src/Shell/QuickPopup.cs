@@ -30,7 +30,7 @@ namespace TkoolLauncher
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
 
             var sc = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
-            int w = Theme.S(560);
+            int w = Math.Max(Theme.S(360), (int)(sc.Width * 0.26f)); // 화면 가로의 약 1/4 (AYASpace 팝업 정도)
             targetX = sc.Right - w;
             Bounds = new Rectangle(sc.Right, sc.Top, w, sc.Height);
 

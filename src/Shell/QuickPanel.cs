@@ -218,7 +218,7 @@ namespace TkoolLauncher
                 rows.Add(new Row
                 {
                     Kind = Kind.Action, Title = "팬 · 조명 · TDP",
-                    Sub = Settings.HardwareControl ? Hardware.Problem : "설정 → 고급 하드웨어 제어를 켜면 쓸 수 있어요",
+                    Sub = Settings.HardwareControl ? Hardware.Problem : "설정에서 하드웨어 제어를 켜세요",
                     Act = () => { Hide(); Shell.GoHome(); Shell.Push(new SettingsScreen()); }
                 });
             }
@@ -459,7 +459,7 @@ namespace TkoolLauncher
 
             // ── 왼쪽 탭 ──
             int top = ty + th + S(14), bottom = full.Height - S(60);
-            int railW = S(92);
+            int railW = w < S(480) ? S(76) : S(92);
             tabRects.Clear();
             int tabH = Math.Min(S(64), (bottom - top) / TabNames.Length);
             for (int i = 0; i < TabNames.Length; i++)
@@ -566,7 +566,8 @@ namespace TkoolLauncher
                         Draw.Text(g, row.Title, Draw.Body, new Rectangle(ix, r.Y, r.Width / 2, row.Sub != null ? h - S(18) : h), tc);
                         if (row.Sub != null) Draw.Text(g, row.Sub, Draw.Small, new Rectangle(ix, r.Y + h - S(26), r.Width - S(30), S(20)), Theme.SubText);
                         string v = row.Choices[Math.Max(0, Math.Min(row.Choices.Length - 1, row.ChoiceIndex))];
-                        var vr = new Rectangle(r.Right - S(190), r.Y, S(176), row.Sub != null ? h - S(18) : h);
+                        int vw = Math.Min(S(176), r.Width / 2);
+                        var vr = new Rectangle(r.Right - vw - S(12), r.Y, vw, row.Sub != null ? h - S(18) : h);
                         Draw.Text(g, "‹", Draw.H2, new Rectangle(vr.X, vr.Y, S(22), vr.Height), f ? Theme.Text : Theme.Dim, Draw.Center);
                         Draw.Text(g, v, Draw.BodyBold, new Rectangle(vr.X + S(22), vr.Y, vr.Width - S(44), vr.Height), Theme.Text, Draw.Center);
                         Draw.Text(g, "›", Draw.H2, new Rectangle(vr.Right - S(22), vr.Y, S(22), vr.Height), f ? Theme.Text : Theme.Dim, Draw.Center);
@@ -692,7 +693,7 @@ namespace TkoolLauncher
                 }
                 else if (r.Kind == Kind.Choice)
                 {
-                    if (p.X < r.Rect.Right - S(100)) r.Change((r.ChoiceIndex - 1 + r.Choices.Length) % r.Choices.Length);
+                    if (p.X < r.Rect.Right - Math.Min(S(176), r.Rect.Width / 2) / 2 - S(12)) r.Change((r.ChoiceIndex - 1 + r.Choices.Length) % r.Choices.Length);
                     else r.Change((r.ChoiceIndex + 1) % r.Choices.Length);
                 }
                 else Activate(r);
