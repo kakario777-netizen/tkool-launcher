@@ -6,7 +6,7 @@ using System.Linq;
 namespace TkoolLauncher
 {
     enum TkoolVersion { RM2000, XP, VX, VXAce, MV, MZ }
-    enum GameKind { Tkool, Steam, Epic, Gog, Pc }
+    enum GameKind { Tkool, Steam, Epic, Gog, Pc, Battle }
 
     class GameInfo
     {
@@ -16,6 +16,8 @@ namespace TkoolLauncher
         public string CoverHint;     // 스토어가 갖고 있는 세로 표지
         public string HeroHint;      // 스토어가 갖고 있는 가로 큰 그림
         public bool Manual;          // 직접 추가한 게임
+        public bool FromFolder;      // 사용자가 고른 게임 폴더(쯔꾸르 폴더)에서 찾은 것
+        public string Launcher, Args; // 다른 프로그램으로 실행 (배틀넷: Battle.net.exe --exec="launch OSI")
         public bool IsTkool => Kind == GameKind.Tkool;
 
         public string Title;
@@ -36,6 +38,7 @@ namespace TkoolLauncher
                     case GameKind.Epic: return "Epic";
                     case GameKind.Gog: return "GOG";
                     case GameKind.Pc: return "PC";
+                    case GameKind.Battle: return "Battle.net";
                 }
                 switch (Version)
                 {
@@ -79,9 +82,24 @@ namespace TkoolLauncher
             if (Settings.StoreScan) { try { stores = StoreScanner.ScanAll(); } catch { } }
             foreach (var st in stores)
             {
+                if (st.InstallDir != null && list.Any(x => x.Kind == st.Kind && x.InstallDir != null &&
+                    x.InstallDir.TrimEnd('\\').Equals(st.InstallDir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))) continue;
                 list.RemoveAll(x => !x.IsTkool && st.InstallDir != null &&
                     x.Folder.StartsWith(st.InstallDir.TrimEnd('\\') , StringComparison.OrdinalIgnoreCase));
                 if (seen.Add(st.Exe ?? st.LaunchUri)) list.Add(st);
+            }
+            // 직접 설치한 PC 게임 (설치 기록) — 이미 찾은 폴더와 겹치면 뺌
+            if (Settings.StoreScan)
+            {
+                List<GameInfo> inst = new List<GameInfo>();
+                try { inst = StoreScanner.Installed(); } catch { }
+                foreach (var ig in inst)
+                {
+                    string d = ig.InstallDir.TrimEnd('\\');
+                    if (list.Any(x => (x.InstallDir ?? x.Folder ?? "").TrimEnd('\\').StartsWith(d, StringComparison.OrdinalIgnoreCase) ||
+                                      d.StartsWith((x.InstallDir ?? x.Folder ?? "?").TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase))) continue;
+                    if (seen.Add(ig.Exe)) list.Add(ig);
+                }
             }
             foreach (var exe in Settings.ManualGames)
             {
@@ -101,6 +119,7 @@ namespace TkoolLauncher
             }
             if (g != null)
             {
+                g.FromFolder = true;
                 if (seen.Add(g.Exe)) list.Add(g);
                 return; // 게임 폴더 안쪽은 더 뒤지지 않음
             }

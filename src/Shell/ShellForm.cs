@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -422,9 +423,30 @@ namespace TkoolLauncher
             Animate();
         }
 
+        // 배경은 한 장으로 미리 합쳐 두고 그대로 찍기 (매 프레임 전체 화면 그림 늘리기가 버벅임의 큰 원인)
+        Bitmap bgCache; object bgKeyA, bgKeyB, bgKeyC; int bgKeyFade = -1; Size bgKeySize;
+
         void PaintBackground(Graphics g)
         {
             var r = ClientRectangle;
+            if (r.Width <= 0 || r.Height <= 0) return;
+            int fq = bgFade >= 1f ? 100 : (int)(bgFade * 12);
+            if (bgCache == null || bgKeySize != r.Size || bgKeyA != bgImage || bgKeyB != bgPrev || bgKeyC != bgCur || bgKeyFade != fq)
+            {
+                var nb = new Bitmap(r.Width, r.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+                using (var cg = Graphics.FromImage(nb)) ComposeBackground(cg, r);
+                bgCache?.Dispose();
+                bgCache = nb; bgKeySize = r.Size; bgKeyA = bgImage; bgKeyB = bgPrev; bgKeyC = bgCur; bgKeyFade = fq;
+            }
+            var oc = g.CompositingMode; var oi = g.InterpolationMode;
+            g.CompositingMode = CompositingMode.SourceCopy;
+            g.InterpolationMode = InterpolationMode.NearestNeighbor;
+            g.DrawImageUnscaled(bgCache, 0, 0);
+            g.CompositingMode = oc; g.InterpolationMode = oi;
+        }
+
+        void ComposeBackground(Graphics g, Rectangle r)
+        {
             using (var lg = new LinearGradientBrush(r, Theme.BgTop, Theme.BgBottom, 90f)) g.FillRectangle(lg, r);
             if (bgImage != null)
             {
@@ -434,12 +456,15 @@ namespace TkoolLauncher
             }
             g.InterpolationMode = InterpolationMode.HighQualityBilinear;
             g.PixelOffsetMode = PixelOffsetMode.Half;
-            if (bgPrev != null && bgFade < 1f) DrawBg(g, bgPrev, (1f - bgFade) * 0.55f);
-            if (bgCur != null) DrawBg(g, bgCur, bgFade * 0.55f);
+            float f = bgFade >= 1f ? 1f : bgKeyFadeValue();
+            if (bgPrev != null && f < 1f) DrawBg(g, bgPrev, (1f - f) * 0.55f);
+            if (bgCur != null) DrawBg(g, bgCur, f * 0.55f);
             g.PixelOffsetMode = PixelOffsetMode.Default;
             // 아래로 갈수록 어둡게
             using (var lg = new LinearGradientBrush(r, Color.FromArgb(40, 0, 0, 0), Color.FromArgb(220, 9, 12, 16), 90f)) g.FillRectangle(lg, r);
         }
+
+        float bgKeyFadeValue() => Math.Min(1f, (int)(bgFade * 12) / 12f);
 
         static void DrawBg(Graphics g, Bitmap b, float alpha)
         {
@@ -790,12 +815,14 @@ namespace TkoolLauncher
         public void Launch(GameInfo g)
         {
             if (GameWatch.Running) { ShowToast("다른 게임이 아직 실행 중이에요", 3000); return; }
-            Log.Info("게임 실행: " + g.Title + " (" + g.Kind + " " + g.VersionLabel + ") " + (g.LaunchUri ?? g.Exe));
+            Log.Info("게임 실행: " + g.Title + " (" + g.Kind + " " + g.VersionLabel + ") " + (g.LaunchUri ?? (g.Launcher != null ? g.Launcher + " " + g.Args : g.Exe)));
             Process p = null;
             try
             {
                 if (g.LaunchUri != null)
                     Process.Start(new ProcessStartInfo(g.LaunchUri) { UseShellExecute = true });
+                else if (g.Launcher != null)
+                    Process.Start(new ProcessStartInfo(g.Launcher, g.Args ?? "") { WorkingDirectory = Path.GetDirectoryName(g.Launcher), UseShellExecute = true });
                 else
                     p = Process.Start(new ProcessStartInfo(g.Exe) { WorkingDirectory = g.Folder, UseShellExecute = true });
             }

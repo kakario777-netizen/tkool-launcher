@@ -58,6 +58,7 @@ namespace TkoolLauncher
                 case GameKind.Epic: return Color.FromArgb(70, 70, 76);
                 case GameKind.Gog: return Color.FromArgb(124, 64, 168);
                 case GameKind.Pc: return Color.FromArgb(58, 96, 140);
+                case GameKind.Battle: return Color.FromArgb(20, 84, 160);
                 default: return VersionColor(g.Version);
             }
         }

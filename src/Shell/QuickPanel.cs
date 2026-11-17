@@ -447,12 +447,20 @@ namespace TkoolLauncher
 
         bool IsGrid => tab == 5;   // 바로가기 탭은 2열 단추판
 
+        /// <summary>빠른 설정판 폭 — 런처 안이든 게임 위 팝업이든 똑같이 (화면 가로의 약 26%)</summary>
+        public static int PanelWidth()
+        {
+            int sw = 1920;
+            try { sw = System.Windows.Forms.Screen.PrimaryScreen.Bounds.Width; } catch { }
+            return Math.Max(Theme.S(360), (int)(sw * 0.26f));
+        }
+
         public void Paint(Graphics g, Rectangle full)
         {
             if (T <= 0) return;
             try { Build(); Categorize(); } catch { }
             using (var b = new SolidBrush(Color.FromArgb((int)(140 * T), 0, 0, 0))) g.FillRectangle(b, full);
-            int w = Math.Min(full.Width, S(560));
+            int w = Popup ? full.Width : Math.Min(full.Width, PanelWidth());
             float e = 1 - (1 - T) * (1 - T) * (1 - T);
             int x = (int)(full.Width - w * e);
             panel = new Rectangle(x, 0, w, full.Height);

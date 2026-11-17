@@ -236,13 +236,10 @@ namespace TkoolLauncher
                 new Tab { Name = "즐겨찾기", Filter = x => GameData.Get(x).Favorite },
                 new Tab { Name = "전체", Filter = x => true },
             };
-            var kinds = new[] { GameKind.Tkool, GameKind.Steam, GameKind.Epic, GameKind.Gog, GameKind.Pc };
-            var names = new[] { "쯔꾸르", "Steam", "Epic", "GOG", "PC" };
-            for (int i = 0; i < kinds.Length; i++)
-            {
-                var k = kinds[i];
-                if (all.Any(x => x.Kind == k)) tabs.Add(new Tab { Name = names[i], Filter = x => x.Kind == k });
-            }
+            // 쯔꾸르 폴더에서 찾은 건 '쯔꾸르'에만, 스팀·배틀넷·에픽·GOG·설치된 게임은 'PC 게임'에
+            Func<GameInfo, bool> isT = x => x.FromFolder || x.IsTkool;
+            if (all.Any(isT)) tabs.Add(new Tab { Name = "쯔꾸르", Filter = isT });
+            if (all.Any(x => !isT(x))) tabs.Add(new Tab { Name = "PC 게임", Filter = x => !isT(x) });
             tab = Math.Max(0, tabs.FindIndex(t => t.Name == lastTab));
         }
 

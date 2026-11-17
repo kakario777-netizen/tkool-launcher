@@ -111,18 +111,27 @@ namespace TkoolLauncher
         }
 
         // GPU 3D 엔진 사용률 합 (윈도우 10 1709 이상)
+        // 카운터 목록 만들기가 무거워서 매초 새로 만들면 게임이 1초마다 끊김 → 10초에 한 번만 목록 갱신, 값은 그냥 읽기
+        static System.Collections.Generic.List<PerformanceCounter> gpuCounters;
+        static int gpuListAt = -100000;
+        static float gpuLast = -1;
         static float Gpu3D()
         {
             try
             {
-                var cat = new PerformanceCounterCategory("GPU Engine");
-                var names = cat.GetInstanceNames().Where(n => n.EndsWith("engtype_3D")).ToArray();
+                if (gpuCounters == null || Environment.TickCount - gpuListAt > 10000)
+                {
+                    gpuListAt = Environment.TickCount;
+                    if (gpuCounters != null) foreach (var c in gpuCounters) c.Dispose();
+                    var cat = new PerformanceCounterCategory("GPU Engine");
+                    gpuCounters = cat.GetInstanceNames().Where(n => n.EndsWith("engtype_3D"))
+                        .Select(n => new PerformanceCounter("GPU Engine", "Utilization Percentage", n)).ToList();
+                    foreach (var c in gpuCounters) c.NextValue();
+                    return gpuLast;
+                }
                 float sum = 0;
-                var counters = names.Select(n => new PerformanceCounter("GPU Engine", "Utilization Percentage", n)).ToList();
-                foreach (var c in counters) c.NextValue();
-                System.Threading.Thread.Sleep(200);
-                foreach (var c in counters) { sum += c.NextValue(); c.Dispose(); }
-                return Math.Min(100, sum);
+                foreach (var c in gpuCounters) { try { sum += c.NextValue(); } catch { } }
+                return gpuLast = Math.Min(100, sum);
             }
             catch { return -1; }
         }

@@ -8,7 +8,7 @@
 - 패드: XInput 직접 읽기(Gamepad.cs). 런처 화면은 IPadTarget, 게임 중엔 2000~VX Ace만 키보드로 변환(A=Z, B=X, X=Shift, Y=Esc, LB=Q, RB=W, Start=Enter).
 - 화면: src/Shell (스팀OS 게임 모드 모양 — 홈 선반·라이브러리 탭·상세·왼쪽 메뉴). 표지는 CoverArt(캐시: 내 문서\쯔꾸르 런처\cache), 타이틀 그림 추출은 ArtExtract(MV·MZ 암호화, rgssad/rgss2a/rgss3a, XYZ). 기록은 GameData(games.ini).
 - 미리보기: Xvfb + mono로 ShellForm.DrawToBitmap 스크린샷 가능(배터리 읽기는 mono에서 예외 → try로 감쌈).
-- 게임 종류: GameKind(Tkool·Steam·Epic·Gog·Pc). 스토어는 StoreScanner, PC 폴더 게임은 GameScanner.DetectPc(폴더 하나=게임 하나), 직접 추가는 Settings.ManualGames. 실행 감시는 GameWatch(게임 폴더 안 프로세스가 다 꺼질 때까지). 검색은 SearchScreen(초성·알파벳·가나 줄).
+- 게임 종류: GameKind(Tkool·Steam·Epic·Gog·Pc·Battle). 라이브러리 탭은 "쯔꾸르"(게임 폴더에서 찾은 것 FromFolder) / "PC 게임"(스토어·배틀넷(Battle.net.exe --exec="launch 코드")·설치 기록 StoreScanner.Installed — 게임 회사·경로에 game 들어간 것만)로 나눔. 스토어는 StoreScanner, PC 폴더 게임은 GameScanner.DetectPc(폴더 하나=게임 하나), 직접 추가는 Settings.ManualGames. 실행 감시는 GameWatch(게임 폴더 안 프로세스가 다 꺼질 때까지). 검색은 SearchScreen(초성·알파벳·가나 줄).
 - 기기: 사용자 기기는 AYANEO AIR Plus (AMD 7320U 멘도시노, 보드명 AB05-Mendocino). 팬은 리눅스 oxp-sensors와 같은 EC 레지스터(pwm 0~100) — 윈도우에선 EC 접근 드라이버 필요.
 - 빠른 설정판: Shell/QuickPanel(메뉴 버튼·오른쪽 위 탭·위에서 쓸어내리기), 기능은 SystemControls(WMI 밝기, Core Audio, PowerShell WinRT 무선, 전원 오버레이, DEVMODE). 성능 표시 OverlayForm(UpdateLayeredWindow 픽셀 투명, 빠른 설정 "오버레이" 탭에서 모양·위치·크기·글자 색·배경/글자 진하기·보일 항목 조절, Settings.Ov*). AYA 버튼은 Hotkeys(저수준 키보드 훅 배우기), 패드 가이드 버튼은 XInput #100, 게임 중 보기+메뉴 = 홈.
 - 팬·조명·TDP·온도: Hardware.cs (PawnIO, res/*.bin 서명 모듈 내장: LpcIO=EC 0x4E/0x4F CEii 방식, RyzenSMU=MP1 우편함 0x3B10528/578/998 명령 0x14·0x15·0x16 mW, AMDFamily17=SMN 0x59800 온도). 값 출처는 Handheld Companion. 보드명 AB05-Mendocino일 때만 동작. 관리자 권한은 작업 스케줄러 TkoolLauncherAdmin(--elevated)로 재실행 — 그냥 더블클릭해도 항상 관리자로(처음 한 번만 허락 창, Settings.AdminTaskExe로 exe 경로 기억, 옮기면 다시 만듦, 거절하면 다시 안 물음).
@@ -18,6 +18,8 @@
 - 가상 패드: VirtualPad.cs (ViGEmClient.dll 내장 → tools, HidHideCLI로 진짜 패드 숨김·런처 등록, 250Hz 루프: 원형 데드존·감도·연사·자이로(Gyro.cs 윈도우 센서 API COM)·진동 세기 XInputSetState). 런처 시작 때 VPadOn 아니면 --cloak-off로 숨김 해제.
 - 화면 확대(FSR 용도): Scaler.cs (Magnification API MagSetFullscreenTransform, 부드럽게/도트 정수배, 검은 판을 게임 뒤에, 런처 불러낼 땐 잠시 해제). 쯔꾸르 자동 확대 옵션.
 - 조명 효과: Hardware.UpdateEffect (1.5초 간격 숨쉬기·무지개). 전압: 배터리 전압(WMI BatteryStatus.Voltage) — CPU 코어 전압은 미구현.
+- 버벅임 대책: 배경은 한 장으로 미리 합쳐 캐시(ShellForm.bgCache), 표지는 화면 크기로 줄인 PArgb 캐시(Draw.Image, 그림당 3크기). 오버레이 GPU 카운터는 10초마다만 목록 갱신.
+- 빠른 설정판 폭은 런처 안·게임 위 팝업 모두 QuickPanel.PanelWidth()(화면 가로 26%).
 - 시작 영상은 사용자가 필요 없다고 함.
 - 오류 기록: Log.cs (내 문서\쯔꾸르 런처\logs: log.txt·errors.txt·running.flag). 화면 오류는 ErrorPopup 띄우고 계속, 다음 시작 때 지난 비정상 종료 알림. 사용자가 기록을 보여주면 그걸로 고칠 것.
 - 빠른 설정 모양: AYASpace식 — 위 빠른 타일(와이파이·블투·음소거·성능 표시·마우스), 왼쪽 탭(성능·화면·소리연결·컨트롤러·조명·바로가기, LB/RB), 오른쪽 기능, 성능 탭 맨 위 팬·TDP. 바로가기는 2열 단추판.

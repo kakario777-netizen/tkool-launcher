@@ -16,6 +16,7 @@ namespace TkoolLauncher
             try { list.AddRange(Steam()); } catch { }
             try { list.AddRange(Epic()); } catch { }
             try { list.AddRange(Gog()); } catch { }
+            try { list.AddRange(Battle()); } catch { }
             return list;
         }
 
@@ -166,6 +167,169 @@ namespace TkoolLauncher
                     }
                 }
             }
+        }
+
+        // ───────── 설치 기록(제어판 프로그램 목록) 읽기 ─────────
+        class Uninst { public string Key, Name, Publisher, Dir, Icon; }
+
+        static List<Uninst> UninstallEntries()
+        {
+            var res = new List<Uninst>();
+            var roots = new[]
+            {
+                new { H = Registry.LocalMachine, P = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall" },
+                new { H = Registry.LocalMachine, P = @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall" },
+                new { H = Registry.CurrentUser,  P = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall" },
+            };
+            foreach (var r in roots)
+            {
+                try
+                {
+                    using (var key = r.H.OpenSubKey(r.P))
+                    {
+                        if (key == null) continue;
+                        foreach (var id in key.GetSubKeyNames())
+                        {
+                            try
+                            {
+                                using (var k = key.OpenSubKey(id))
+                                {
+                                    if (k == null) continue;
+                                    var u = new Uninst
+                                    {
+                                        Key = id,
+                                        Name = k.GetValue("DisplayName") as string,
+                                        Publisher = k.GetValue("Publisher") as string ?? "",
+                                        Dir = k.GetValue("InstallLocation") as string,
+                                        Icon = k.GetValue("DisplayIcon") as string,
+                                    };
+                                    if (string.IsNullOrWhiteSpace(u.Name)) continue;
+                                    if ((k.GetValue("SystemComponent") as int?) == 1) continue;
+                                    u.Dir = CleanDir(u.Dir);
+                                    if (u.Dir == null && u.Icon != null)
+                                    {
+                                        string ic = IconExe(u.Icon);
+                                        if (ic != null) u.Dir = Path.GetDirectoryName(ic);
+                                    }
+                                    if (u.Dir == null || !Directory.Exists(u.Dir)) continue;
+                                    res.Add(u);
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                catch { }
+            }
+            return res;
+        }
+
+        static string CleanDir(string d)
+        {
+            if (string.IsNullOrWhiteSpace(d)) return null;
+            d = d.Trim().Trim('"').TrimEnd('\\');
+            return d.Length < 4 ? null : d;   // "C:" 같은 드라이브 통째는 제외
+        }
+
+        static string IconExe(string icon)
+        {
+            string p = icon.Trim();
+            int comma = p.LastIndexOf(',');
+            if (comma > 2 && !p.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) p = p.Substring(0, comma);
+            p = p.Trim().Trim('"');
+            return p.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && File.Exists(p) ? p : null;
+        }
+
+        // ───────── Battle.net (블리자드) ─────────
+        // 표시 이름 → 배틀넷 실행 코드
+        static readonly string[][] BlizzCodes =
+        {
+            new[] { "Diablo II: Resurrected", "OSI" }, new[] { "Diablo II Resurrected", "OSI" },
+            new[] { "Diablo IV", "Fen" }, new[] { "Diablo III", "D3" }, new[] { "Diablo Immortal", "ANBS" },
+            new[] { "Overwatch", "Pro" }, new[] { "Hearthstone", "WTCG" }, new[] { "Heroes of the Storm", "Hero" },
+            new[] { "StarCraft II", "S2" }, new[] { "StarCraft", "S1" }, new[] { "Warcraft III", "W3" },
+            new[] { "World of Warcraft Classic", "WoW_classic" }, new[] { "World of Warcraft", "WoW" },
+            new[] { "Warcraft Rumble", "GRYPHON" },
+        };
+
+        static IEnumerable<GameInfo> Battle()
+        {
+            var all = UninstallEntries();
+            var bnet = all.FirstOrDefault(u => u.Name == "Battle.net");
+            string launcher = bnet != null ? Path.Combine(bnet.Dir, "Battle.net.exe") : null;
+            if (launcher == null || !File.Exists(launcher))
+            {
+                string pf = Environment.GetEnvironmentVariable("ProgramFiles(x86)") ?? @"C:\Program Files (x86)";
+                launcher = Path.Combine(pf, "Battle.net", "Battle.net.exe");
+                if (!File.Exists(launcher)) launcher = null;
+            }
+            var res = new List<GameInfo>();
+            foreach (var u in all)
+            {
+                if (u.Publisher.IndexOf("Blizzard", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                if (u.Name.StartsWith("Battle.net", StringComparison.OrdinalIgnoreCase)) continue;
+                GameInfo pc = null;
+                try { pc = GameScanner.DetectPc(u.Dir); } catch { }
+                string exe = IconExe(u.Icon ?? "") ?? pc?.Exe;
+                // 런처 껍데기(…Launcher.exe) 말고 진짜 게임 실행 파일이 있으면 그걸로 (아이콘·기록용)
+                if (exe == null) continue;
+                string code = null;
+                foreach (var c in BlizzCodes) if (u.Name.StartsWith(c[0], StringComparison.OrdinalIgnoreCase)) { code = c[1]; break; }
+                var g = new GameInfo { Kind = GameKind.Battle, Title = u.Name, Folder = u.Dir, InstallDir = u.Dir, Exe = exe };
+                if (code != null && launcher != null) { g.Launcher = launcher; g.Args = "--exec=\"launch " + code + "\""; }
+                res.Add(g);
+            }
+            return res;
+        }
+
+        // ───────── 직접 설치한 PC 게임 ─────────
+        // 게임 회사(설치 기록의 '게시자')
+        static readonly string[] GamePublishers =
+        {
+            "nexon", "ncsoft", "netmarble", "smilegate", "krafton", "pubg", "pearl abyss", "kakao games", "riot games",
+            "electronic arts", "ubisoft", "bandai namco", "square enix", "capcom", "sega", "koei tecmo", "hoyoverse", "mihoyo",
+            "cognosphere", "wemade", "gravity", "neople", "com2us", "devsisters", "rockstar games", "cd projekt", "bethesda",
+            "2k", "activision", "konami", "falcom", "nis america", "spike chunsoft", "atlus", "kadokawa", "degica", "playism",
+            "paradox", "focus entertainment", "deep silver", "thq", "devolver", "annapurna", "team17", "humble games",
+            "nintendo", "valve", "mojang", "grinding gear", "digital extremes", "wargaming", "gaijin", "hoyo", "shift up",
+            "nexon games", "line games", "gamania", "xd entertainment", "kuro games", "level-5", "marvelous", "idea factory",
+        };
+        // 게임이 아닌 것 (런처·런타임·도구)
+        static readonly string[] NotGame =
+        {
+            "launcher", "client", "steam", "epic games", "ea app", "origin", "ubisoft connect", "gog galaxy", "xbox", "playnite",
+            "redistributable", "runtime", "directx", "driver", "anti-cheat", "anticheat", "easy anti", "battleye", "punkbuster",
+            "nvidia", "geforce", "radeon", "amd ", "intel", "gamemaker", "game bar", "gamestream", "gameinput", "gaming services",
+            "sdk", "editor", "toolkit", "overlay", "update", "helper", "visual c++", ".net", "framework", "microsoft", "windows",
+            "rtp", "rpg maker", "rpgツクール", "ツクール", "unity hub", "unreal engine", "godot", "obs ", "discord", "afterburner",
+            "rivatuner", "ayaspace", "aya space", "handheld companion", "vigem", "hidhide", "pawnio", "7-zip", "winrar", "bandizip",
+        };
+
+        public static List<GameInfo> Installed()
+        {
+            var res = new List<GameInfo>();
+            var dirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var u in UninstallEntries())
+            {
+                if (u.Key.StartsWith("Steam App", StringComparison.OrdinalIgnoreCase)) continue;
+                if (u.Publisher.IndexOf("Blizzard", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                string ln = u.Name.ToLowerInvariant(), lp = u.Publisher.ToLowerInvariant(), ld = u.Dir.ToLowerInvariant();
+                if (NotGame.Any(w => ln.Contains(w))) continue;
+                if (ld.Contains("\\steamapps\\") || ld.Contains("\\windowsapps\\") || ld.Contains("\\microsoft")) continue;
+                bool pub = GamePublishers.Any(w => lp.Contains(w));
+                bool path = ld.Split('\\').Any(seg => seg.Contains("game") || seg.Contains("게임") || seg.Contains("ゲーム"));
+                if (!pub && !path) continue;
+                if (!dirs.Add(u.Dir)) continue;
+                GameInfo pc = null;
+                try { pc = GameScanner.DetectPc(u.Dir); } catch { }
+                string exe = IconExe(u.Icon ?? "");
+                if (exe != null && !exe.StartsWith(u.Dir, StringComparison.OrdinalIgnoreCase)) exe = null;
+                if (exe != null && Path.GetFileName(exe).ToLowerInvariant().StartsWith("unins")) exe = null;
+                exe = exe ?? pc?.Exe;
+                if (exe == null) continue;
+                res.Add(new GameInfo { Kind = GameKind.Pc, Title = u.Name.Trim(), Folder = Path.GetDirectoryName(exe), InstallDir = u.Dir, Exe = exe });
+            }
+            return res;
         }
     }
 }

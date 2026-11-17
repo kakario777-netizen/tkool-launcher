@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -67,12 +68,87 @@ namespace TkoolLauncher
             Ring(g, Rectangle.Inflate(r, S(2), S(2)), radius + S(2), Theme.Focus, S(2.5f));
         }
 
+        // 표지 그림: 화면 크기로 미리 줄여 둔 것(모서리 둥글게 포함)을 그대로 찍음 — 매 프레임 고품질 축소·잘라내기는 느림
+        class Scaled { public Bitmap Bmp; public int W, H, Rad; }
+        static readonly Dictionary<Image, List<Scaled>> scaled = new Dictionary<Image, List<Scaled>>();
+        static int scaledCount;
+        static int madeThisFrame; static long frameAt;
+
         public static void Image(Graphics g, Image img, Rectangle r, int radius)
         {
-            if (img == null) return;
+            if (img == null || r.Width <= 0 || r.Height <= 0) return;
+            List<Scaled> list;
+            scaled.TryGetValue(img, out list);
+            Scaled sc = null;
+            if (list != null)
+            {
+                sc = list.Find(x => x.W == r.Width && x.H == r.Height && x.Rad == radius);
+                if (sc == null) sc = list.Find(x => x.Rad == radius && Math.Abs(x.W - r.Width) < r.Width / 4 && Math.Abs(x.H - r.Height) < r.Height / 4);
+            }
+            bool exact = sc != null && sc.W == r.Width && sc.H == r.Height;
+            if (!exact)
+            {
+                long now = Environment.TickCount;
+                if (now - frameAt > 12) { frameAt = now; madeThisFrame = 0; }
+                // 크기가 조금만 다르면(커지는 애니메이션 중) 있던 걸 늘려 씀, 아니면 새로 만듦 (한 프레임에 몇 장까지만)
+                bool close = sc != null;
+                if (!close || madeThisFrame < 2)
+                {
+                    if (!close && madeThisFrame >= 6) { DirectImage(g, img, r, radius); return; }
+                    madeThisFrame++;
+                    sc = Make(img, r.Width, r.Height, radius, close ? sc : null);
+                    exact = true;
+                }
+            }
+            if (exact) g.DrawImageUnscaled(sc.Bmp, r.X, r.Y);
+            else
+            {
+                var oi = g.InterpolationMode;
+                g.InterpolationMode = InterpolationMode.Bilinear;
+                g.DrawImage(sc.Bmp, r);
+                g.InterpolationMode = oi;
+            }
+        }
+
+        static Scaled Make(Image img, int w, int h, int radius, Scaled old)
+        {
+            var b = new Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            using (var g = Graphics.FromImage(b))
+            {
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.PixelOffsetMode = PixelOffsetMode.Half;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                if (radius > 0)
+                {
+                    using (var tmp = new Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppPArgb))
+                    {
+                        using (var tg = Graphics.FromImage(tmp))
+                        {
+                            tg.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                            tg.PixelOffsetMode = PixelOffsetMode.Half;
+                            tg.DrawImage(img, new Rectangle(0, 0, w, h));
+                        }
+                        using (var tb = new TextureBrush(tmp))
+                        using (var path = Theme.Round(new Rectangle(0, 0, w, h), radius))
+                            g.FillPath(tb, path);
+                    }
+                }
+                else g.DrawImage(img, new Rectangle(0, 0, w, h));
+            }
+            if (scaledCount > 400) { foreach (var l in scaled.Values) foreach (var v in l) v.Bmp.Dispose(); scaled.Clear(); scaledCount = 0; old = null; }
+            List<Scaled> list;
+            if (!scaled.TryGetValue(img, out list)) scaled[img] = list = new List<Scaled>();
+            if (old != null && list.Remove(old)) { old.Bmp.Dispose(); scaledCount--; }   // 애니메이션 중간 크기는 바꿔 끼움
+            else if (list.Count >= 3) { list[0].Bmp.Dispose(); list.RemoveAt(0); scaledCount--; }
+            var s = new Scaled { Bmp = b, W = w, H = h, Rad = radius };
+            list.Add(s); scaledCount++;
+            return s;
+        }
+
+        static void DirectImage(Graphics g, Image img, Rectangle r, int radius)
+        {
             var old = g.InterpolationMode;
-            g.InterpolationMode = InterpolationMode.HighQualityBilinear;
-            g.PixelOffsetMode = PixelOffsetMode.Half;
+            g.InterpolationMode = InterpolationMode.Bilinear;
             if (radius > 0)
             {
                 using (var path = Theme.Round(r, radius))
@@ -85,7 +161,6 @@ namespace TkoolLauncher
             }
             else g.DrawImage(img, r);
             g.InterpolationMode = old;
-            g.PixelOffsetMode = PixelOffsetMode.Default;
         }
 
         /// <summary>패드 버튼 모양 (A/B/X/Y 동그라미, LB/RB, 보기·메뉴 버튼)</summary>
