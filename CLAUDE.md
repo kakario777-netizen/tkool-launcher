@@ -16,5 +16,7 @@
 - FPS: Fps.cs (PresentMon 2.3 내장 res/PresentMon.exe.bin → 내 문서\쯔꾸르 런처\tools, 관리자 필요, --v1_metrics MsBetweenPresents, 앞 창 PID 기준). 스마트 TDP는 3초마다 ±1W.
 - 기타: Extras.cs (ButtonActions·LC/RC 버튼, MiniBubble 미니 모드, Bgm(MCI), LoopGuard 최소화 반복 감시·TaskbarSd). 조이스틱 마우스 모드는 Gamepad.MouseMode.
 - 가상 패드: VirtualPad.cs (ViGEmClient.dll 내장 → tools, HidHideCLI로 진짜 패드 숨김·런처 등록, 250Hz 루프: 원형 데드존·감도·연사·자이로(Gyro.cs 윈도우 센서 API COM)·진동 세기 XInputSetState). 런처 시작 때 VPadOn 아니면 --cloak-off로 숨김 해제.
-- 남은 큰 작업: FSR(창 확대), 조명 효과, 전압 확인, 시작 영상.
+- 화면 확대(FSR 용도): Scaler.cs (Magnification API MagSetFullscreenTransform, 부드럽게/도트 정수배, 검은 판을 게임 뒤에, 런처 불러낼 땐 잠시 해제). 쯔꾸르 자동 확대 옵션.
+- 조명 효과: Hardware.UpdateEffect (1.5초 간격 숨쉬기·무지개). 전압: 배터리 전압(WMI BatteryStatus.Voltage) — CPU 코어 전압은 미구현.
+- 시작 영상은 사용자가 필요 없다고 함.
 - 진행 순서: 1) 폴더 검색·제목/버전 인식·목록 2) 스팀식 표지 화면·플레이 시간 3) 게임패드·전체 화면·일본어 환경 실행·RTP 확인 4) 상태 표시줄·빠른 설정판 5) 최소화 반복 감시.

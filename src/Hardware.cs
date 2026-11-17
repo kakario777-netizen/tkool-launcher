@@ -248,6 +248,48 @@ namespace TkoolLauncher
             EcWrite(0xD187, 0x00);
         }
 
+        // ───────── 조명 효과 (숨쉬기·무지개) ─────────
+        // 기기 자체 효과 명령은 공개된 게 없어서 런처가 색을 천천히 바꿔줌 (EC에 무리 안 가게 1.5초 간격)
+        static Thread fx;
+
+        public static void UpdateEffect()
+        {
+            if (Settings.LedEffect == 0 || !EcReady || !Settings.LedOn) return;
+            if (fx != null && fx.IsAlive) return;
+            fx = new Thread(() =>
+            {
+                double t = 0;
+                while (Settings.LedEffect != 0 && Settings.LedOn && EcReady)
+                {
+                    int r = Settings.LedR, g = Settings.LedG, b = Settings.LedB, br = Settings.LedBright;
+                    if (Settings.LedEffect == 1)
+                    {
+                        br = (int)(Settings.LedBright * (0.25 + 0.75 * (0.5 + 0.5 * Math.Sin(t))));
+                        t += 0.9;
+                    }
+                    else
+                    {
+                        var c = Hsv(t);
+                        r = c.R; g = c.G; b = c.B;
+                        t += 25;
+                    }
+                    try { SetLed(true, r, g, b, br); } catch { }
+                    Thread.Sleep(1500);
+                }
+            }) { IsBackground = true, Priority = ThreadPriority.Lowest };
+            fx.Start();
+        }
+
+        static System.Drawing.Color Hsv(double h)
+        {
+            h = ((h % 360) + 360) % 360;
+            double x = 1 - Math.Abs((h / 60) % 2 - 1);
+            double r = 0, g = 0, b = 0;
+            if (h < 60) { r = 1; g = x; } else if (h < 120) { r = x; g = 1; } else if (h < 180) { g = 1; b = x; }
+            else if (h < 240) { g = x; b = 1; } else if (h < 300) { r = x; b = 1; } else { r = 1; b = x; }
+            return System.Drawing.Color.FromArgb((int)(r * 255), (int)(g * 255), (int)(b * 255));
+        }
+
         static byte Scale(int c, int bright) => (byte)(c / 255f * 192f / 100f * Math.Max(0, Math.Min(100, bright)));
 
         // ───────── TDP (SMU MP1 우편함) ─────────
@@ -335,6 +377,7 @@ namespace TkoolLauncher
                 {
                     if (Settings.Fan >= 0) SetFan(Settings.Fan);
                     if (Settings.LedSet) SetLed(Settings.LedOn, Settings.LedR, Settings.LedG, Settings.LedB, Settings.LedBright);
+                    UpdateEffect();
                 }
             }
             catch { }

@@ -703,6 +703,8 @@ namespace TkoolLauncher
                           Act = () => { Settings.LoopGuard = !Settings.LoopGuard; Settings.Save(); } },
                 new Row { Title = "작업 표시줄 끝 눌러 바탕화면 보기", Toggle = LoopGuard.CornerPeekOn, Sub = "최소화 반복이 생기면 끄는 걸 추천해요",
                           Act = () => LoopGuard.CornerPeekOn = !LoopGuard.CornerPeekOn },
+                new Row { Title = "쯔꾸르 게임 자동 확대", Toggle = Settings.AutoScaleTkool, Sub = "2000~VX Ace 게임을 켜면 작은 창을 도트 선명하게 꽉 채워요",
+                          Act = () => { Settings.AutoScaleTkool = !Settings.AutoScaleTkool; Settings.Save(); } },
                 new Row { Title = "AYA 큰 버튼 연결", Sub = learning == 1 ? "지금 AYA 큰 버튼을 누르세요..." : "빠른 설정 열기 · 패드 가이드 버튼, 보기+메뉴 동시 누름도 돼요",
                           Value = Hotkeys.Describe(Settings.HomeKey), Act = () => Learn(1) },
                 new Row { Title = "AYA 작은 버튼 연결", Sub = learning == 2 ? "지금 AYA 작은 버튼을 누르세요..." : "런처 홈 화면으로", Value = Hotkeys.Describe(Settings.SmallKey), Act = () => Learn(2) },

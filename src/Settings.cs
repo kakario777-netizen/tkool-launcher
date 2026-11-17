@@ -25,6 +25,8 @@ namespace TkoolLauncher
         public static bool UseBgImage = true, Bgm;
         public static int LcAction = 1, RcAction = 3;   // 위쪽 LC/RC 버튼 기능 (ButtonActions 번호)
         public static bool LoopGuard = true;
+        public static int LedEffect;          // 0 고정, 1 숨쉬기, 2 무지개
+        public static bool AutoScaleTkool;    // 쯔꾸르(2000~VX Ace) 켤 때 자동으로 도트 선명 확대
         // 가상 패드
         public static bool VPadOn;
         public static int Vibration = 100, StickDeadzone = 5, StickSens = 100, TurboMask, TurboHz = 12;
@@ -64,6 +66,8 @@ namespace TkoolLauncher
                     else if (key == "LcAction") int.TryParse(val, out LcAction);
                     else if (key == "RcAction") int.TryParse(val, out RcAction);
                     else if (key == "LoopGuard") LoopGuard = val != "0";
+                    else if (key == "LedEffect") int.TryParse(val, out LedEffect);
+                    else if (key == "AutoScaleTkool") AutoScaleTkool = val == "1";
                     else if (key == "VPad")
                     {
                         var q = val.Split(',');
@@ -115,6 +119,8 @@ namespace TkoolLauncher
                 sb.AppendLine("LcAction=" + LcAction);
                 sb.AppendLine("RcAction=" + RcAction);
                 sb.AppendLine("LoopGuard=" + (LoopGuard ? "1" : "0"));
+                sb.AppendLine("LedEffect=" + LedEffect);
+                sb.AppendLine("AutoScaleTkool=" + (AutoScaleTkool ? "1" : "0"));
                 sb.AppendLine("VPad=" + string.Join(",", new object[] { VPadOn ? 1 : 0, Vibration, StickDeadzone, StickSens, TurboMask, TurboHz,
                     GyroMode, GyroSens, GyroHold, GyroAxis, GyroInvertX ? 1 : 0, GyroInvertY ? 1 : 0, 0 }));
                 sb.AppendLine("Fan=" + Fan);

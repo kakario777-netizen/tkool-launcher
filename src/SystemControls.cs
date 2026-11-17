@@ -331,6 +331,19 @@ namespace TkoolLauncher
             return 0;
         }
 
+        /// <summary>배터리 전압(V). 모르면 0</summary>
+        public static double BatteryVolts()
+        {
+            try
+            {
+                using (var s = new ManagementObjectSearcher("root\\WMI", "SELECT Voltage FROM BatteryStatus"))
+                    foreach (ManagementObject o in s.Get())
+                        return Convert.ToDouble(o["Voltage"]) / 1000.0;
+            }
+            catch { }
+            return 0;
+        }
+
         // ───────── 윈도우 시작 시 자동 실행 ─────────
         const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 

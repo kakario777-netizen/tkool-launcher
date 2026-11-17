@@ -76,11 +76,17 @@ namespace TkoolLauncher
                     string fpsText = fps > 0 ? "FPS " + (int)Math.Round(fps) + "   " : (Fps.Problem != "" && GameWatch.Running ? "FPS -   " : "");
                     int tdpNow = Settings.SmartFps > 0 && GameWatch.Running ? SmartTdp.Current : Settings.Tdp;
                     t = fpsText + "CPU " + (int)c + "%" + (temp > 0 ? " " + (int)temp + "°C" : "") + (tdpNow > 0 ? " " + tdpNow + "W" : "") + "   GPU " + (gpu < 0 ? "-" : ((int)gpu).ToString()) + "%   RAM " + used.ToString("0.0") + "/" + total.ToString("0.0") + "GB" +
-                        (w > 0 ? "   " + w.ToString("0.0") + "W" : "") + bat + "   " + DateTime.Now.ToString("HH:mm");
+                        (w > 0 ? "   " + w.ToString("0.0") + "W" : "") + VoltText() + bat + "   " + DateTime.Now.ToString("HH:mm");
                 }
                 catch { t = "측정 실패"; }
                 try { BeginInvoke(new Action(() => { text = t; busy = false; Invalidate(); })); } catch { busy = false; }
             });
+        }
+
+        static string VoltText()
+        {
+            double v = SystemControls.BatteryVolts();
+            return v > 0 ? " " + v.ToString("0.00") + "V" : "";
         }
 
         // GPU 3D 엔진 사용률 합 (윈도우 10 1709 이상)

@@ -197,6 +197,11 @@ namespace TkoolLauncher
                         Change = v => { Settings.LedR = LedColors[v].R; Settings.LedG = LedColors[v].G; Settings.LedB = LedColors[v].B; ApplyLed(); }
                     });
                     rows.Add(new Row { Kind = Kind.Slider, Title = "조명 밝기", Num = Settings.LedBright, Change = v => { Settings.LedBright = v; ApplyLed(); } });
+                    rows.Add(new Row
+                    {
+                        Kind = Kind.Choice, Title = "조명 효과", Choices = new[] { "고정", "숨쉬기", "무지개" }, ChoiceIndex = Settings.LedEffect,
+                        Change = v => { Settings.LedEffect = v; Settings.Save(); if (v == 0) ApplyLed(); else Hardware.UpdateEffect(); }
+                    });
                 }
             }
             if (!Hardware.Ready)
@@ -255,6 +260,19 @@ namespace TkoolLauncher
                 }
             }
 
+            // ── 화면 확대 (FSR 용도) ──
+            rows.Add(new Row
+            {
+                Kind = Kind.Choice, Title = "화면 확대", Choices = Scaler.ModeNames, ChoiceIndex = Scaler.Mode,
+                Sub = Scaler.Problem != "" ? Scaler.Problem : "게임을 작은 창으로 띄운 뒤 켜면 화면에 꽉 차게 키워요",
+                Change = v =>
+                {
+                    if (v == 0) { Scaler.Stop(); return; }
+                    if (!GameWatch.Running) { Shell.ShowToast("게임을 켠 다음 여기서 켜 주세요", 3000); return; }
+                    Shell.SendToGame(() => Scaler.Start(v, GetFg()));
+                }
+            });
+
             // ── 빠른 버튼 ──
             rows.Add(new Row { Kind = Kind.Toggle, Title = "조이스틱 마우스 모드", Sub = "왼쪽 스틱 이동 · A 클릭 · B 오른쪽 클릭 · 오른쪽 스틱 휠", On = Gamepad.MouseMode,
                                Change = v => Gamepad.MouseMode = v == 1 });
@@ -278,6 +296,8 @@ namespace TkoolLauncher
             if (focus >= rows.Count) focus = rows.Count - 1;
         }
 
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "GetForegroundWindow")] static extern IntPtr GetFg();
+
         void AddChoice(string title, int[] vals, string unit, int cur, Action<int> set)
         {
             var names = new string[vals.Length];
@@ -295,6 +315,7 @@ namespace TkoolLauncher
         };
 
         System.Threading.Timer ledTimer;
+        double volt; int voltNext;
 
         /// <summary>조명은 여러 번 바꿔도 마지막 것만 적용 (밝기 끌 때 EC에 너무 많이 안 쓰게)</summary>
         void ApplyLed()
@@ -335,6 +356,8 @@ namespace TkoolLauncher
             Draw.Text(g, DateTime.Now.ToString("HH:mm"), Draw.H1, new Rectangle(x + S(28), S(18), w, S(36)), Theme.Text);
             string head = SystemControls.BatteryText();
             if (Hardware.TempReady) { float tc = Hardware.CpuTemp(); if (tc > 0) head += " · CPU " + (int)tc + "°C"; }
+            if (voltNext < Environment.TickCount) { volt = SystemControls.BatteryVolts(); voltNext = Environment.TickCount + 5000; }
+            if (volt > 0) head += " · " + volt.ToString("0.00") + "V";
             Draw.Text(g, head, Draw.Body, new Rectangle(x + S(28), S(56), w - S(40), S(22)), Theme.SubText);
 
             int top = S(96), bottom = full.Height - S(60);

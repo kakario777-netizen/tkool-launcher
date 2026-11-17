@@ -23,11 +23,13 @@ namespace TkoolLauncher
         readonly MainMenu menu = new MainMenu();
         readonly QuickPanel quick = new QuickPanel();
         public bool CameFromGame;   // 게임 중에 홈 버튼으로 불려 나왔는지
+        int scaleWas;               // 런처를 불러낼 때 잠시 꺼둔 화면 확대
         IntPtr gameHwnd;
 
         [System.Runtime.InteropServices.DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
         [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
         [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
         readonly Timer anim = new Timer { Interval = 15 };
         readonly Timer clock = new Timer { Interval = 15000 };
         readonly Stopwatch sw = Stopwatch.StartNew();
@@ -168,6 +170,8 @@ namespace TkoolLauncher
             {
                 gameHwnd = GetForegroundWindow();
                 CameFromGame = true;
+                scaleWas = Scaler.Mode;
+                if (scaleWas != 0) Scaler.Stop();
                 WindowState = FormWindowState.Maximized;
                 Show();
                 Activate();
@@ -283,6 +287,7 @@ namespace TkoolLauncher
             CameFromGame = false;
             WindowState = FormWindowState.Minimized;
             if (gameHwnd != IntPtr.Zero) { ShowWindow(gameHwnd, 9); SetForegroundWindow(gameHwnd); }
+            if (scaleWas != 0 && gameHwnd != IntPtr.Zero) { int m = scaleWas; scaleWas = 0; Scaler.Start(m, gameHwnd); }
         }
 
         public void QuitGame()
@@ -421,6 +426,7 @@ namespace TkoolLauncher
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             Hotkeys.Stop();
+            try { Scaler.Stop(); } catch { }
             try { VirtualPad.Stop(); } catch { }
             LoopGuard.Stop();
             Fps.Stop();
@@ -679,6 +685,20 @@ namespace TkoolLauncher
             string dir = g.InstallDir ?? g.Folder;
             CameFromGame = false;
             SmartTdp.Reset();
+            if (Settings.AutoScaleTkool && Gamepad.MapKeys)
+            {
+                // 게임 창이 뜰 때까지 조금 기다렸다가 확대 (앞 창이 게임 폴더 프로그램일 때만)
+                int tries = 0;
+                var st2 = new Timer { Interval = 1500 };
+                st2.Tick += (s2, e2) =>
+                {
+                    IntPtr fg = GetForegroundWindow();
+                    GetWindowThreadProcessId(fg, out uint fpid);
+                    if (GameWatch.InDir((int)fpid, GameWatch.Dir)) { st2.Stop(); st2.Dispose(); Scaler.Start(2, fg); }
+                    else if (++tries > 10) { st2.Stop(); st2.Dispose(); }
+                };
+                st2.Start();
+            }
             GameWatch.Start(p, dir, () => BeginInvoke(new Action(() =>
             {
                 CameFromGame = false;
