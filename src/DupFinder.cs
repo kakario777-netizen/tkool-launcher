@@ -32,7 +32,7 @@ namespace TkoolLauncher
                 Activity.Set("dup", "중복 게임 검사 중");
                 try { Groups = Find(games); }
                 catch (Exception ex) { Log.Error("중복 찾기", ex); }
-                Activity.Done("dup");
+                Activity.Done("dup", "중복 검사 끝 · " + Groups.Count + "묶음");
                 busy = false;
                 try { done?.Invoke(); } catch { }
             }) { IsBackground = true, Priority = ThreadPriority.Lowest };

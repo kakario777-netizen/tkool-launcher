@@ -257,7 +257,7 @@ namespace TkoolLauncher
                     System.Threading.Thread.Sleep(1500);
                 }
                 Finding = false;
-                Activity.Done("cover");
+                Activity.Done("cover", "표지 찍기 끝 · " + list.Count + "개 중 " + okCount + "개");
                 done(okCount);
             }) { IsBackground = true };
             th.SetApartmentState(System.Threading.ApartmentState.STA);

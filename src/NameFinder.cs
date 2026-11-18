@@ -296,7 +296,7 @@ namespace TkoolLauncher
         {
             if (Busy) return;
             var list = games.Where(Wants).ToList();
-            if (list.Count == 0) { done?.Invoke(0); return; }
+            if (list.Count == 0) { Activity.Note("이름 확인 · 새로 볼 게임 없음 (모두 확인됨)"); done?.Invoke(0); return; }
             Busy = true;
             var th = new System.Threading.Thread(() =>
             {
@@ -360,7 +360,7 @@ namespace TkoolLauncher
                 finally
                 {
                     GameData.Save();
-                    Activity.Done("name");
+                    Activity.Done("name", "이름 확인 끝 · " + list.Count + "개 확인, " + n + "개 바꿈");
                     Busy = false;
                     done?.Invoke(n);
                 }

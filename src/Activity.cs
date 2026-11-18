@@ -26,11 +26,25 @@ namespace TkoolLauncher
             try { Changed?.Invoke(); } catch { }
         }
 
-        public static void Done(string key)
+        public static void Done(string key, string summary = null)
         {
             lock (jobs) { if (jobs.Remove(key)) order.Remove(key); }
+            if (summary != null) Note(summary);
             try { Changed?.Invoke(); } catch { }
         }
+
+        // ── 지난 일 기록 (아래 왼쪽을 누르면 목록) ──
+        static readonly List<string> history = new List<string>();
+        public static void Note(string text)
+        {
+            lock (history)
+            {
+                history.Insert(0, DateTime.Now.ToString("HH:mm") + "  " + text);
+                if (history.Count > 40) history.RemoveAt(history.Count - 1);
+            }
+            try { Changed?.Invoke(); } catch { }
+        }
+        public static List<string> History() { lock (history) return history.ToList(); }
 
         public static bool Any { get { lock (jobs) return jobs.Count > 0; } }
 
@@ -40,7 +54,10 @@ namespace TkoolLauncher
             progress = -1;
             lock (jobs)
             {
-                if (order.Count == 0) return null;
+                if (order.Count == 0)
+                {
+                    lock (history) return history.Count > 0 ? "✓ " + history[0].Substring(7) + "  · 할 일 없음" : "✓ 할 일 없음";
+                }
                 var j = jobs[order[0]];
                 string s = j.Text;
                 if (j.Total > 0) { s += "  " + j.Cur + "/" + j.Total; progress = Math.Min(1f, j.Cur / (float)j.Total); }

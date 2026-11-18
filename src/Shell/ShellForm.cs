@@ -932,13 +932,16 @@ namespace TkoolLauncher
             float prog;
             string act = Activity.Line(out prog);
             if (act == null && Scanning) act = "게임 찾는 중";
+            actRect = Rectangle.Empty;
             if (act != null)
             {
+                bool idle = !Activity.Any && !Scanning;
+                actRect = new Rectangle(0, r.Y, Math.Max(Theme.S(120), x - Theme.S(10)), h);
                 int ax = Theme.S(24), aw = Math.Max(Theme.S(120), x - ax - Theme.S(20));
-                // 도는 점 세 개
-                int t = (Environment.TickCount / 300) % 3;
+                // 도는 점 세 개 (쉬는 중이면 흐린 점)
+                int t = idle ? -1 : (Environment.TickCount / 300) % 3;
                 for (int i = 0; i < 3; i++)
-                    using (var b = new SolidBrush(i == t ? Theme.Accent : Color.FromArgb(90, 255, 255, 255)))
+                    using (var b = new SolidBrush(i == t ? Theme.Accent : Color.FromArgb(idle ? 50 : 90, 255, 255, 255)))
                         g.FillEllipse(b, ax + i * Theme.S(10), cy - Theme.S(3), Theme.S(6), Theme.S(6));
                 int tx = ax + Theme.S(36);
                 Draw.Text(g, act, Draw.Small, new Rectangle(tx, r.Y, aw - Theme.S(36), prog >= 0 ? h - Theme.S(10) : h), Theme.SubText,
@@ -951,6 +954,18 @@ namespace TkoolLauncher
                     Draw.Fill(g, new Rectangle(bar.X, bar.Y, Math.Max(Theme.S(4), (int)(bw * prog)), bar.Height), Theme.S(2), Theme.Accent);
                 }
             }
+        }
+
+        Rectangle actRect;
+        /// <summary>아래 왼쪽을 누르면: 지금 하는 일 + 지난 일 목록</summary>
+        public void ShowActivityLog()
+        {
+            float pr;
+            var l = new List<string>();
+            if (Activity.Any) l.Add("▶ " + Activity.Line(out pr));
+            l.AddRange(Activity.History());
+            if (l.Count == 0) l.Add("아직 기록이 없어요");
+            PickerScreen.Show(this, "런처가 한 일", l.ToArray(), -1, i => { }, "새로 넣은 게임·이름 확인·DLsite·중복 검사 등");
         }
 
         void PaintToast(Graphics g)
@@ -1030,6 +1045,7 @@ namespace TkoolLauncher
             if (dragging) { dragging = false; Cur.OnDrag(int.MinValue, int.MinValue, false); Animate(); return; }
             var p = e.Location;
             foreach (var h in hints) if (h.Bounds.Contains(p)) { h.Act?.Invoke(); Animate(); return; }
+            if (actRect.Contains(p)) { ShowActivityLog(); return; }
             if (quick.Open) { quick.OnTap(p); Invalidate(); return; }
             if (menu.Open) { menu.OnTap(p); Invalidate(); return; }
             if (menuIcon.Contains(p)) { OpenMenu(); return; }
@@ -1147,7 +1163,7 @@ namespace TkoolLauncher
                 BeginInvoke(new Action(() =>
                 {
                     Scanning = false;
-                    Activity.Done("scan");
+                    Activity.Done("scan", "게임 " + found.Count + "개 찾음");
                     int before = knownCount;
                     SetGames(found);
                     knownCount = found.Count;

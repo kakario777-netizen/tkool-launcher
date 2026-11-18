@@ -185,7 +185,7 @@ namespace TkoolLauncher
             var list = withCode.Where(g => !Tried(NameFinder.FindCode(g))).ToList();
             // 예전에 정보만 받고 그림을 못 넣은 게임 (표지 없음) → 그림만 다시
             var needImg = withCode.Where(g => Tried(NameFinder.FindCode(g))).ToList();
-            if (list.Count == 0 && needImg.Count == 0) { done?.Invoke(0); return; }
+            if (list.Count == 0 && needImg.Count == 0) { Activity.Note("DLsite · 새로 받을 게임 없음"); done?.Invoke(0); return; }
             Busy = true;
             var th = new System.Threading.Thread(() =>
             {
@@ -213,7 +213,7 @@ namespace TkoolLauncher
                         if (i != null && SaveCover(g, i)) { n++; System.Threading.Thread.Sleep(300); }
                     }
                 }
-                finally { Activity.Done("dlsite"); Busy = false; done?.Invoke(n); }
+                finally { Activity.Done("dlsite", "DLsite 정보 끝 · " + list.Count + "개 확인, " + n + "개 채움"); Busy = false; done?.Invoke(n); }
             }) { IsBackground = true };
             th.Start();
         }
