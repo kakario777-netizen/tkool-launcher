@@ -201,11 +201,13 @@ namespace TkoolLauncher
         }
 
         public static volatile bool Busy;
+        static volatile bool again;
 
         /// <summary>DLsite 정보가 없는 쯔꾸르 폴더 게임: 스팀 → ふりーむ 순으로 찾아봄 (한 번만, 흔적 남김)</summary>
         public static void RunAll(List<GameInfo> games, Action<int> done)
         {
-            if (Busy) return;
+            if (Busy) { again = true; return; }
+            again = false;
             var list = games.Where(g => g.FromFolder && g.Exe != null && !Tried(GameData.IdOf(g)))
                             .Where(g => { string c = NameFinder.FindCode(g); return c == null || DlsiteInfo.Get(g) == null; }).ToList();
             if (list.Count == 0) { Activity.Note("스팀·ふりーむ · 새로 찾을 게임 없음"); done?.Invoke(0); return; }
@@ -243,6 +245,7 @@ namespace TkoolLauncher
                     Activity.Done("web", "스팀·ふりーむ 끝 · " + list.Count + "개 찾아봄, " + n + "개 채움");
                     Busy = false;
                     done?.Invoke(n);
+                    if (again) RunAll(games, done);   // 도는 중에 새로 생긴 게임(DLsite에도 없던 것)
                 }
             }) { IsBackground = true };
             th.Start();
