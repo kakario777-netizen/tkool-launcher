@@ -66,6 +66,10 @@ namespace TkoolLauncher
         /// <summary>이름 후보 찾기 (느릴 수 있음 — 백그라운드에서)</summary>
         public static Found Find(GameInfo g, bool online)
         {
+            // 0) 폴더 이름이 한글이면 그게 사용자가 붙인 이름 — 지금 이름이 외국어·뜻 없음일 때만 그걸로
+            string kf = KoreanFolderName(g);
+            if (kf != null && (Foreign(g.Title) || Meaningless(g, g.Title))) return new Found { Name = kf, From = "폴더 이름" };
+            if (kf != null && Hangul.IsMatch(g.Title ?? "")) return null;   // 이미 한글 이름 + 한글 폴더 → 그대로
             // 1) 읽어보기의 한글 제목
             var f = FromReadme(g);
             if (f != null && Hangul.IsMatch(f.Name)) return f;
@@ -160,7 +164,7 @@ namespace TkoolLauncher
 
         // ───────── 읽어보기에서 ─────────
         static readonly Regex Label = new Regex(@"^\s*[\[【■◆●○▶☆★\-\*]*\s*(한글\s*제목|한국어\s*제목|게임\s*제목|게임\s*이름|게임명|제\s*목|타이틀|작품명|원제|タイトル|作品名|ゲーム名|title)\s*[\]】]?\s*[:：=\]】」]\s*(.+?)\s*$", RegexOptions.IgnoreCase);
-        static readonly Regex Quoted = new Regex(@"[『「《〈\[]([^』」》〉\]\r\n]{2,40})[』」》〉\]]");
+        static readonly Regex Quoted = new Regex(@"[『「《]([^』」》\r\n]{2,30})[』」》]");
 
         static IEnumerable<string> TextFiles(string dir)
         {
@@ -191,11 +195,37 @@ namespace TkoolLauncher
             }).Take(12);
         }
 
+        // 읽어보기에서 이름으로 잘못 잡히는 말 (안내·주의 문구)
+        static readonly string[] Notice = { "중요", "필독", "주의", "공지", "안내", "설명", "조작", "업데이트", "버전", "패치", "번역", "실행", "설치", "오류", "에러", "감사", "읽어", "참고", "주의사항", "변경", "수정", "문의", "연락", "금지", "배포", "저작권", "알림", "확인", "방법", "사항", "목차", "注意", "重要", "必読", "説明", "操作", "更新", "履歴", "連絡", "禁止", "readme", "read me", "notice", "warning", "important", "caution", "update", "changelog", "license", "credit", "contact", "how to", "controls" };
+
+        /// <summary>이름이 아니라 안내·문장으로 보이는지</summary>
+        public static bool BadName(string s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return true;
+            string l = s.Trim().ToLowerInvariant();
+            foreach (var w in Notice) if (l.Contains(w)) return true;
+            // 문장 끝말 (~니다, ~요, ~다., 마침표·느낌표로 끝)
+            if (Regex.IsMatch(l, @"(니다|세요|해요|어요|아요|에요|예요|다\.|요\.|です|ます|ください)\s*[.!。！]*$")) return true;
+            if (Regex.IsMatch(l, @"[.!?。！？]$") && l.Length > 8) return true;
+            if (l.Split(' ').Length > 7) return true;   // 너무 긴 문장
+            return false;
+        }
+
+        /// <summary>폴더 이름(정리한 것)이 한글이고 뜻이 있으면 그 이름</summary>
+        static string KoreanFolderName(GameInfo g)
+        {
+            string folder = Path.GetFileName((g.Folder ?? "").TrimEnd('\\', '/'));
+            string c = TitleTidy.Clean(folder, new List<string>());
+            if (string.IsNullOrWhiteSpace(c) || !Hangul.IsMatch(c) || Meaningless(g, c) || BadName(c)) return null;
+            return c.Trim();
+        }
+
         static string Tidy(string s)
         {
             s = (s ?? "").Trim().Trim('"', '\'', '「', '」', '『', '』', '《', '》', '〈', '〉', '[', ']', '【', '】', ' ', '　');
             if (s.Length < 2 || s.Length > 40) return null;
             if (s.Contains("http") || s.Contains("@") || s.Contains("://")) return null;
+            if (BadName(s)) return null;
             return s;
         }
 
@@ -303,6 +333,20 @@ namespace TkoolLauncher
         public static void RunAll(List<GameInfo> games, bool online, Action<int> done)
         {
             if (Busy) return;
+            // 예전 판이 읽어보기 안내 문구("중요합니다" 같은 것)로 바꿔 버린 이름 되돌리기
+            int fixedBad = 0;
+            foreach (var g in games.Where(x => x.FromFolder))
+            {
+                var st = GameData.Get(g);
+                if (st.NameFrom == null || st.NameFrom.StartsWith("-") || st.NameFrom.EndsWith(ByUser)) continue;
+                bool fromReadme = Regex.IsMatch(st.NameFrom, @"\.(txt|md|nfo|ini)(\s|$)", RegexOptions.IgnoreCase);
+                if (!fromReadme || !BadName(g.Title)) continue;
+                string orig = st.NameFrom.Split(new[] { " · " }, StringSplitOptions.None)[0];
+                st.Title = null; st.NameFrom = null;
+                g.Title = TitleTidy.Clean(string.IsNullOrEmpty(orig) ? (g.RawTitle ?? g.Title) : orig, new List<string>());
+                fixedBad++;
+            }
+            if (fixedBad > 0) { GameData.Save(); Activity.Note("이상하게 바뀐 이름 " + fixedBad + "개 되돌림"); }
             var list = games.Where(Wants).ToList();
             if (list.Count == 0) { Activity.Note("이름 확인 · 새로 볼 게임 없음 (모두 확인됨)"); done?.Invoke(0); return; }
             Busy = true;
