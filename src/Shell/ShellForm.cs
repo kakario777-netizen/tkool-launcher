@@ -136,6 +136,7 @@ namespace TkoolLauncher
                 });
                 if (Settings.GameFolders.Count == 0 && !Settings.StoreScan) OpenFolders(true);
                 else Rescan();
+                WatchFolders();
             };
         }
 
@@ -1026,7 +1027,7 @@ namespace TkoolLauncher
             using (var f = new FolderManagerForm(firstRun))
             {
                 f.ShowDialog(this);
-                if (f.Changed || firstRun) Rescan();
+                if (f.Changed || firstRun) { Rescan(); WatchFolders(); }
             }
         }
 
@@ -1044,6 +1045,65 @@ namespace TkoolLauncher
             }
         }
 
+        // ───────── 게임 폴더 지켜보기: 새 게임을 넣거나 지우면 조용히 다시 찾기 ─────────
+        readonly List<System.IO.FileSystemWatcher> watchers = new List<System.IO.FileSystemWatcher>();
+        Timer rescanDelay;
+        int knownCount = -1;
+
+        public void WatchFolders()
+        {
+            foreach (var w in watchers) { try { w.EnableRaisingEvents = false; w.Dispose(); } catch { } }
+            watchers.Clear();
+            foreach (var root in Settings.GameFolders)
+            {
+                try
+                {
+                    if (!System.IO.Directory.Exists(root)) continue;
+                    var w = new System.IO.FileSystemWatcher(root) { IncludeSubdirectories = true, NotifyFilter = System.IO.NotifyFilters.DirectoryName | System.IO.NotifyFilters.FileName, InternalBufferSize = 65536 };
+                    System.IO.FileSystemEventHandler h = (o, e) => SoonRescan(e.FullPath);
+                    w.Created += h; w.Deleted += h;
+                    w.Renamed += (o, e) => SoonRescan(e.FullPath);
+                    w.Error += (o, e) => SoonRescan(null);
+                    w.EnableRaisingEvents = true;
+                    watchers.Add(w);
+                }
+                catch (Exception ex) { Log.Error("게임 폴더 지켜보기 " + root, ex); }
+            }
+        }
+
+        static readonly string[] GameFileExt = { ".exe", ".rgss3a", ".rgss2a", ".rgssad", ".ldb", ".json", ".ini" };
+
+        /// <summary>압축 풀기·복사가 끝날 때까지 30초 조용하면 다시 찾기 (게임 중이면 끝난 뒤)</summary>
+        void SoonRescan(string path)
+        {
+            if (path != null)
+            {
+                string ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+                // 세이브·로그 같은 잔 파일은 무시, 폴더·실행 파일·게임 데이터만
+                if (ext.Length > 0 && Array.IndexOf(GameFileExt, ext) < 0) return;
+                if (path.IndexOf("쯔꾸르 런처", StringComparison.Ordinal) >= 0) return;
+            }
+            try
+            {
+                BeginInvoke(new Action(() =>
+                {
+                    if (rescanDelay == null)
+                    {
+                        rescanDelay = new Timer { Interval = 30000 };
+                        rescanDelay.Tick += (o, e) =>
+                        {
+                            if (GameWatch.Running || Scanning || GameCapture.Finding) return;   // 게임 중엔 기다림
+                            rescanDelay.Stop();
+                            Log.Info("게임 폴더가 바뀌어 다시 찾기");
+                            Rescan();
+                        };
+                    }
+                    rescanDelay.Stop(); rescanDelay.Start();
+                }));
+            }
+            catch { }
+        }
+
         public void Rescan()
         {
             if (Scanning) return;
@@ -1058,8 +1118,12 @@ namespace TkoolLauncher
                 BeginInvoke(new Action(() =>
                 {
                     Scanning = false;
+                    int before = knownCount;
                     SetGames(found);
-                    ShowToast("게임 " + found.Count + "개를 찾았어요");
+                    knownCount = found.Count;
+                    if (before < 0) ShowToast("게임 " + found.Count + "개를 찾았어요");
+                    else if (found.Count > before) ShowToast("새 게임 " + (found.Count - before) + "개를 목록에 넣었어요", 4000);
+                    else if (found.Count < before) ShowToast("없어진 게임 " + (before - found.Count) + "개를 목록에서 뺐어요", 4000);
                 }));
             });
         }

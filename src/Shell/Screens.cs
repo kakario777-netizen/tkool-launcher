@@ -312,38 +312,18 @@ namespace TkoolLauncher
 
         void BuildChips(List<GameInfo> pool)
         {
+            // 위 칸: 상태·언어·체험판·숨김만 (태그·엔진은 왼쪽 주황 단추 → 고르기 창)
             chips = new List<Chip>
             {
                 new Chip { Name = "전체", Filter = x => true },
-                new Chip { Name = "하는 중", Filter = x => Status(x) == 1 },
-                new Chip { Name = "안 해봄", Filter = x => Status(x) == 0 },
-                new Chip { Name = "다 깸", Filter = x => Status(x) == 2 },
+                new Chip { Name = "플레이 중", Filter = x => Status(x) == 1 },
+                new Chip { Name = "완료", Filter = x => Status(x) == 2 },
             };
-            if (pool.Any(IsKorean) && pool.Any(x => !IsKorean(x)))
-            {
-                chips.Add(new Chip { Name = "한글", Filter = IsKorean });
-                chips.Add(new Chip { Name = "일본어", Filter = x => !IsKorean(x) });
-            }
-            foreach (var v in new[] { TkoolVersion.RM2000, TkoolVersion.XP, TkoolVersion.VX, TkoolVersion.VXAce, TkoolVersion.MV, TkoolVersion.MZ })
-            {
-                var vv = v;
-                if (pool.Any(x => x.IsTkool && x.Version == vv))
-                    chips.Add(new Chip { Name = EngineShort(new GameInfo { Kind = GameKind.Tkool, Version = vv }), Filter = x => x.IsTkool && x.Version == vv });
-            }
+            if (pool.Any(IsKorean)) chips.Add(new Chip { Name = "한글", Filter = IsKorean });
+            if (pool.Any(x => !IsKorean(x))) chips.Add(new Chip { Name = "일본어", Filter = x => !IsKorean(x) });
             if (pool.Any(x => x.Tags.Contains("체험판"))) chips.Add(new Chip { Name = "체험판", Filter = x => x.Tags.Contains("체험판") });
-            // 쯔꾸르가 아닌 엔진들 · 내 태그들도 칸으로 (설정에 없는 건 뒤에 붙음)
-            foreach (var en in pool.Where(x => !x.IsTkool && x.Engine != null).Select(x => ShortEngine(x.Engine)).Distinct().OrderBy(x => x))
-            {
-                string e2 = en;
-                chips.Add(new Chip { Name = e2, Filter = x => !x.IsTkool && ShortEngine(x.Engine) == e2 });
-            }
-            foreach (var tg in pool.SelectMany(x => GameData.TagsOf(x)).Distinct().OrderBy(x => x))
-            {
-                string t2 = tg;
-                chips.Add(new Chip { Name = "#" + t2, Filter = x => GameData.TagsOf(x).Contains(t2) });
-            }
             if (Shell.Games != null && Shell.Games.Any(x => x.FromFolder && GameData.Get(x).Hidden))
-                chips.Add(new Chip { Name = "숨긴 게임", Filter = x => false });   // 목록은 따로 (숨긴 게임만)
+                chips.Add(new Chip { Name = "숨김", Filter = x => false });   // 목록은 따로 (숨긴 게임만)
             // 설정한 순서·숨김 적용
             var order = ChipEditScreen.Order();
             var sorted = new List<Chip>();
@@ -388,6 +368,43 @@ namespace TkoolLauncher
             Shell.FocusChanged();
         }
 
+        // ── 왼쪽 주황 단추: 태그·엔진 (고르기 창) ──
+        static string tagSel, engSel;
+        Rectangle tagBtn, engBtn;
+
+        /// <summary>내 태그 + DLsite 장르(한글)</summary>
+        static List<string> TagsAll(GameInfo g)
+        {
+            var l = new List<string>(GameData.TagsOf(g));
+            var d = DlsiteInfo.Get(g);
+            if (d != null)
+                for (int k = 0; k < d.Genres.Count; k++)
+                {
+                    string t = k < d.GenresKo.Count && d.GenresKo[k].Length > 0 ? d.GenresKo[k] : d.Genres[k];
+                    if (!l.Contains(t)) l.Add(t);
+                }
+            return l;
+        }
+
+        static string EngineOf(GameInfo g) => g.IsTkool ? EngineShort(g) : g.Engine != null ? ShortEngine(g.Engine) : "기타";
+
+        IEnumerable<GameInfo> TkPool => Shell.VisibleGames.Where(x => x.FromFolder);
+
+        void OpenTagPicker()
+        {
+            var counts = TkPool.SelectMany(TagsAll).GroupBy(x => x).OrderByDescending(x => x.Count()).ThenBy(x => x.Key)
+                .Select(x => new KeyValuePair<string, int>(x.Key, x.Count())).ToList();
+            if (counts.Count == 0) { Shell.ShowToast("아직 태그가 없어요 (상세 화면 + 태그, DLsite 장르)", 2500); return; }
+            FlowPicker.Show(Shell, "태그로 보기", counts, tagSel, t => { tagSel = t; focus = 0; scroll = target = 0; OnGamesChanged(); });
+        }
+
+        void OpenEnginePicker()
+        {
+            var counts = TkPool.GroupBy(EngineOf).OrderByDescending(x => x.Count()).ThenBy(x => x.Key)
+                .Select(x => new KeyValuePair<string, int>(x.Key, x.Count())).ToList();
+            FlowPicker.Show(Shell, "엔진으로 보기", counts, engSel, t => { engSel = t; focus = 0; scroll = target = 0; OnGamesChanged(); });
+        }
+
         void NextSort()
         {
             PickerScreen.Show(Shell, "정렬 방식", SortNames, sortMode, i =>
@@ -428,9 +445,12 @@ namespace TkoolLauncher
             {
                 BuildChips(items);
                 var cf = chips[chipIdx].Filter;
-                items = chips[chipIdx].Name == "숨긴 게임"
-                    ? SortWide(Shell.Games.Where(x => x.FromFolder && GameData.Get(x).Hidden))
-                    : SortWide(items.Where(cf));
+                IEnumerable<GameInfo> src = chips[chipIdx].Name == "숨김"
+                    ? Shell.Games.Where(x => x.FromFolder && GameData.Get(x).Hidden)
+                    : items.Where(cf);
+                if (tagSel != null) src = src.Where(x => TagsAll(x).Contains(tagSel));
+                if (engSel != null) src = src.Where(x => EngineOf(x) == engSel);
+                items = SortWide(src);
             }
             else chipFocus = false;
             int i = cur != null ? items.FindIndex(x => x.Exe == cur.Exe) : -1;
@@ -626,8 +646,25 @@ namespace TkoolLauncher
                 Draw.Text(g, ex[i].Key, font, r, dup ? Color.White : Theme.SubText, Draw.Center);
                 if (chipFocus && extraSel == i + 1 && Shell.ShowFocus) Draw.FocusGlow(g, r, h / 2);
             }
-            // 2) 왼쪽 칩 칸
-            chipArea = new Rectangle(Area.X + Pad0, y - S(4), rx - S(14) - (Area.X + Pad0), h + S(8));
+            // 2) 맨 왼쪽 주황 단추 (태그·엔진, 자리 고정)
+            int lx = Area.X + Pad0;
+            var orange = Color.FromArgb(255, 214, 120, 30);
+            string tagText = tagSel == null ? "태그 ▾" : "# " + tagSel + "  ×";
+            string engText = engSel == null ? "엔진 ▾" : engSel + "  ×";
+            tagBtn = new Rectangle(lx, y, Math.Min(S(200), Draw.Measure(g, tagText, font) + S(32)), h);
+            engBtn = new Rectangle(tagBtn.Right + S(10), y, Math.Min(S(200), Draw.Measure(g, engText, font) + S(32)), h);
+            foreach (var bt in new[] { tagBtn, engBtn })
+            {
+                bool set = bt == tagBtn ? tagSel != null : engSel != null;
+                if (set) Draw.Fill(g, bt, h / 2, orange);
+                else using (var pen = new Pen(orange, Math.Max(1, S(2)))) g.DrawPath(pen, Theme.Round(bt, h / 2));
+                Draw.Text(g, bt == tagBtn ? tagText : engText, font, bt, set ? Color.White : orange, Draw.Center);
+            }
+            if (chipFocus && extraSel == -2 && Shell.ShowFocus) Draw.FocusGlow(g, tagBtn, h / 2);
+            if (chipFocus && extraSel == -1 && Shell.ShowFocus) Draw.FocusGlow(g, engBtn, h / 2);
+            lx = engBtn.Right + S(14);
+            // 3) 칩 칸
+            chipArea = new Rectangle(lx, y - S(4), rx - S(14) - lx, h + S(8));
             if (chipRects.Length != chips.Count) chipRects = new Rectangle[chips.Count];
             int x = 0;
             var widths = new int[chips.Count];
@@ -769,9 +806,20 @@ namespace TkoolLauncher
         {
             switch (b)
             {
-                case Pad.Left: if (chipFocus) { if (extraSel > 0) extraSel--; else PickChip(chipIdx - 1); } else Move(-1); break;
+                case Pad.Left:
+                    if (chipFocus)
+                    {
+                        if (extraSel > 0) extraSel--;
+                        else if (extraSel < 0) extraSel = -2;
+                        else if (chipIdx > 0) PickChip(chipIdx - 1);
+                        else extraSel = -1;    // 칸 맨 앞에서 왼쪽 → 엔진·태그 단추
+                        Shell.Invalidate();
+                    }
+                    else Move(-1);
+                    break;
                 case Pad.Right:
-                    if (chipFocus) { if (chipIdx < chips.Count - 1 && extraSel == 0) PickChip(chipIdx + 1); else extraSel = Math.Min(Extras().Count, extraSel + 1); }   // 칸 끝에서 오른쪽 → 오른쪽 단추들
+                    if (chipFocus && extraSel < 0) { extraSel++; Shell.Invalidate(); }
+                    else if (chipFocus) { if (chipIdx < chips.Count - 1 && extraSel == 0) PickChip(chipIdx + 1); else extraSel = Math.Min(Extras().Count, extraSel + 1); }   // 칸 끝에서 오른쪽 → 오른쪽 단추들
                     else Move(1);
                     break;
                 case Pad.Up:
@@ -786,6 +834,8 @@ namespace TkoolLauncher
                 case Pad.LB: SetTab(tab - 1); break;
                 case Pad.RB: SetTab(tab + 1); break;
                 case Pad.A:
+                    if (chipFocus && extraSel == -2) { OpenTagPicker(); break; }
+                    if (chipFocus && extraSel == -1) { OpenEnginePicker(); break; }
                     if (chipFocus && extraSel > 0) { var ex = Extras(); if (extraSel <= ex.Count) ex[extraSel - 1].Value(); break; }
                     if (chipFocus) { chipFocus = false; Shell.FocusChanged(); } else if (FocusedGame != null) Shell.Push(new DetailScreen(FocusedGame)); break;
                 case Pad.B: Shell.Pop(); break;
@@ -798,6 +848,8 @@ namespace TkoolLauncher
             for (int i = 0; i < tabRects.Length; i++) if (tabRects[i].Contains(p)) { SetTab(i); return; }
             if (TkTab)
             {
+                if (tagBtn.Contains(p)) { if (tagSel != null && p.X > tagBtn.Right - S(40)) { tagSel = null; OnGamesChanged(); } else OpenTagPicker(); return; }
+                if (engBtn.Contains(p)) { if (engSel != null && p.X > engBtn.Right - S(40)) { engSel = null; OnGamesChanged(); } else OpenEnginePicker(); return; }
                 if (chipLeftR.Contains(p)) { chipScroll -= chipArea.Width * 2 / 3; Shell.Invalidate(); return; }
                 if (chipRightR.Contains(p)) { chipScroll += chipArea.Width * 2 / 3; Shell.Invalidate(); return; }
                 for (int i = 0; i < chipRects.Length; i++) if (chipRects[i].Contains(p) && chipArea.Contains(p)) { chipFocus = false; PickChip(i); return; }
@@ -843,7 +895,7 @@ namespace TkoolLauncher
     class ChipEditScreen : Screen
     {
         public class Item { public string Name; public bool Hidden; }
-        static readonly string[] All = { "전체", "하는 중", "안 해봄", "다 깸", "한글", "일본어", "2000", "XP", "VX", "Ace", "MV", "MZ", "체험판", "숨긴 게임" };
+        static readonly string[] All = { "전체", "플레이 중", "완료", "한글", "일본어", "체험판", "숨김" };
         List<Item> items;
         int focus;
         Rectangle[] rowR = new Rectangle[0], upR = new Rectangle[0], downR = new Rectangle[0];
