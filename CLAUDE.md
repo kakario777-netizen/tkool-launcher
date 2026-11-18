@@ -27,6 +27,7 @@
 - AYA 큰 버튼: 짧게=라이브러리 앞이면 내림/아니면 팝업, 길게(0.6초, 키 뗄 때까지 기다림 — Hotkeys.HomeLong)=라이브러리 전체 화면. 길게 누를 때 다른 신호 오는 기기면 설정에서 HomeLongKey 배우기.
 - 치트 에디터: 사용자의 mini-cheat(MiniCheat.exe, 인수 없음). 팝업 바로가기 "치트 에디터" → Settings.CheatExe/런처 옆·바탕화면·문서·다운로드에서 찾고 없으면 GitHub 최신 릴리스에서 tools로 받음.
 - 성능 모드: PerfMode.cs — 저소음(7W·조용한 팬 곡선·윈도우 절약)/균형(11W)/고성능(15W·센 곡선·최고 성능)/직접 설정(Settings.Tdp·Fan). 팬 곡선은 2초마다 온도로 계산(올릴 땐 바로, 내릴 땐 5%씩). TDP·팬을 직접 고르면 직접 설정으로 바뀜. 빠른 설정 "지금 상태" 줄에 실제 TDP·팬%·온도·배터리 소모 W(팝업은 1.5초마다 갱신).
+- 라이브러리 모든 탭이 같은 가로 카드(상태 선은 뺌). 목록 그림은 CoverArt.Thumb(작은 JPG _t.jpg를 전부 메모리에, Preload) → 빨리 넘겨도 바로 보임, 그림 없는 건 NoHero(_nohero 표시 파일). 오른쪽 스크롤 손잡이 끌기(Screen.DownAt). 고르기 창: Shell/Picker.cs PickerScreen.Show/Confirm(정렬·해상도·더보기·언어·이름). 상세 화면 "더보기": 표지 직접 찍기(ManualCover — 게임 켜고 Y 두 번, Gamepad.DoubleY, 그동안 Y는 게임에 안 보냄, AYA로 취소)·표지 지우기(묻기)·언어(GameStat.Lang)·이름·숨기기. 자동 표지 찍기(Watch)는 끔, 찍을 때 OverlayTip.HideAll로 안내 글 숨김. 분류 칸 순서·숨김: 설정 "쯔꾸르 분류 칸"(ChipEditScreen, Settings.ChipOrder). 게임 기록은 GameData.Reconcile로 폴더 옮겨도 이어짐(Sig=exe 이름|크기|게임 데이터 제목, 표지 파일 이름도 옮김).
 - 쯔꾸르 탭 정리: 가로 카드(4:3 타이틀 그림 비율 그대로 + 아래 띠: 이름 한 줄·엔진 색 점·한/日·체험판·상태, 맨 아래 상태 선 — 하는 중 파랑/다 깸 초록), 그림 없으면 엔진 색 바탕+첫 글자. 위 동그라미 칩(전체·하는 중·안 해봄·다 깸·한글·일본어·엔진별·체험판) + 정리 모드·정렬(이름순/최근 추가/플레이 시간, X). 패드: 맨 윗줄에서 위 → 칩 줄, 칩 끝에서 오른쪽 → 정리 모드·정렬.
 - 이름 정리: TitleTidy.Clean(버전·날짜·[꼬리표]·_kr·한글패치·체험판 떼기 → Tags). SetGames에서 쯔꾸르에 적용, RawTitle 보관. GameStat.Title이 "="로 시작하면 사용자가 고른 이름(정리 안 함). GameStat.Cleared(games.ini 8번째 칸) = 다 깸, 상세 화면 버튼.
 - 정리 모드: TidyScreen — 손볼 게 많은 쯔꾸르부터 하나씩, 이름 후보 돌리기(타자 없음)·다 깸·표지 찍기(FindCovers 한 개)·숨기기.

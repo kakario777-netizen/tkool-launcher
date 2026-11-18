@@ -15,6 +15,9 @@ namespace TkoolLauncher
         public string Title;     // 게임 창 제목에서 가져온 진짜 이름 (없으면 null)
         public string Res;       // 이 게임 켤 때 강제할 해상도 "1280×720" (없으면 null)
         public bool Cleared;     // 다 깸 (직접 표시)
+        public string Sig;       // 같은 게임 알아보기: 실행 파일 이름|크기|게임 데이터 제목 (폴더를 옮겨도 그대로)
+        public string FolderName;// 마지막으로 본 게임 폴더 이름 (표지 파일 이름 옮기기용)
+        public int Lang;         // 언어 직접 지정: 0 자동 1 한글 2 일본어
     }
 
     static class GameData
@@ -45,6 +48,67 @@ namespace TkoolLauncher
             return s;
         }
 
+        public static string SigOf(GameInfo g)
+        {
+            long size = 0;
+            try { size = new FileInfo(g.Exe).Length; } catch { }
+            return (Path.GetFileName(g.Exe) ?? "").ToLowerInvariant() + "|" + size + "|" + (g.Title ?? "").Trim().ToLowerInvariant();
+        }
+
+        /// <summary>
+        /// 목록을 새로 찾은 뒤: 폴더 이름·위치가 바뀌어 번호가 달라진 게임을 예전 기록(플레이 시간·이름·표지·즐겨찾기…)과 이어 줌.
+        /// 실행 파일 이름·크기·게임 데이터 제목이 같고, 그 기록이 지금 목록의 다른 게임 것이 아니면 같은 게임으로 봄.
+        /// (꼭 g.Title이 스캔한 원래 제목일 때 — 저장된 이름을 덮어쓰기 전에 부름)
+        /// </summary>
+        public static void Reconcile(List<GameInfo> games)
+        {
+            try
+            {
+                var used = new HashSet<string>();
+                foreach (var g in games) used.Add(IdOf(g));
+                var bySig = new Dictionary<string, List<string>>();
+                foreach (var kv in stats)
+                    if (kv.Value.Sig != null && !used.Contains(kv.Key))
+                    {
+                        if (!bySig.TryGetValue(kv.Value.Sig, out var l)) bySig[kv.Value.Sig] = l = new List<string>();
+                        l.Add(kv.Key);
+                    }
+                bool changed = false;
+                foreach (var g in games)
+                {
+                    string id = IdOf(g);
+                    string sig = SigOf(g);
+                    string folder = Path.GetFileName((g.Folder ?? "").TrimEnd('\\'));
+                    if (stats.TryGetValue(id, out var cur))
+                    {
+                        if (cur.Sig != sig || cur.FolderName != folder) { cur.Sig = sig; cur.FolderName = folder; changed = true; }
+                        continue;
+                    }
+                    if (!bySig.TryGetValue(sig, out var cands) || cands.Count != 1) continue;
+                    string old = cands[0];
+                    var st = stats[old];
+                    stats.Remove(old); bySig.Remove(sig);
+                    // 표지 파일 이름도 새 폴더 이름으로
+                    if (!string.IsNullOrEmpty(st.FolderName) && st.FolderName != folder)
+                        foreach (var ext in new[] { ".png", ".jpg", ".jpeg", ".auto.png" })
+                        {
+                            try
+                            {
+                                string a = Path.Combine(CoverArt.CoverDir, st.FolderName + ext), b = Path.Combine(CoverArt.CoverDir, folder + ext);
+                                if (File.Exists(a) && !File.Exists(b)) File.Move(a, b);
+                            }
+                            catch { }
+                        }
+                    st.FolderName = folder; st.Sig = sig;
+                    stats[id] = st;
+                    changed = true;
+                    Log.Info("옮겨진 게임 기록 이어 붙임: " + g.Title + " (" + g.Folder + ")");
+                }
+                if (changed) Save();
+            }
+            catch (Exception ex) { Log.Error("게임 기록 맞추기", ex); }
+        }
+
         public static void Load()
         {
             stats.Clear();
@@ -64,6 +128,9 @@ namespace TkoolLauncher
                         Title = p.Length > 5 && p[5].Length > 0 ? p[5].Replace("\u2502", "|") : null,
                         Res = p.Length > 6 && p[6].Length > 0 ? p[6] : null,
                         Cleared = p.Length > 7 && p[7] == "1",
+                        Sig = p.Length > 8 && p[8].Length > 0 ? p[8].Replace("\u2502", "|") : null,
+                        FolderName = p.Length > 9 && p[9].Length > 0 ? p[9] : null,
+                        Lang = p.Length > 10 && int.TryParse(p[10], out int lg) ? lg : 0,
                     };
                     stats[p[0]] = s;
                 }
@@ -80,10 +147,11 @@ namespace TkoolLauncher
                 foreach (var kv in stats)
                 {
                     var s = kv.Value;
-                    if (!s.Favorite && s.LastPlayed == 0 && s.TotalSeconds == 0 && !s.Hidden && s.Title == null && s.Res == null && !s.Cleared) continue;
+                    if (!s.Favorite && s.LastPlayed == 0 && s.TotalSeconds == 0 && !s.Hidden && s.Title == null && s.Res == null && !s.Cleared && s.Lang == 0) continue;
                     sb.Append(kv.Key).Append('|').Append(s.Favorite ? "1" : "0").Append('|')
                       .Append(s.LastPlayed).Append('|').Append(s.TotalSeconds).Append('|').Append(s.Hidden ? "1" : "0")
-                      .Append('|').Append((s.Title ?? "").Replace("|", "\u2502").Replace("\n", " ")).Append('|').Append(s.Res ?? "").Append('|').Append(s.Cleared ? "1" : "0").AppendLine();
+                      .Append('|').Append((s.Title ?? "").Replace("|", "\u2502").Replace("\n", " ")).Append('|').Append(s.Res ?? "").Append('|').Append(s.Cleared ? "1" : "0")
+                      .Append('|').Append((s.Sig ?? "").Replace("|", "\u2502")).Append('|').Append(s.FolderName ?? "").Append('|').Append(s.Lang).AppendLine();
                 }
                 File.WriteAllText(FilePath, sb.ToString(), new UTF8Encoding(false));
             }

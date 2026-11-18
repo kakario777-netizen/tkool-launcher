@@ -126,6 +126,8 @@ namespace TkoolLauncher
 
         /// <summary>게임 중 홈 버튼(가이드 버튼, 또는 보기+메뉴 동시)</summary>
         public static Action Home;
+        public static Action DoubleY;   // 게임 중 Y 빠르게 두 번 (표지 직접 찍기)
+        static int lastY;
 
         // ── 상태 ──
         public static bool MapKeys;         // 그 게임에 키보드 변환을 할지
@@ -205,8 +207,13 @@ namespace TkoolLauncher
                     Home?.Invoke();
                     return;
                 }
+                if (DoubleY != null && (fresh & Pad.Y) != 0)
+                {
+                    int now = Environment.TickCount;
+                    if (now - lastY < 450) { lastY = 0; DoubleY(); } else lastY = now;
+                }
                 if (MouseMode) { ReleaseGameKeys(); HandleMouse(cur, old); timer.Interval = 16; }
-                else if (MapKeys && GameIsForeground()) HandleGame(cur & ~blocked);
+                else if (MapKeys && GameIsForeground()) HandleGame(cur & ~blocked & (DoubleY != null ? ~Pad.Y : ~Pad.None));   // 표지 찍는 동안 Y는 게임에 안 보냄
                 else ReleaseGameKeys();
             }
         }

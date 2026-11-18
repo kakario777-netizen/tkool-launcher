@@ -48,7 +48,7 @@ namespace TkoolLauncher
         /// <summary>게임 켠 뒤 불러줌: 필요할 때만 몇 번 시도</summary>
         public static void Watch(ShellForm shell, GameInfo g)
         {
-            bool needCover = CoverArt.Needs(g) && !File.Exists(CoverArt.AutoShotPath(g));
+            bool needCover = false;   // 표지는 아무 화면이나 자동으로 찍지 않음 — 사용자가 직접 (Y 두 번)
             bool needName = IsGenericTitle(g, g.Title) || g.Title == Path.GetFileName(g.Folder);
             if (!needCover && !needName) return;
             int tries = 0;
@@ -179,7 +179,9 @@ namespace TkoolLauncher
                     // 화면 확대 중이면 확대된 전체 화면을 찍음
                     var sc = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
                     bmp = new Bitmap(sc.Width, sc.Height);
-                    using (var gr = Graphics.FromImage(bmp)) gr.CopyFromScreen(sc.Location, Point.Empty, sc.Size);
+                    OverlayTip.HideAll(true);
+                    try { using (var gr = Graphics.FromImage(bmp)) gr.CopyFromScreen(sc.Location, Point.Empty, sc.Size); }
+                    finally { OverlayTip.HideAll(false); }
                 }
                 else
                 {
@@ -196,7 +198,9 @@ namespace TkoolLauncher
                         {
                             var p = new POINT();
                             ClientToScreen(w, ref p);
-                            gr.CopyFromScreen(p.X, p.Y, 0, 0, new Size(cw, ch));
+                            OverlayTip.HideAll(true);   // 안내 글이 같이 찍히지 않게
+                            try { gr.CopyFromScreen(p.X, p.Y, 0, 0, new Size(cw, ch)); }
+                            finally { OverlayTip.HideAll(false); }
                         }
                     }
                 }

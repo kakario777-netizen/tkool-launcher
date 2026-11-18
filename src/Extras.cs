@@ -49,6 +49,17 @@ namespace TkoolLauncher
         protected override CreateParams CreateParams { get { var cp = base.CreateParams; cp.ExStyle |= 0x80 | 0x08000000 | 0x20 | 0x80000; return cp; } }
         protected override bool ShowWithoutActivation => true;
         public void SetText(string t) { text = t; Invalidate(); }
+
+        // 화면을 찍을 때 안내 글이 같이 찍히지 않게 잠깐 숨기기 (다른 스레드에서도 부를 수 있게 창 핸들로)
+        static readonly System.Collections.Generic.List<IntPtr> all = new System.Collections.Generic.List<IntPtr>();
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
+        protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); lock (all) all.Add(Handle); }
+        protected override void OnHandleDestroyed(EventArgs e) { lock (all) all.Remove(Handle); base.OnHandleDestroyed(e); }
+        public static void HideAll(bool hide)
+        {
+            lock (all) foreach (var h in all) ShowWindow(h, hide ? 0 : 4);
+            if (hide) System.Threading.Thread.Sleep(120);   // 화면에서 사라질 시간
+        }
         protected override void OnPaint(PaintEventArgs e)
         {
             e.Graphics.Clear(BackColor);

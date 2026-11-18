@@ -42,7 +42,8 @@ namespace TkoolLauncher
         public static bool GyroInvertX, GyroInvertY;
         public static int Tdp;          // 0 = 기기 기본
         public static int Fan = -1;     // -1 = 자동
-        public static string LibStartTab = "즐겨찾기";   // 라이브러리를 열면 처음 보일 탭
+        public static string LibStartTab = "즐겨찾기";
+        public static string ChipOrder = "";   // 쯔꾸르 분류 칸 순서 (쉼표, 앞에 - 는 숨김)   // 라이브러리를 열면 처음 보일 탭
         public static int PerfMode = -1; // 성능 모드 0 저소음 1 균형 2 고성능 3 직접 (-1 = 처음, 직접으로 취급)
         public static bool LedSet, LedOn = true;
         public static int LedR = 255, LedG = 255, LedB = 255, LedBright = 60;
@@ -81,6 +82,7 @@ namespace TkoolLauncher
                     else if (key == "OvOn") OvOn = val == "1";
                     else if (key == "PerfMode") int.TryParse(val, out PerfMode);
                     else if (key == "LibStartTab") LibStartTab = val;
+                    else if (key == "ChipOrder") ChipOrder = val;
                     else if (key == "OvX") float.TryParse(val, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out OvX);
                     else if (key == "OvY") float.TryParse(val, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out OvY);
                     else if (key == "AdminTaskExe") AdminTaskExe = val;
@@ -142,7 +144,7 @@ namespace TkoolLauncher
                 sb.AppendLine("HardwareControl=" + (HardwareControl ? "1" : "0"));
                 sb.AppendLine("OvStyle=" + OvStyle); sb.AppendLine("OvPos=" + OvPos); sb.AppendLine("OvSize=" + OvSize);
                 sb.AppendLine("OvColor=" + OvColor); sb.AppendLine("OvBg=" + OvBg); sb.AppendLine("OvText=" + OvText); sb.AppendLine("OvItems=" + OvItems);
-                sb.AppendLine("OvMargin=" + OvMargin); sb.AppendLine("OvOn=" + (OvOn ? "1" : "0")); sb.AppendLine("PerfMode=" + PerfMode); sb.AppendLine("LibStartTab=" + LibStartTab);
+                sb.AppendLine("OvMargin=" + OvMargin); sb.AppendLine("OvOn=" + (OvOn ? "1" : "0")); sb.AppendLine("PerfMode=" + PerfMode); sb.AppendLine("LibStartTab=" + LibStartTab); sb.AppendLine("ChipOrder=" + ChipOrder);
                 sb.AppendLine("OvX=" + OvX.ToString(System.Globalization.CultureInfo.InvariantCulture)); sb.AppendLine("OvY=" + OvY.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 sb.AppendLine("AdminTaskExe=" + AdminTaskExe);
                 sb.AppendLine("Tdp=" + Tdp);

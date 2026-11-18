@@ -42,6 +42,96 @@ namespace TkoolLauncher
         public static Action Changed;
         const int MaxInMemory = 30;
 
+        // ── 작은 미리보기(썸네일): 목록용. 작은 JPG를 전부 메모리에 들고 있다가 바로 풀어서 그림 → 빨리 넘겨도 빈칸이 안 보임 ──
+        static readonly Dictionary<string, byte[]> thumbs = new Dictionary<string, byte[]>();
+        static readonly Dictionary<string, Bitmap> thumbBmp = new Dictionary<string, Bitmap>();
+        static readonly LinkedList<string> thumbLru = new LinkedList<string>();
+        public static readonly HashSet<string> NoHero = new HashSet<string>();   // 타이틀 그림이 없는 게임 (만들어 봤더니 없음)
+
+        /// <summary>목록 카드용 작은 그림. 없으면 null (만들기는 예약)</summary>
+        public static Bitmap Thumb(GameInfo g)
+        {
+            string id = GameData.IdOf(g);
+            byte[] b;
+            lock (lk)
+            {
+                if (thumbBmp.TryGetValue(id, out Bitmap bm)) { thumbLru.Remove(id); thumbLru.AddFirst(id); return bm; }
+                thumbs.TryGetValue(id, out b);
+            }
+            if (b == null) { if (!HasNoHero(g)) Get(g); return null; }
+            Bitmap bmp;
+            try { using (var ms = new MemoryStream(b)) using (var tmp = Image.FromStream(ms)) bmp = new Bitmap(tmp); }
+            catch { return null; }
+            lock (lk)
+            {
+                thumbBmp[id] = bmp; thumbLru.AddFirst(id);
+                while (thumbLru.Count > 160) { string old = thumbLru.Last.Value; thumbLru.RemoveLast(); if (thumbBmp.TryGetValue(old, out Bitmap ob)) { thumbBmp.Remove(old); ob.Dispose(); } }
+            }
+            return bmp;
+        }
+
+        public static bool HasNoHero(GameInfo g) { lock (lk) return NoHero.Contains(GameData.IdOf(g)); }
+
+        /// <summary>목록이 바뀌면 뒤에서 썸네일 파일을 미리 다 읽어 둠 (없는 건 천천히 만듦)</summary>
+        public static void Preload(List<GameInfo> games)
+        {
+            var list = games.ToList();
+            var th = new Thread(() =>
+            {
+                foreach (var g in list)
+                {
+                    try
+                    {
+                        string id = GameData.IdOf(g);
+                        lock (lk) if (thumbs.ContainsKey(id) || NoHero.Contains(id)) continue;
+                        string t = Path.Combine(CacheDir, id + "_t.jpg");
+                        if (File.Exists(t)) { var b = File.ReadAllBytes(t); lock (lk) thumbs[id] = b; }
+                        else if (File.Exists(Path.Combine(CacheDir, id + "_nohero"))) { lock (lk) NoHero.Add(id); }
+                        else Get(g);   // 처음 보는 게임: 만들기 예약
+                    }
+                    catch { }
+                }
+                try { ui?.BeginInvoke(new Action(() => Changed?.Invoke())); } catch { }
+            }) { IsBackground = true, Priority = ThreadPriority.BelowNormal };
+            th.Start();
+        }
+
+        static void MakeThumb(string id, GameArt art)
+        {
+            try
+            {
+                string t = Path.Combine(CacheDir, id + "_t.jpg"), nh = Path.Combine(CacheDir, id + "_nohero");
+                if (art.Hero == null)
+                {
+                    lock (lk) NoHero.Add(id);
+                    try { File.WriteAllText(nh, ""); } catch { }
+                    return;
+                }
+                lock (lk) if (thumbs.ContainsKey(id)) return;
+                var h = art.Hero;
+                float k = Math.Min(1f, Math.Min(400f / h.Width, 300f / h.Height));
+                int w = Math.Max(1, (int)(h.Width * k)), hh = Math.Max(1, (int)(h.Height * k));
+                byte[] bytes;
+                using (var small = new Bitmap(w, hh, PixelFormat.Format24bppRgb))
+                {
+                    using (var gr = Graphics.FromImage(small))
+                    {
+                        gr.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                        gr.PixelOffsetMode = PixelOffsetMode.Half;
+                        gr.DrawImage(h, 0, 0, w, hh);
+                    }
+                    var enc = ImageCodecInfo.GetImageEncoders().First(c => c.FormatID == ImageFormat.Jpeg.Guid);
+                    var ps = new EncoderParameters(1);
+                    ps.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 85L);
+                    using (var ms = new MemoryStream()) { small.Save(ms, enc, ps); bytes = ms.ToArray(); }
+                }
+                try { Directory.CreateDirectory(CacheDir); File.WriteAllBytes(t, bytes); } catch { }
+                lock (lk) { thumbs[id] = bytes; NoHero.Remove(id); }
+                try { File.Delete(nh); } catch { }
+            }
+            catch { }
+        }
+
         public static void Init(Control uiControl)
         {
             ui = uiControl;
@@ -70,6 +160,16 @@ namespace TkoolLauncher
             return null;
         }
 
+        /// <summary>직접·자동으로 찍은 표지 지우기 → 기본 그림으로</summary>
+        public static void DeleteCover(GameInfo g)
+        {
+            string name = Path.GetFileName(g.Folder);
+            foreach (var ext in new[] { ".png", ".jpg", ".jpeg", ".auto.png" })
+                try { File.Delete(Path.Combine(CoverDir, name + ext)); } catch { }
+            Invalidate(g);
+            try { ui?.BeginInvoke(new Action(() => Changed?.Invoke())); } catch { }
+        }
+
         /// <summary>표지를 바꿨을 때 다시 만들기</summary>
         public static void Invalidate(GameInfo g)
         {
@@ -78,8 +178,13 @@ namespace TkoolLauncher
             {
                 if (mem.TryGetValue(id, out GameArt a)) { mem.Remove(id); lru.Remove(id); Dispose(a); }
             }
-            foreach (var suf in new[] { "_c.png", "_h.png", "_b.png", "_n.png" })
+            foreach (var suf in new[] { "_c.png", "_h.png", "_b.png", "_n.png", "_t.jpg", "_nohero" })
                 try { File.Delete(Path.Combine(CacheDir, id + suf)); } catch { }
+            lock (lk)
+            {
+                thumbs.Remove(id); NoHero.Remove(id);
+                if (thumbBmp.TryGetValue(id, out Bitmap tb)) { thumbBmp.Remove(id); thumbLru.Remove(id); }
+            }
         }
 
         static void Dispose(GameArt a)
@@ -100,6 +205,7 @@ namespace TkoolLauncher
                 GameArt art = null;
                 try { art = Build(g); } catch { }
                 string id = GameData.IdOf(g);
+                if (art != null) MakeThumb(id, art);
                 lock (lk)
                 {
                     pending.Remove(id);

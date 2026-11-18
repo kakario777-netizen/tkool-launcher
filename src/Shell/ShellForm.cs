@@ -49,7 +49,7 @@ namespace TkoolLauncher
 
         const int TopH = 44, BottomH = 52;
 
-        Screen Cur => stack[stack.Count - 1];
+        public Screen Cur => stack[stack.Count - 1];
 
         public ShellForm()
         {
@@ -231,6 +231,7 @@ namespace TkoolLauncher
         /// <summary>짧게: 라이브러리가 앞에 있으면 라이브러리를 내림, 아니면(게임·바탕화면) 오른쪽 팝업</summary>
         public void AyaAction()
         {
+            if (coverFor != null) { EndManualCover(); ShowToast("표지 찍기를 그만뒀어요", 2000); }
             if (GameCapture.Finding) { GameCapture.Cancel = true; return; }
             if (PopupOpen) { ClosePopup(); return; }
             if (LauncherFront)
@@ -925,6 +926,7 @@ namespace TkoolLauncher
         {
             base.OnMouseDown(e);
             down = e.Location; isDown = true; dragging = false;
+            try { Cur.DownAt = e.Location; } catch { }
         }
 
         protected override void OnMouseMove(MouseEventArgs e)
@@ -1050,6 +1052,7 @@ namespace TkoolLauncher
                 playTimer?.Dispose(); playTimer = null;
                 Log.Info("게임 끝: " + g.Title + " (이번 " + (int)(DateTime.Now - sessionStart).TotalMinutes + "분, 총 " + st.TotalSeconds / 60 + "분)");
                 playStat = null; PlayingGame = null; TrackedExternal = false; GameProblem = null;
+                if (coverFor != null) EndManualCover();
                 CameFromGame = false;
                 quick.Open = false; quick.T = 0;
                 if (PopupOpen) ClosePopup(false);
@@ -1090,9 +1093,11 @@ namespace TkoolLauncher
                 var g = PlayingGame;
                 string dir = g != null ? (g.InstallDir ?? g.Folder) : null;
                 bool front = LauncherFront;
-                IntPtr fg = GetForegroundWindow();
+                IntPtr fg = IntPtr.Zero;
+                try { fg = GetForegroundWindow(); } catch { healthBusy = false; return; }
                 var lib = Games;
                 bool tk = g != null && g.IsTkool;
+                if (lib == null) { healthBusy = false; return; }
                 Task.Run(() =>
                 {
                     GameInfo attach = null; string problem = null; bool hung = false;
@@ -1162,6 +1167,49 @@ namespace TkoolLauncher
             healthTimer.Start();
         }
 
+        // ───────── 표지 직접 찍기: 게임을 켜고, 원하는 화면에서 Y를 빠르게 두 번 ─────────
+        GameInfo coverFor;
+        OverlayTip coverTip;
+
+        public void ManualCover(GameInfo g)
+        {
+            if (GameWatch.Running && PlayingGame != g) { ShowToast("다른 게임을 끈 다음에 해 주세요", 3000); return; }
+            coverFor = g;
+            coverTip?.Close();
+            coverTip = new OverlayTip();
+            coverTip.SetText("표지로 쓸 화면에서 Y를 빠르게 두 번 누르세요  ·  그만두기: AYA 버튼");
+            coverTip.Show();
+            Gamepad.DoubleY = () => { try { BeginInvoke(new Action(TakeManualCover)); } catch { } };
+            Log.Info("표지 직접 찍기 시작: " + g.Title);
+            if (!GameWatch.Running) Launch(g);
+            else ReturnToGame();
+        }
+
+        void TakeManualCover()
+        {
+            var g = coverFor;
+            if (g == null) return;
+            bool ok = false;
+            try { ok = GameCapture.ShotNow(g); } catch (Exception ex) { Log.Error("표지 찍기", ex); }
+            if (!ok) { coverTip?.SetText("찍지 못했어요 — 게임 화면이 앞에 있을 때 다시 Y 두 번"); return; }
+            Log.Info("표지 직접 찍음: " + g.Title);
+            EndManualCover("표지로 저장했어요");
+            RefreshLists();
+        }
+
+        public void EndManualCover(string msg = null)
+        {
+            Gamepad.DoubleY = null;
+            coverFor = null;
+            var tip = coverTip; coverTip = null;
+            if (tip == null) return;
+            if (msg == null) { tip.Close(); return; }
+            tip.SetText(msg);
+            var t = new Timer { Interval = 1800 };
+            t.Tick += (o, e) => { t.Stop(); t.Dispose(); tip.Close(); };
+            t.Start();
+        }
+
         /// <summary>표지·이름 없는 게임을 하나씩 잠깐 켜서 채우기</summary>
         public void FindCovers(List<GameInfo> only = null)
         {
@@ -1187,6 +1235,7 @@ namespace TkoolLauncher
         public void SetGames(List<GameInfo> found)
         {
             GameDoctor.Library = found;
+            GameData.Reconcile(found);   // 폴더를 옮기거나 이름을 바꿔도 예전 기록 그대로
             // 게임 창 제목에서 가져와 저장해 둔 진짜 이름 적용
             foreach (var g in found)
             {
@@ -1204,6 +1253,7 @@ namespace TkoolLauncher
                 }
             }
             Games = found;
+            CoverArt.Preload(found);   // 목록 썸네일을 미리 메모리에
             LayoutScreens();
             foreach (var s in stack) s.OnGamesChanged();
             FocusChanged();
