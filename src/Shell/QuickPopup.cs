@@ -46,7 +46,16 @@ namespace TkoolLauncher
 
         protected override CreateParams CreateParams
         {
-            get { var cp = base.CreateParams; cp.ExStyle |= 0x80; return cp; } // 작업 표시줄·Alt+Tab에 안 나오게
+            // 작업 표시줄·Alt+Tab에 안 나오고(0x80), 맨 위(0x8), 눌러도 포커스를 안 가져감(0x08000000) — 게임은 계속 앞 창
+            get { var cp = base.CreateParams; cp.ExStyle |= 0x80 | 0x8 | 0x08000000; return cp; }
+        }
+
+        protected override bool ShowWithoutActivation => true;
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == 0x21) { m.Result = (IntPtr)3; return; }   // WM_MOUSEACTIVATE → MA_NOACTIVATE
+            base.WndProc(ref m);
         }
 
         public void Open()
@@ -54,10 +63,27 @@ namespace TkoolLauncher
             qp.Show();       // 상태(밝기·소리 등) 다시 읽기
             qp.Open = true; qp.T = 1f;
             Show();
+            SetWindowPos(Handle, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010 | 0x0040);   // 맨 위, 포커스 안 뺏음
             slide.Start();
-            refresh.Tick += (o, e) => { if (Visible) Invalidate(); };
+            refresh.Tick -= RefreshTick; refresh.Tick += RefreshTick;
             refresh.Start();
-            Activate();
+            outside.Tick -= OutsideTick; outside.Tick += OutsideTick;
+            outside.Start();
+        }
+
+        void RefreshTick(object o, EventArgs e) { if (Visible) Invalidate(); }
+
+        // 포커스를 안 가져가니 '바깥 누르면 닫기'는 직접 봄: 팝업 밖(게임 쪽)을 누르면 닫음
+        readonly Timer outside = new Timer { Interval = 60 };
+        bool wasDown;
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern short GetAsyncKeyState(int vk);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+        void OutsideTick(object o, EventArgs e)
+        {
+            if (!Visible) { outside.Stop(); return; }
+            bool down = (GetAsyncKeyState(0x01) & 0x8000) != 0;
+            if (down && !wasDown && !Bounds.Contains(Cursor.Position) && !shell.PopupClosing) shell.ClosePopup(false);
+            wasDown = down;
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -132,11 +158,10 @@ namespace TkoolLauncher
             if (Visible) Invalidate();
         }
 
-        // 바깥(게임 쪽)을 누르면 닫힘
-        protected override void OnDeactivate(EventArgs e)
+        protected override void OnVisibleChanged(EventArgs e)
         {
-            base.OnDeactivate(e);
-            if (Visible && !shell.PopupClosing) BeginInvoke(new Action(() => { if (Visible) shell.ClosePopup(false); }));
+            base.OnVisibleChanged(e);
+            if (!Visible) { outside.Stop(); refresh.Stop(); }
         }
     }
 }

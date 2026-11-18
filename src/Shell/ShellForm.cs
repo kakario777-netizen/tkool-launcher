@@ -210,18 +210,43 @@ namespace TkoolLauncher
             scaleWas = Scaler.Mode;
             if (scaleWas != 0) Scaler.Stop();   // 확대 중이면 팝업까지 커지니 잠시 풂
             if (popup == null || popup.IsDisposed) popup = new QuickPopup(this);
+            // 게임은 계속 앞 창(포커스 그대로) — 팝업은 위에 떠서 패드만 받음, 그동안 게임엔 버튼이 안 감
+            popupMapWas = Gamepad.MapKeys; Gamepad.MapKeys = false;
+            popupPadOffWas = VirtualPad.ControllerOff;
+            if (VirtualPad.Running) VirtualPad.ControllerOff = true;
+            Gamepad.Overlay = popup;
             popup.Open();
-            ForceForeground(popup.Handle);
         }
 
         /// <summary>팝업 닫기. backToGame이면 원래 앞에 있던 게임으로 포커스를 돌려줌</summary>
+        bool popupMapWas, popupPadOffWas;
+
+        /// <summary>전체 화면 ↔ 창 (Alt+Enter) 뒤 창이 되면 화면 가운데로</summary>
+        public void ToggleFullscreen()
+        {
+            IntPtr gw = gameHwnd != IntPtr.Zero ? gameHwnd : GetForegroundWindow();
+            SendToGame(() => KeySender.Combo(KeySender.Alt, KeySender.Enter));
+            int tries = 0;
+            var t = new Timer { Interval = 500 };
+            t.Tick += (s, e) =>
+            {
+                if (++tries >= 5) { t.Stop(); t.Dispose(); }
+                if (tries == 2 || tries == 5) CenterGameWin(gw, true);   // 창 크기가 자리 잡을 때까지 두 번
+            };
+            t.Start();
+        }
+
         public void ClosePopup(bool backToGame = true)
         {
             if (popup == null || !popup.Visible) return;
             PopupClosing = true;
             popup.Hide();
             PopupClosing = false;
-            if (backToGame && gameHwnd != IntPtr.Zero && gameHwnd != Handle)
+            Gamepad.Overlay = null;
+            Gamepad.MapKeys = popupMapWas && GameWatch.Running;
+            VirtualPad.ControllerOff = popupPadOffWas;
+            // 팝업이 포커스를 안 가져가니 보통은 게임이 그대로 앞 — 혹시 다른 창이 앞이면 게임으로
+            if (backToGame && gameHwnd != IntPtr.Zero && gameHwnd != Handle && GetForegroundWindow() != gameHwnd)
             {
                 ShowWindow(gameHwnd, 9);
                 ForceForeground(gameHwnd);
@@ -279,6 +304,7 @@ namespace TkoolLauncher
             if (PopupOpen) { ClosePopup(); return; }
             // 런처가 앞에 없으면(게임·바탕화면 등) 런처를 띄우지 않고 오른쪽 팝업만
             if (Form.ActiveForm == null || WindowState == FormWindowState.Minimized) { ShowPopup(); return; }
+            if (GameWatch.Running && curtain) { ShowPopup(); return; }   // 게임 중(검은 판 뒤)엔 언제나 게임 위 팝업
             if (GameWatch.Running && (WindowState == FormWindowState.Minimized || Form.ActiveForm == null))
             {
                 gameHwnd = GetForegroundWindow();
@@ -848,12 +874,12 @@ namespace TkoolLauncher
         [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool IsZoomed(IntPtr h);
 
         /// <summary>창 모드 게임은 검은 판 한가운데로 (꽉 찬 창·전체 화면은 그대로)</summary>
-        void CenterGameWin(IntPtr h)
+        void CenterGameWin(IntPtr h, bool any = false)
         {
             try
             {
-                if (h == IntPtr.Zero || IsZoomed(h) || PlayingGame == null) return;
-                if (GameData.Get(PlayingGame).WinMode != 0) return;
+                if (h == IntPtr.Zero || IsZoomed(h)) return;
+                if (!any && (PlayingGame == null || GameData.Get(PlayingGame).WinMode != 0)) return;
                 WRECT wr; if (!GetWindowRect(h, out wr)) return;
                 var sb = System.Windows.Forms.Screen.FromHandle(h).Bounds;
                 int w = wr.R - wr.L, ht = wr.B - wr.T;

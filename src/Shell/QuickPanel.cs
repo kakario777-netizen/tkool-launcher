@@ -322,7 +322,8 @@ namespace TkoolLauncher
                                Change = v => Gamepad.MouseMode = v == 1 });
             rows.Add(new Row { Kind = Kind.Action, Title = "미니 모드", Sub = "런처를 작은 동그라미로 줄여요", Act = Shell.EnterMini });
             rows.Add(new Row { Kind = Kind.Action, Title = "ESC 보내기", Act = () => Shell.SendToGame(() => KeySender.Combo(KeySender.Esc)) });
-            rows.Add(new Row { Kind = Kind.Action, Title = "전체 화면 전환", Act = () => Shell.SendToGame(() => KeySender.Combo(KeySender.Alt, KeySender.Enter)) });
+            if (!(Popup && GameWatch.Running))   // 게임 위 팝업에선 위쪽 큰 단추로 따로 뺌
+                rows.Add(new Row { Kind = Kind.Action, Title = "전체 화면 전환", Act = () => Shell.SendToGame(() => KeySender.Combo(KeySender.Alt, KeySender.Enter)) });
             rows.Add(new Row { Kind = Kind.Action, Title = "스크린샷", Sub = "사진 › 스크린샷 폴더에 저장돼요", Act = () => Shell.SendToGame(() => KeySender.Combo(KeySender.Win, KeySender.PrtSc)) });
             rows.Add(new Row { Kind = Kind.Action, Title = "화상 키보드", Act = () => Shell.SendToGame(() => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("osk.exe") { UseShellExecute = true })) });
             rows.Add(new Row { Kind = Kind.Action, Title = "작업 전환", Act = () => Shell.SendToGame(() => KeySender.Combo(KeySender.Win, KeySender.Tab)) });
@@ -471,6 +472,9 @@ namespace TkoolLauncher
                 var r = rows.FirstOrDefault(x => x.Title.StartsWith(t) && x.Kind == Kind.Toggle);
                 if (r != null) tiles.Add(r);
             }
+            // 게임 중 팝업: 타일 아래 줄 전체 폭 "전체 화면 ↔ 창" 단추 (창으로 돌아오면 화면 가운데로)
+            if (Popup && GameWatch.Running)
+                tiles.Add(new Row { Kind = Kind.Action, Title = "전체 화면 ↔ 창 모드", Act = () => Shell.ToggleFullscreen() });
             if (focus >= view.Count) focus = Math.Max(0, view.Count - 1);
             if (tileFocus >= tiles.Count) tileFocus = Math.Max(0, tiles.Count - 1);
         }
@@ -514,10 +518,23 @@ namespace TkoolLauncher
             // 두 줄 × 3개
             int ty = S(80), tg = S(8), th1 = S(58);
             int tw = (w - S(32) - tg * 2) / 3;
-            int trows = (tiles.Count + 2) / 3;
+            int nToggle = tiles.Count(t => t.Kind == Kind.Toggle);
+            int trows = (nToggle + 2) / 3;
             int th = trows * th1 + Math.Max(0, trows - 1) * tg;
+            int bigH = S(48);
+            if (tiles.Count > nToggle) th += tg + bigH;
             for (int i = 0; i < tiles.Count; i++)
             {
+                if (tiles[i].Kind != Kind.Toggle)
+                {
+                    // 전체 폭 큰 단추
+                    var br = new Rectangle(x + S(16), ty + trows * (th1 + tg), w - S(32), bigH);
+                    tileRects.Add(br);
+                    Draw.Fill(g, br, S(8), Color.FromArgb(255, 52, 62, 78));
+                    Draw.Text(g, tiles[i].Title, Draw.BodyBold, br, Color.White, Draw.Center);
+                    if (zone == 0 && i == tileFocus) Draw.Ring(g, Rectangle.Inflate(br, S(2), S(2)), S(9), Theme.Focus, S(2.5f));
+                    continue;
+                }
                 var r = new Rectangle(x + S(16) + (i % 3) * (tw + tg), ty + (i / 3) * (th1 + tg), tw, th1);
                 tileRects.Add(r);
                 bool on = tiles[i].On;
@@ -753,7 +770,7 @@ namespace TkoolLauncher
                     case Pad.Left: if (tileFocus % 3 > 0) tileFocus--; break;
                     case Pad.Right: if (tileFocus % 3 < 2 && tileFocus + 1 < tiles.Count) tileFocus++; break;
                     case Pad.Up: if (tileFocus >= 3) tileFocus -= 3; break;
-                    case Pad.Down: if (tileFocus + 3 < tiles.Count) tileFocus += 3; else if (tileFocus < 3 && tiles.Count > 3) tileFocus = tiles.Count - 1; else zone = 1; break;
+                    case Pad.Down: if (tileFocus + 3 < tiles.Count) tileFocus += 3; else if (tileFocus != tiles.Count - 1 && tileFocus / 3 < (tiles.Count - 1) / 3) tileFocus = tiles.Count - 1; else zone = 1; break;
                     case Pad.A: if (tileFocus < tiles.Count) Activate(tiles[tileFocus]); break;
                 }
                 Redraw();

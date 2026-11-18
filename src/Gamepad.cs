@@ -152,6 +152,9 @@ namespace TkoolLauncher
             timer.Start();
         }
 
+        /// <summary>포커스를 뺏지 않는 게임 위 팝업 (열려 있는 동안 패드는 여기로, 게임엔 안 감)</summary>
+        public static IPadTarget Overlay;
+
         static bool GameRunning
         {
             get
@@ -162,7 +165,7 @@ namespace TkoolLauncher
 
         static void Tick(object sender, EventArgs e)
         {
-            var target = Form.ActiveForm as IPadTarget;
+            var target = Overlay ?? Form.ActiveForm as IPadTarget;   // 게임 위 팝업은 포커스 없이 패드만 받음
             bool game = GameRunning;
 
             if (target == null && !game && !MouseMode)
@@ -259,7 +262,7 @@ namespace TkoolLauncher
             // 방향 꾹 누르면 연속 이동
             if (repeatDir != Pad.None)
             {
-                if ((cur & repeatDir) == 0 || Form.ActiveForm as IPadTarget != target) repeatDir = Pad.None;
+                if ((cur & repeatDir) == 0 || (Overlay ?? Form.ActiveForm as IPadTarget) != target) repeatDir = Pad.None;
                 else if (now - repeatAt >= 0)
                 {
                     target.OnPad(repeatDir);
