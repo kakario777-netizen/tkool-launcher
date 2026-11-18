@@ -241,6 +241,8 @@ namespace TkoolLauncher
             var l = new List<KeyValuePair<string, Action>>();
             int n = DupFinder.Groups.Count;
             if (n > 0) l.Add(new KeyValuePair<string, Action>("중복 확인 " + n, () => Shell.Push(new DupScreen())));
+            int pc = GameCapture.PendingCount(Shell.Games);
+            if (pc > 0) l.Add(new KeyValuePair<string, Action>("표지 확인 " + pc, () => Shell.Push(new CoverReviewScreen())));
             l.Add(new KeyValuePair<string, Action>("정리 모드", () => Shell.Push(new TidyScreen())));
             l.Add(new KeyValuePair<string, Action>("정렬 · " + SortNames[sortMode], NextSort));
             return l;
@@ -1673,8 +1675,10 @@ namespace TkoolLauncher
                 new Row { Title = "오류 기록 보기", Sub = "내 문서\\쯔꾸르 런처\\logs — Claude에게 보여주면 고칠 수 있어요",
                           Value = System.IO.File.Exists(Log.ErrPath) ? "있음" : "없음",
                           Act = () => ErrorPopup.Show2("최근 오류 기록", Log.Tail(900) is string t && t.Length > 0 ? t : "오류 기록이 없어요") },
-                new Row { Title = "표지·이름 한 번에 찾기", Sub = "표지나 이름이 빠진 게임을 하나씩 15초씩 켜서 타이틀 화면을 찍어요 (홈 버튼으로 멈춤)",
+                new Row { Title = "표지·이름 한 번에 찾기", Sub = "표지나 이름이 빠진 게임을 하나씩 켜서 타이틀 화면을 알아서 찾아 찍어요 (글만 있는 화면은 넘김, 홈 버튼으로 멈춤)",
                           Value = GameCapture.Missing(Shell.Games).Count + "개", Act = () => Shell.FindCovers() },
+                new Row { Title = "찍은 표지 확인", Sub = "한 번에 찾기로 찍은 표지를 늘어놓고, 아닌 것만 취소한 뒤 적용해요",
+                          Value = GameCapture.Pending(Shell.Games).Count + "개", Act = () => Shell.Push(new CoverReviewScreen()) },
                 new Row { Title = "표지 없는 게임 자동 표지", Toggle = Settings.AutoCover, Sub = "처음 켤 때 타이틀 화면을 찍어 표지로, 이름이 'Game'이면 창 제목으로 바꿔요",
                           Act = () => { Settings.AutoCover = !Settings.AutoCover; Settings.Save(); } },
                 new Row { Title = "쯔꾸르 게임 자동 확대", Toggle = Settings.AutoScaleTkool, Sub = "2000~VX Ace 게임을 켜면 작은 창을 도트 선명하게 꽉 채워요",

@@ -23,7 +23,8 @@ namespace TkoolLauncher
             string id = GameData.IdOf(g);
             lock (details)
             {
-                if (details.TryGetValue(id, out var d)) return d;
+                DupFinder.Detail d;
+                if (details.TryGetValue(id, out d)) return d;
                 details[id] = null;
             }
             Task.Run(() => { var v = DupFinder.GetDetail(g); lock (details) details[id] = v; try { Shell.BeginInvoke(new Action(Shell.Invalidate)); } catch { } });

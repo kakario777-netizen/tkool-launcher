@@ -1299,7 +1299,9 @@ namespace TkoolLauncher
                     Bring();
                     Activate();
                     RefreshLists();
-                    ShowToast(list.Count + "개 중 " + n + "개의 표지·이름을 채웠어요", 5000);
+                    int pend = GameCapture.Pending(Games).Count;
+                    if (pend > 0) { Push(new CoverReviewScreen()); ShowToast("찍은 표지 " + pend + "개 — 아닌 것만 눌러 취소하고 적용하세요", 5000); }
+                    else ShowToast(list.Count + "개 중 " + n + "개의 이름을 채웠어요", 5000);
                 })));
         }
 

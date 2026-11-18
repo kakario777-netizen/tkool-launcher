@@ -44,7 +44,7 @@
 - 빠른 설정 모양: AYASpace식 — 위 빠른 타일 2줄×3(와이파이·블투·비행기·음소거·성능 표시·마우스, 켜짐 글자 대신 스위치 모양), 줄 아래 미세 설명은 안 보임(Row.Keep — 성능 "지금 상태"·끝내기 확인만), 왼쪽 탭(성능·화면·소리연결·컨트롤러·조명·바로가기, LB/RB), 오른쪽 기능, 성능 탭 맨 위 팬·TDP. 바로가기는 2열 단추판.
 - 아이콘: app.ico (사용자가 준 네온 슬라이더·회로 그림).
 - AYA 버튼 팝업: Shell/QuickPopup.cs — 런처가 앞에 없으면(게임·바탕화면) 런처 전체 대신 오른쪽 좁은 맨 위 창(화면 가로 약 26%)에 QuickPanel(Popup=true) 표시, 닫으면 원래 창으로 포커스(Alt 눌러 SetForegroundWindow). 사용자는 AYASpace 완전 대용으로 씀.
-- 표지·이름 채우기: GameCapture.cs (게임 켜고 12초 뒤 PrintWindow 캡처 → covers\폴더.auto.png, 창 제목으로 이름 교체 → GameStat.Title, 설정의 "한 번에 찾기"는 하나씩 15초 켜고 끔). 소개 글: GameDesc.cs (스팀 상점 한국어 짧은 소개, 그 외 readme·説明書 txt).
+- 표지·이름 채우기: GameCapture.cs (창 제목으로 이름 교체 → GameStat.Title). 설정 "한 번에 찾기"(FindAll)는 하나씩 켜서 FindTitle: 0.5초마다 창을 찍어 Analyze(밝기·표준편차·채도·24×18 서명) — 까만 바탕 글만(TextOnly)이 1.5초 그대로면 Enter로 넘김(최대 8번), 그림 화면(Picture)이 2초 그대로면 타이틀, 40초 한도, 못 찾으면 처음 글 화면. 결과는 바로 적용 않고 covers\폴더.pending.png → CoverReviewScreen(4×3 쪽, 눌러서 취소, [적용]=이 쪽만 auto.png로·취소는 지움, [나중에]는 남김). 쯔꾸르 탭 "표지 확인 N"·설정 "찍은 표지 확인". 소개 글: GameDesc.cs (스팀 상점 한국어 짧은 소개, 그 외 readme·説明書 txt).
 - 진행 순서: 1) 폴더 검색·제목/버전 인식·목록 2) 스팀식 표지 화면·플레이 시간 3) 게임패드·전체 화면·일본어 환경 실행·RTP 확인 4) 상태 표시줄·빠른 설정판 5) 최소화 반복 감시.
 
 - 로딩 막: 게임 켤 때 런처를 최소화하지 않고 배경+게임 이름+"불러오는 중…"만 그린 꽉 찬 화면(ShellForm.ShowCurtain/PaintCurtain)을 게임 뒤에 둠, 게임 끝나면 "돌아가는 중…" 뒤 라이브러리.

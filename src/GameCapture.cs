@@ -95,8 +95,109 @@ namespace TkoolLauncher
         public static volatile bool Finding, Cancel;
 
         public static List<GameInfo> Missing(IEnumerable<GameInfo> games) =>
-            games.Where(g => (g.Kind == GameKind.Tkool || g.Kind == GameKind.Pc) && !GameData.Get(g).Hidden &&
+            games.Where(g => (g.Kind == GameKind.Tkool || g.Kind == GameKind.Pc) && !GameData.Get(g).Hidden && !File.Exists(PendingPath(g)) &&
                              ((CoverArt.Needs(g) && !File.Exists(CoverArt.AutoShotPath(g))) || IsGenericTitle(g, g.Title))).ToList();
+
+        /// <summary>찍었지만 아직 확인 안 한 표지 (covers\폴더.pending.png) — 표지 확인 화면에서 적용/취소</summary>
+        public static string PendingPath(GameInfo g) => Path.Combine(CoverArt.CoverDir, Path.GetFileName(g.Folder ?? "") + ".pending.png");
+        public static List<GameInfo> Pending(IEnumerable<GameInfo> games) => games.Where(g => g.Folder != null && File.Exists(PendingPath(g))).ToList();
+
+        static int pendCount; static long pendAt;
+        /// <summary>목록 화면용 (5초에 한 번만 셈)</summary>
+        public static int PendingCount(List<GameInfo> games)
+        {
+            if (Environment.TickCount - pendAt > 5000 || pendAt == 0) { pendAt = Environment.TickCount; try { pendCount = Pending(games).Count; } catch { } }
+            return pendCount;
+        }
+
+        public static void Accept(GameInfo g)
+        {
+            try
+            {
+                string auto = CoverArt.AutoShotPath(g);
+                if (File.Exists(auto)) File.Delete(auto);
+                File.Move(PendingPath(g), auto);
+                CoverArt.Invalidate(g);
+            }
+            catch (Exception ex) { Log.Error("표지 적용", ex); }
+            pendAt = 0;
+        }
+        public static void Reject(GameInfo g) { try { File.Delete(PendingPath(g)); } catch { } pendAt = 0; }
+
+        // ───────── 타이틀 화면 알아보기 ─────────
+        class Look { public double Mean, Sd, Color; public byte[] Sig; }
+
+        static Look Analyze(Bitmap b)
+        {
+            var lk = new Look { Sig = new byte[24 * 18] };
+            double sum = 0, sq = 0, col = 0; int n = 0;
+            for (int y = 0; y < 18; y++)
+                for (int x = 0; x < 24; x++)
+                {
+                    var c = b.GetPixel(Math.Min(b.Width - 1, b.Width * x / 24 + b.Width / 48), Math.Min(b.Height - 1, b.Height * y / 18 + b.Height / 36));
+                    double l = 0.3 * c.R + 0.59 * c.G + 0.11 * c.B;
+                    sum += l; sq += l * l; n++;
+                    col += Math.Max(c.R, Math.Max(c.G, c.B)) - Math.Min(c.R, Math.Min(c.G, c.B));
+                    lk.Sig[y * 24 + x] = (byte)l;
+                }
+            lk.Mean = sum / n; lk.Sd = Math.Sqrt(Math.Max(0, sq / n - lk.Mean * lk.Mean)); lk.Color = col / n;
+            return lk;
+        }
+
+        static double Diff(Look a, Look b)
+        {
+            if (a == null || b == null) return 999;
+            double d = 0;
+            for (int i = 0; i < a.Sig.Length; i++) d += Math.Abs(a.Sig[i] - b.Sig[i]);
+            return d / a.Sig.Length;
+        }
+
+        /// <summary>까만 바탕에 흰 글자만 있는 화면 (안내·경고·로고 글)</summary>
+        static bool TextOnly(Look l) => l.Mean < 45 && l.Color < 14 && l.Sd >= 10;
+        /// <summary>그림이 있는 화면 (타이틀 후보)</summary>
+        static bool Picture(Look l) => l.Sd >= 18 && (l.Color >= 16 || l.Mean >= 60);
+
+        /// <summary>게임 창을 0.5초마다 보며 타이틀 화면을 찾아 pending으로 저장. 글만 있는 화면은 Enter로 넘김</summary>
+        static bool FindTitle(GameInfo g, IntPtr w)
+        {
+            Look prev = null; int stable = 0, textStable = 0, presses = 0;
+            Bitmap best = null, firstText = null;   // 그림을 못 찾으면 처음 본 글 화면이라도 (어두운 타이틀일 수도)
+            try
+            {
+                for (int t = 0; t < 80 && !Cancel; t++)   // 최대 40초
+                {
+                    System.Threading.Thread.Sleep(500);
+                    using (var bmp = Grab(w))
+                    {
+                        if (bmp == null) continue;
+                        var lk = Analyze(bmp);
+                        bool same = Diff(lk, prev) < 3;
+                        prev = lk;
+                        if (lk.Sd < 10) { stable = textStable = 0; continue; }          // 검은 화면·로딩
+                        if (TextOnly(lk))
+                        {
+                            stable = 0;
+                            textStable = same ? textStable + 1 : 0;
+                            if (textStable >= 3 && presses < 8 && GetForegroundWindow() == w)   // 1.5초 그대로면 넘김
+                            {
+                                if (firstText == null) firstText = (Bitmap)bmp.Clone(); KeySender.Combo(KeySender.Enter); presses++; textStable = 0; }
+                            continue;
+                        }
+                        if (!Picture(lk)) { stable = 0; continue; }
+                        stable = same ? stable + 1 : 0;
+                        best?.Dispose(); best = (Bitmap)bmp.Clone();
+                        if (stable >= 4) break;        // 그림이 2초 그대로 = 타이틀
+                    }
+                }
+                if (best == null) { best = firstText; firstText = null; }
+                if (best == null) return false;
+                Directory.CreateDirectory(CoverArt.CoverDir);
+                best.Save(PendingPath(g), ImageFormat.Png); pendAt = 0;
+                return true;
+            }
+            catch (Exception ex) { Log.Error("타이틀 화면 찾기", ex); return false; }
+            finally { best?.Dispose(); firstText?.Dispose(); }
+        }
 
         static void KillDir(string dir)
         {
@@ -134,8 +235,8 @@ namespace TkoolLauncher
                         }
                         if (w != IntPtr.Zero)
                         {
-                            for (int k = 0; k < 10 && !Cancel; k++) System.Threading.Thread.Sleep(1000); // 타이틀 화면까지 기다림
                             bool got = false;
+                            if (!Cancel && CoverArt.Needs(g) && FindTitle(g, w)) got = true;   // 타이틀 화면까지 지켜봄 (확인 화면에서 적용)
                             if (!Cancel)
                             {
                                 var sb = new StringBuilder(256);
@@ -146,7 +247,6 @@ namespace TkoolLauncher
                                     GameData.Get(g).Title = title; GameData.Save(); g.Title = title; got = true;
                                     CoverArt.Invalidate(g);
                                 }
-                                if (CoverArt.Needs(g) && Shot(g, w)) got = true;
                             }
                             if (got) okCount++;
                         }
@@ -167,6 +267,35 @@ namespace TkoolLauncher
         {
             IntPtr w = GameWindow();
             return w != IntPtr.Zero && Shot(g, w, true);
+        }
+
+        /// <summary>게임 창 안쪽을 그림으로 (못 찍으면 null)</summary>
+        static Bitmap Grab(IntPtr w)
+        {
+            Bitmap bmp = null;
+            try
+            {
+                if (!GetClientRect(w, out RECT rc)) return null;
+                int cw = rc.R - rc.L, ch = rc.B - rc.T;
+                if (cw < 64 || ch < 64) return null;
+                bmp = new Bitmap(cw, ch, PixelFormat.Format32bppArgb);
+                using (var gr = Graphics.FromImage(bmp))
+                {
+                    IntPtr hdc = gr.GetHdc();
+                    bool ok = PrintWindow(w, hdc, 1 | 2);
+                    gr.ReleaseHdc(hdc);
+                    if (!ok || Plain(bmp))
+                    {
+                        var p = new POINT();
+                        ClientToScreen(w, ref p);
+                        OverlayTip.HideAll(true);
+                        try { gr.CopyFromScreen(p.X, p.Y, 0, 0, new Size(cw, ch)); }
+                        finally { OverlayTip.HideAll(false); }
+                    }
+                }
+                return bmp;
+            }
+            catch { bmp?.Dispose(); return null; }
         }
 
         static bool Shot(GameInfo g, IntPtr w, bool force = false)
