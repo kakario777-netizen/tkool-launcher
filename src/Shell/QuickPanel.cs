@@ -627,7 +627,7 @@ namespace TkoolLauncher
                 switch (row.Kind)
                 {
                     case Kind.Slider:
-                        Draw.Text(g, row.Title, Draw.Body, new Rectangle(ix, r.Y + S(8), r.Width, S(22)), tc);
+                        Draw.Text(g, TitleOf(row), Draw.Body, new Rectangle(ix, r.Y + S(8), r.Width, S(22)), tc);
                         Draw.Text(g, row.Num + "%", Draw.BodyBold, new Rectangle(r.Right - S(80), r.Y + S(8), S(64), S(22)), Theme.SubText, Draw.Right);
                         var track = new Rectangle(ix, r.Y + S(40), r.Width - S(32), S(6));
                         Draw.Fill(g, track, S(3), Color.FromArgb(70, 78, 90));
@@ -636,14 +636,14 @@ namespace TkoolLauncher
                         using (var b = new SolidBrush(Color.White)) g.FillEllipse(b, kx - S(9), track.Y + S(3) - S(9), S(18), S(18));
                         break;
                     case Kind.Toggle:
-                        Draw.Text(g, row.Title, Draw.Body, new Rectangle(ix, r.Y, r.Width - S(90), SubOf(row) != null ? h - S(18) : h), tc);
+                        Draw.Text(g, TitleOf(row), Draw.Body, new Rectangle(ix, r.Y, r.Width - S(90), SubOf(row) != null ? h - S(18) : h), tc);
                         if (SubOf(row) != null) Draw.Text(g, SubOf(row), Draw.Small, new Rectangle(ix, r.Y + h - S(26), r.Width - S(80), S(20)), Theme.SubText);
                         var t = new Rectangle(r.Right - S(16) - S(50), r.Y + (h - S(26)) / 2, S(50), S(26));
                         Draw.Fill(g, t, S(13), row.On ? Theme.Accent : Color.FromArgb(70, 78, 90));
                         using (var b = new SolidBrush(Color.White)) g.FillEllipse(b, row.On ? t.Right - S(23) : t.X + S(3), t.Y + S(3), S(20), S(20));
                         break;
                     case Kind.Choice:
-                        Draw.Text(g, row.Title, Draw.Body, new Rectangle(ix, r.Y, r.Width / 2, SubOf(row) != null ? h - S(18) : h), tc);
+                        Draw.Text(g, TitleOf(row), Draw.Body, new Rectangle(ix, r.Y, r.Width / 2, SubOf(row) != null ? h - S(18) : h), tc);
                         if (SubOf(row) != null) Draw.Text(g, SubOf(row), Draw.Small, new Rectangle(ix, r.Y + h - S(26), r.Width - S(30), S(20)), Theme.SubText);
                         string v = row.Choices[Math.Max(0, Math.Min(row.Choices.Length - 1, row.ChoiceIndex))];
                         int vw = Math.Min(S(176), r.Width / 2);
@@ -653,7 +653,7 @@ namespace TkoolLauncher
                         Draw.Text(g, "›", Draw.H2, new Rectangle(vr.Right - S(22), vr.Y, S(22), vr.Height), f ? Theme.Text : Theme.Dim, Draw.Center);
                         break;
                     default:
-                        Draw.Text(g, row.Title, Draw.Body, new Rectangle(ix, r.Y, r.Width - S(20), SubOf(row) != null ? h - S(18) : h), tc);
+                        Draw.Text(g, TitleOf(row), Draw.Body, new Rectangle(ix, r.Y, r.Width - S(20), SubOf(row) != null ? h - S(18) : h), tc);
                         if (SubOf(row) != null) Draw.Text(g, SubOf(row), Draw.Small, new Rectangle(ix, r.Y + h - S(26), r.Width - S(30), S(20)), Theme.SubText);
                         break;
                 }
@@ -680,9 +680,9 @@ namespace TkoolLauncher
                 // 한 줄로만 — 길면 글자를 줄여서 (어중간한 줄바꿈 없음)
                 var tr = new Rectangle(r.X + S(8), r.Y + S(6), r.Width - S(16), SubOf(row) != null ? S(36) : r.Height - S(12));
                 var tf = Draw.BodyBold;
-                if (Draw.Measure(g, row.Title, tf) > tr.Width) tf = Draw.Body;
-                if (Draw.Measure(g, row.Title, tf) > tr.Width) tf = Draw.Small;
-                Draw.Text(g, row.Title, tf, tr, tc,
+                if (Draw.Measure(g, TitleOf(row), tf) > tr.Width) tf = Draw.Body;
+                if (Draw.Measure(g, TitleOf(row), tf) > tr.Width) tf = Draw.Small;
+                Draw.Text(g, TitleOf(row), tf, tr, tc,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
                 if (SubOf(row) != null) Draw.Text(g, SubOf(row), Draw.Tiny, new Rectangle(r.X + S(8), r.Y + S(44), r.Width - S(16), S(24)), Theme.SubText,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
@@ -692,7 +692,19 @@ namespace TkoolLauncher
 
         int RowH(Row r) => r.Kind == Kind.Slider ? S(62) : SubOf(r) != null ? S(62) : S(50);
         /// <summary>미세 설명은 빼고, 성능 "지금 상태"·끝내기 확인만 보임</summary>
-        string SubOf(Row r) => r.Keep ? r.Sub : null;
+        string SubOf(Row r)
+        {
+            if (r.Keep) return r.Sub;
+            // "가상 패드 (감도·연사…)" → 둘째 줄에 괄호 안 내용
+            int k = r.Title.IndexOf(" (");
+            return k > 0 && r.Title.EndsWith(")") ? r.Title.Substring(k + 2, r.Title.Length - k - 3) : null;
+        }
+        string TitleOf(Row r)
+        {
+            if (r.Keep) return r.Title;
+            int k = r.Title.IndexOf(" (");
+            return k > 0 && r.Title.EndsWith(")") ? r.Title.Substring(0, k) : r.Title;
+        }
 
         /// <summary>보이는 순서로 다음/이전 탭</summary>
         void StepTab(int d) => SetTab(TabOrder[(TabPos(tab) + d + TabOrder.Length) % TabOrder.Length]);
