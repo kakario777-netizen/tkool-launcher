@@ -405,6 +405,12 @@ namespace TkoolLauncher
             FlowPicker.Show(Shell, "엔진으로 보기", counts, engSel, t => { engSel = t; focus = 0; scroll = target = 0; OnGamesChanged(); });
         }
 
+        void OpenDetail(GameInfo g)
+        {
+            var snap = items.ToList();
+            Shell.Push(new DetailScreen(g, snap, x => { int i = items.IndexOf(x); if (i >= 0) { focus = i; Follow(); } }));
+        }
+
         void NextSort()
         {
             PickerScreen.Show(Shell, "정렬 방식", SortNames, sortMode, i =>
@@ -837,7 +843,7 @@ namespace TkoolLauncher
                     if (chipFocus && extraSel == -2) { OpenTagPicker(); break; }
                     if (chipFocus && extraSel == -1) { OpenEnginePicker(); break; }
                     if (chipFocus && extraSel > 0) { var ex = Extras(); if (extraSel <= ex.Count) ex[extraSel - 1].Value(); break; }
-                    if (chipFocus) { chipFocus = false; Shell.FocusChanged(); } else if (FocusedGame != null) Shell.Push(new DetailScreen(FocusedGame)); break;
+                    if (chipFocus) { chipFocus = false; Shell.FocusChanged(); } else if (FocusedGame != null) OpenDetail(FocusedGame); break;
                 case Pad.B: Shell.Pop(); break;
                 case Pad.Y: Shell.Push(new SearchScreen()); break;
             }
@@ -859,7 +865,7 @@ namespace TkoolLauncher
             if (MaxScroll > 0 && BarZone.Contains(p)) { BarJump(p.Y); return; }
             if (!GridArea.Contains(p)) return;
             for (int i = 0; i < items.Count; i++)
-                if (CapRect(i).Contains(p)) { focus = i; Shell.FocusChanged(); Shell.Push(new DetailScreen(items[i])); return; }
+                if (CapRect(i).Contains(p)) { focus = i; Shell.FocusChanged(); OpenDetail(items[i]); return; }
         }
 
         public override void OnDrag(int dx, int dy, bool start)
@@ -1183,9 +1189,27 @@ namespace TkoolLauncher
     {
         readonly GameInfo game;
         int focus; // 0 플레이, 1 즐겨찾기, 2 숨기기, 3 해상도
-        Rectangle playBtn, favBtn, hideBtn, resBtn, clearBtn;
+        Rectangle playBtn, favBtn, hideBtn, resBtn, clearBtn, prevR, nextR;
+        /// <summary>목록에서 들어왔으면 그 목록 (LB/RB·좌우로 밀기·‹ ›로 앞뒤 게임)</summary>
+        public List<GameInfo> List;
+        public Action<GameInfo> OnMove;
 
         public DetailScreen(GameInfo g) { game = g; }
+        public DetailScreen(GameInfo g, List<GameInfo> list, Action<GameInfo> onMove = null) { game = g; List = list; OnMove = onMove; }
+
+        /// <summary>앞뒤 게임으로 (화면을 새로 만들어 바꿔 끼움)</summary>
+        void Go(int d)
+        {
+            if (List == null || List.Count < 2) return;
+            int i = List.IndexOf(game);
+            if (i < 0) return;
+            int j = i + d;
+            if (j < 0 || j >= List.Count) { Shell.ShowToast(d < 0 ? "맨 처음 게임이에요" : "마지막 게임이에요", 1200); return; }
+            var next = new DetailScreen(List[j], List, OnMove) { focus = focus };
+            try { OnMove?.Invoke(List[j]); } catch { }
+            Shell.Pop();
+            Shell.Push(next);
+        }
         public override GameInfo FocusedGame => game;
 
         public override void Paint(Graphics g)
@@ -1266,6 +1290,28 @@ namespace TkoolLauncher
             int ix0 = pad + descW + S(40);
 
             PaintDesc(g, new Rectangle(pad, y0, descW, bottom - y0));
+
+            // 앞뒤 게임 ‹ › (목록에서 들어왔을 때)
+            prevR = nextR = Rectangle.Empty;
+            if (List != null && List.Count > 1)
+            {
+                int idx = List.IndexOf(game);
+                int ah = S(90), aw = S(46), ay = Area.Y + S(70);
+                if (idx > 0)
+                {
+                    prevR = new Rectangle(Area.X + S(10), ay, aw, ah);
+                    Draw.Fill(g, prevR, S(10), Color.FromArgb(120, 0, 0, 0));
+                    Draw.Text(g, "‹", Theme.Px(30, true), prevR, Theme.Text, Draw.Center);
+                }
+                if (idx >= 0 && idx < List.Count - 1)
+                {
+                    nextR = new Rectangle(Area.Right - aw - S(10), ay, aw, ah);
+                    Draw.Fill(g, nextR, S(10), Color.FromArgb(120, 0, 0, 0));
+                    Draw.Text(g, "›", Theme.Px(30, true), nextR, Theme.Text, Draw.Center);
+                }
+                if (idx >= 0)
+                    Draw.Text(g, (idx + 1) + " / " + List.Count, Draw.Small, new Rectangle(Area.Right - S(200), Area.Y + S(12), S(180), S(24)), Theme.SubText, Draw.Right);
+            }
 
             Draw.Text(g, "정보", Draw.H2, new Rectangle(ix0, y0, S(300), S(30)), Theme.Text);
             int y = y0 + S(42);
@@ -1427,11 +1473,43 @@ namespace TkoolLauncher
             Shell.Invalidate();
         }
 
+        int swipeDx, swipeDy;
         public override void OnDrag(int dx, int dy, bool start)
         {
-            if (start) { descDrag = descRect.Contains(DownAt); descDragStart = descScroll; }
-            if (dx == int.MinValue) { descDrag = false; return; }
-            if (descDrag) { descScroll = descDragStart; ScrollDesc(-dy); }
+            if (start) { descDrag = descRect.Contains(DownAt); descDragStart = descScroll; swipeDx = swipeDy = 0; }
+            if (dx == int.MinValue)
+            {
+                // 옆으로 크게 밀면 앞뒤 게임
+                if (!descDrag && Math.Abs(swipeDx) > S(140) && Math.Abs(swipeDx) > Math.Abs(swipeDy) * 2) Go(swipeDx < 0 ? 1 : -1);
+                descDrag = false; return;
+            }
+            swipeDx = dx; swipeDy = dy;
+            if (descDrag && Math.Abs(dy) >= Math.Abs(dx)) { descScroll = descDragStart; ScrollDesc(-dy); }
+        }
+
+        /// <summary>이름 고치기: 후보(원래 이름·읽어보기·DLsite 원제·번역)에서 고르거나 직접 입력</summary>
+        void RenameMenu(GameStat st)
+        {
+            var c = TidyScreen.Candidates(game);
+            Action<string> add = t => { if (!string.IsNullOrWhiteSpace(t) && !c.Contains(t.Trim())) c.Add(t.Trim()); };
+            if (st.NameFrom != null && st.NameFrom.Length > 2) add(st.NameFrom.Split(new[] { " · " }, StringSplitOptions.None)[0]);
+            var dl = DlsiteInfo.Get(game);
+            if (dl != null) add(dl.Name);
+            var opts = new List<string>(c) { "✎ 직접 입력하기" };
+            PickerScreen.Show(Shell, "이름 고치기", opts.ToArray(), c.IndexOf(game.Title), k =>
+            {
+                string name = null;
+                if (k == opts.Count - 1)
+                {
+                    name = InputDialog.Ask(Shell, "게임 이름", game.Title);
+                    if (string.IsNullOrWhiteSpace(name)) return;
+                    name = name.Trim();
+                }
+                else name = c[k];
+                if (st.NameFrom == null || st.NameFrom == "-") st.NameFrom = NameFinder.Checked;   // 다시 자동으로 안 바꾸게
+                game.Title = name; st.Title = "=" + name; GameData.Save(); Shell.RefreshLists();
+                Shell.ShowToast("이름을 '" + name + "'(으)로 바꿨어요", 2000);
+            }, "원래 이름: " + (game.RawTitle ?? game.Title));
         }
 
         // 태그 고르기: 목록 + 새 태그 만들기
@@ -1499,6 +1577,8 @@ namespace TkoolLauncher
                 case Pad.A: if (focus == 0) Shell.Launch(game); else if (focus == 1) ToggleFav(); else if (focus == 2) More(); else if (focus == 3) NextRes(); else ToggleCleared(); break;
                 case Pad.X: EditTags(); return;
                 case Pad.Y: ToggleFav(); break;
+                case Pad.LB: Go(-1); return;
+                case Pad.RB: Go(1); return;
                 case Pad.B: Shell.Pop(); break;
             }
             Shell.Invalidate();
@@ -1506,6 +1586,8 @@ namespace TkoolLauncher
 
         public override void OnTap(Point p)
         {
+            if (prevR.Contains(p)) { Go(-1); return; }
+            if (nextR.Contains(p)) { Go(1); return; }
             if (playBtn.Contains(p)) { focus = 0; Shell.Launch(game); }
             else if (favBtn.Contains(p)) { focus = 1; ToggleFav(); }
             else if (hideBtn.Contains(p)) { focus = 2; More(); }
@@ -1573,11 +1655,7 @@ namespace TkoolLauncher
                         PickerScreen.Show(Shell, "언어", langs, st.Lang, k => { st.Lang = k; GameData.Save(); Shell.RefreshLists(); });
                         break;
                     case 3:
-                        var c = TidyScreen.Candidates(game);
-                        PickerScreen.Show(Shell, "이름 고르기", c.ToArray(), c.IndexOf(game.Title), k =>
-                        {
-                            game.Title = c[k]; st.Title = "=" + c[k]; GameData.Save(); Shell.RefreshLists();
-                        }, "원래 이름: " + (game.RawTitle ?? game.Title));
+                        RenameMenu(st);
                         break;
                     case 4:
                         if (st.Hidden) { st.Hidden = false; GameData.Save(); Shell.ShowToast("다시 보이게 했어요", 1500); Shell.RefreshLists(); }
@@ -1597,6 +1675,7 @@ namespace TkoolLauncher
             new Hint(Pad.A, focus == 0 ? "플레이" : focus == 1 ? "즐겨찾기" : focus == 2 ? "더보기" : focus == 3 ? "해상도 고르기" : "다 깸 표시", () => OnPad(Pad.A)),
             new Hint(Pad.Y, "즐겨찾기", ToggleFav),
             new Hint(Pad.X, "태그", EditTags),
+            new Hint(Pad.RB, "다음 게임", () => Go(1)),
             new Hint(Pad.B, "뒤로", Shell.Pop),
         };
     }

@@ -192,8 +192,10 @@ namespace TkoolLauncher
                 int n = 0;
                 try
                 {
+                    int k = 0;
                     foreach (var g in list)
                     {
+                        Activity.Set("dlsite", "DLsite 정보 받는 중 · " + g.Title, ++k, list.Count);
                         string code = NameFinder.FindCode(g);
                         if (Tried(code)) continue;
                         Info i = null;
@@ -203,13 +205,15 @@ namespace TkoolLauncher
                         if (i != null) { n++; SaveCover(g, i); }
                         System.Threading.Thread.Sleep(400);   // 사이트에 부담 안 주게 천천히
                     }
+                    k = 0;
                     foreach (var g in needImg)
                     {
+                        Activity.Set("dlsite", "DLsite 그림 확인 중", ++k, needImg.Count);
                         var i = Get(g);
                         if (i != null && SaveCover(g, i)) { n++; System.Threading.Thread.Sleep(300); }
                     }
                 }
-                finally { Busy = false; done?.Invoke(n); }
+                finally { Activity.Done("dlsite"); Busy = false; done?.Invoke(n); }
             }) { IsBackground = true };
             th.Start();
         }

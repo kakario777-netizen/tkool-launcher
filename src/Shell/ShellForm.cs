@@ -118,6 +118,10 @@ namespace TkoolLauncher
 
                 // 1초마다: FPS 측정 켜고 끄기, 스마트 TDP, 배경음악
                 int sec = 0;
+                Activity.Changed = () => { try { BeginInvoke(new Action(() => Invalidate(new Rectangle(0, Height - Theme.S(BottomH), Width, Theme.S(BottomH))))); } catch { } };
+                var actTimer = new Timer { Interval = 300 };
+                actTimer.Tick += (o, ev) => { if (Activity.Any && Visible && WindowState != FormWindowState.Minimized) Invalidate(new Rectangle(0, Height - Theme.S(BottomH), Width, Theme.S(BottomH))); };
+                actTimer.Start();
                 var fpsTimer = new Timer { Interval = 1000 };
                 fpsTimer.Tick += (s3, e3) =>
                 {
@@ -924,7 +928,29 @@ namespace TkoolLauncher
                 hnt.Bounds = new Rectangle(x0 - Theme.S(10), r.Y, total + Theme.S(20), h);
                 x = x0 - Theme.S(28);
             }
-            if (Scanning) Draw.Text(g, "게임 찾는 중...", Draw.Small, new Rectangle(Theme.S(24), r.Y, Theme.S(300), h), Theme.SubText);
+            // 왼쪽: 런처가 뒤에서 하는 일
+            float prog;
+            string act = Activity.Line(out prog);
+            if (act == null && Scanning) act = "게임 찾는 중";
+            if (act != null)
+            {
+                int ax = Theme.S(24), aw = Math.Max(Theme.S(120), x - ax - Theme.S(20));
+                // 도는 점 세 개
+                int t = (Environment.TickCount / 300) % 3;
+                for (int i = 0; i < 3; i++)
+                    using (var b = new SolidBrush(i == t ? Theme.Accent : Color.FromArgb(90, 255, 255, 255)))
+                        g.FillEllipse(b, ax + i * Theme.S(10), cy - Theme.S(3), Theme.S(6), Theme.S(6));
+                int tx = ax + Theme.S(36);
+                Draw.Text(g, act, Draw.Small, new Rectangle(tx, r.Y, aw - Theme.S(36), prog >= 0 ? h - Theme.S(10) : h), Theme.SubText,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+                if (prog >= 0)
+                {
+                    int bw = Math.Min(Theme.S(260), aw - Theme.S(36));
+                    var bar = new Rectangle(tx, r.Bottom - Theme.S(12), bw, Theme.S(4));
+                    Draw.Fill(g, bar, Theme.S(2), Color.FromArgb(50, 255, 255, 255));
+                    Draw.Fill(g, new Rectangle(bar.X, bar.Y, Math.Max(Theme.S(4), (int)(bw * prog)), bar.Height), Theme.S(2), Theme.Accent);
+                }
+            }
         }
 
         void PaintToast(Graphics g)
@@ -1094,11 +1120,13 @@ namespace TkoolLauncher
                         {
                             if (GameWatch.Running || Scanning || GameCapture.Finding) return;   // 게임 중엔 기다림
                             rescanDelay.Stop();
+                            Activity.Done("watch");
                             Log.Info("게임 폴더가 바뀌어 다시 찾기");
                             Rescan();
                         };
                     }
                     rescanDelay.Stop(); rescanDelay.Start();
+                    Activity.Set("watch", "게임 폴더가 바뀌어 곧 다시 찾아요");
                 }));
             }
             catch { }
@@ -1108,6 +1136,7 @@ namespace TkoolLauncher
         {
             if (Scanning) return;
             Scanning = true;
+            Activity.Set("scan", "게임 폴더 살펴보는 중");
             Invalidate();
             var roots = Settings.GameFolders.ToList();
             Task.Run(() =>
@@ -1118,6 +1147,7 @@ namespace TkoolLauncher
                 BeginInvoke(new Action(() =>
                 {
                     Scanning = false;
+                    Activity.Done("scan");
                     int before = knownCount;
                     SetGames(found);
                     knownCount = found.Count;

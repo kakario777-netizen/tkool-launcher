@@ -313,8 +313,10 @@ namespace TkoolLauncher
                 int n = 0;
                 try
                 {
+                    int k = 0;
                     foreach (var g in list)
                     {
+                        Activity.Set("name", "이름 확인 중 · " + g.Title, ++k, list.Count);
                         Found f = null;
                         try { f = Find(g, online); } catch (Exception ex) { Log.Error("이름 찾기 " + g.Title, ex); }
                         var st = GameData.Get(g);
@@ -333,6 +335,7 @@ namespace TkoolLauncher
                 finally
                 {
                     GameData.Save();
+                    Activity.Done("name");
                     Busy = false;
                     done?.Invoke(n);
                 }

@@ -221,6 +221,7 @@ namespace TkoolLauncher
                 {
                     var g = list[i];
                     progress((i + 1) + "/" + list.Count + " · " + g.Title + " — 홈 버튼을 누르면 멈춰요");
+                    Activity.Set("cover", "표지 찍는 중 · " + g.Title, i + 1, list.Count);
                     string dir = g.InstallDir ?? g.Folder;
                     try
                     {
@@ -256,6 +257,7 @@ namespace TkoolLauncher
                     System.Threading.Thread.Sleep(1500);
                 }
                 Finding = false;
+                Activity.Done("cover");
                 done(okCount);
             }) { IsBackground = true };
             th.SetApartmentState(System.Threading.ApartmentState.STA);
