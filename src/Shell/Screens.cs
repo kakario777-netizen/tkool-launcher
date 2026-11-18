@@ -380,7 +380,7 @@ namespace TkoolLauncher
             if (d != null)
                 for (int k = 0; k < d.Genres.Count; k++)
                 {
-                    string t = k < d.GenresKo.Count && d.GenresKo[k].Length > 0 ? d.GenresKo[k] : d.Genres[k];
+                    string t = DlsiteInfo.GenreKo(d.Genres[k]);
                     if (!l.Contains(t)) l.Add(t);
                 }
             return l;
@@ -1350,7 +1350,7 @@ namespace TkoolLauncher
                 int lines = 0;
                 var items = new List<string>();
                 if (!string.IsNullOrEmpty(dl.Circle)) items.Add("서클 " + dl.Circle);
-                for (int k = 0; k < dl.Genres.Count; k++) items.Add(k < dl.GenresKo.Count && dl.GenresKo[k].Length > 0 ? dl.GenresKo[k] : dl.Genres[k]);
+                for (int k = 0; k < dl.Genres.Count; k++) items.Add(DlsiteInfo.GenreKo(dl.Genres[k]));
                 foreach (var t in items)
                 {
                     int w = Draw.Measure(g, t, Draw.Small) + S(20);

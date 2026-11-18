@@ -20,6 +20,81 @@ namespace TkoolLauncher
         public class Info { public string Id, Name, Circle, Desc, Image, Date; public List<string> Genres = new List<string>(), GenresKo = new List<string>(); }
 
         static readonly Dictionary<string, Info> mem = new Dictionary<string, Info>();
+
+        // ── 장르 한글 사전 (모든 게임이 같이 씀: 같은 장르는 한 번만 번역) cache\dlsite\genres_ko.txt ──
+        static readonly Dictionary<string, string> genreKo = new Dictionary<string, string>();
+        static readonly HashSet<string> genrePending = new HashSet<string>();
+        static bool genreLoaded;
+        static string GenrePath => Path.Combine(Dir, "genres_ko.txt");
+
+        static void LoadGenres()
+        {
+            if (genreLoaded) return;
+            genreLoaded = true;
+            try
+            {
+                if (File.Exists(GenrePath))
+                    foreach (var l in File.ReadAllLines(GenrePath, Encoding.UTF8))
+                    {
+                        int k = l.IndexOf('=');
+                        if (k > 0) genreKo[l.Substring(0, k)] = l.Substring(k + 1);
+                    }
+            }
+            catch { }
+        }
+
+        /// <summary>장르 일본어 → 한글 (아직 번역 안 됐으면 일본어 그대로)</summary>
+        public static string GenreKo(string jp)
+        {
+            lock (genreKo)
+            {
+                LoadGenres();
+                string ko;
+                if (genreKo.TryGetValue(jp, out ko) && ko.Length > 0) return ko;
+                genrePending.Add(jp);
+                return jp;
+            }
+        }
+
+        /// <summary>번역 안 된 장르를 40개씩 몰아서 번역 (줄 수 안 맞으면 그 묶음은 하나씩)</summary>
+        public static int TranslateGenres()
+        {
+            List<string> todo;
+            lock (genreKo) { LoadGenres(); todo = genrePending.Where(x => !genreKo.ContainsKey(x)).ToList(); genrePending.Clear(); }
+            int done = 0;
+            for (int i = 0; i < todo.Count; i += 40)
+            {
+                var batch = todo.Skip(i).Take(40).ToList();
+                Activity.Set("genre", "장르 한글로 번역 중", i, todo.Count);
+                List<string> kos = null;
+                try
+                {
+                    kos = (Translate.Run(string.Join("\n", batch)) ?? "").Replace("\r", "").Split('\n').Select(x => x.Trim()).ToList();
+                    if (kos.Count != batch.Count) kos = null;
+                }
+                catch { }
+                if (kos == null)
+                {
+                    kos = new List<string>();
+                    foreach (var b in batch) { string t = ""; try { t = (Translate.Run(b) ?? "").Trim(); } catch { } kos.Add(t); }
+                }
+                lock (genreKo)
+                {
+                    for (int j = 0; j < batch.Count; j++)
+                        if (kos[j].Length > 0 && kos[j].Length < 30) { genreKo[batch[j]] = kos[j]; done++; }
+                        else genrePending.Add(batch[j]);   // 실패 → 다음에 다시
+                    try
+                    {
+                        Directory.CreateDirectory(Dir);
+                        File.WriteAllLines(GenrePath, genreKo.Select(kv => kv.Key + "=" + kv.Value), new UTF8Encoding(false));
+                    }
+                    catch { }
+                }
+                System.Threading.Thread.Sleep(2000);
+            }
+            Activity.Done("genre", todo.Count > 0 ? "장르 번역 · " + done + "/" + todo.Count + "개" : null);
+            return done;
+        }
         static string Dir => Path.Combine(Settings.Dir, "cache", "dlsite");
 
         /// <summary>받아 둔 정보 (없으면 null) — 화면에서 바로 써도 됨</summary>
@@ -61,6 +136,9 @@ namespace TkoolLauncher
                         case "genres_ko": i.GenresKo = v.Split('|').Where(x => x.Length > 0).ToList(); break;
                     }
                 }
+                // 예전 판에서 게임별로 번역해 둔 장르는 사전에 옮김
+                if (i.GenresKo.Count == i.Genres.Count)
+                    lock (genreKo) { LoadGenres(); for (int k = 0; k < i.Genres.Count; k++) if (!genreKo.ContainsKey(i.Genres[k]) && i.GenresKo[k].Length > 0) genreKo[i.Genres[k]] = i.GenresKo[k]; }
                 return i.Id == null ? null : i;
             }
             catch { return null; }
@@ -117,17 +195,7 @@ namespace TkoolLauncher
                     }
                 }
                 catch (Exception ex) { Log.Info("DLsite 작품 페이지 " + id + ": " + ex.Message); }
-                // 장르 한글로 (한 번에)
-                if (i.Genres.Count > 0)
-                {
-                    try
-                    {
-                        string ko = Translate.Run(string.Join("\n", i.Genres));
-                        var parts = (ko ?? "").Replace("\r", "").Split('\n').Select(x => x.Trim()).ToList();
-                        if (parts.Count == i.Genres.Count) i.GenresKo = parts;
-                    }
-                    catch { }
-                }
+                lock (genreKo) foreach (var gname in i.Genres) if (!genreKo.ContainsKey(gname)) genrePending.Add(gname);
                 return i;
             }
             return null;
@@ -215,7 +283,14 @@ namespace TkoolLauncher
             if (Busy) { again = true; return; }
             var list = games.Where(g => g.FromFolder && NameFinder.FindCode(g) != null)
                             .Where(g => { string c = NameFinder.FindCode(g); return !Tried(c) || (!ImgChecked(c) && File.Exists(Path.Combine(Dir, c + ".txt"))); }).ToList();
-            if (list.Count == 0) { Activity.Note("DLsite · 새로 받을 게임 없음"); done?.Invoke(0); return; }
+            // 받아 둔 정보 중 장르가 아직 일본어인 것 모으기
+            foreach (var g in games.Where(x => x.FromFolder && NameFinder.FindCode(x) != null))
+            {
+                var inf = Get(g);
+                if (inf != null) foreach (var gn in inf.Genres) GenreKo(gn);
+            }
+            bool genresTodo; lock (genreKo) genresTodo = genrePending.Count > 0;
+            if (list.Count == 0 && !genresTodo) { Activity.Note("DLsite · 새로 받을 게임 없음"); done?.Invoke(0); return; }
             Busy = true; again = false;
             var th = new System.Threading.Thread(() =>
             {
@@ -228,6 +303,7 @@ namespace TkoolLauncher
                         Activity.Set("dlsite", "DLsite 정보 받는 중 · " + g.Title, ++k, list.Count);
                         if (EnsureOne(g)) n++;
                     }
+                    if (TranslateGenres() > 0) n++;   // 화면 다시 그리게
                 }
                 finally
                 {

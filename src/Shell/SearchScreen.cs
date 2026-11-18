@@ -17,7 +17,7 @@ namespace TkoolLauncher
         {
             var d = DlsiteInfo.Get(g);
             if (d == null) return false;
-            foreach (var t in new[] { d.Name, d.Circle }.Concat(d.Genres).Concat(d.GenresKo))
+            foreach (var t in new[] { d.Name, d.Circle }.Concat(d.Genres).Concat(d.Genres.Select(DlsiteInfo.GenreKo)))
                 if (!string.IsNullOrEmpty(t) && t.ToUpperInvariant().Contains(q)) return true;
             return false;
         }
