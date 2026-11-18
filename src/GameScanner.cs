@@ -25,6 +25,8 @@ namespace TkoolLauncher
         public string Exe;
         public TkoolVersion Version;
         public bool Japanese;
+        public string RawTitle;                       // 정리 전 이름 (폴더·게임 데이터 그대로)
+        public List<string> Tags = new List<string>(); // 이름에서 떼어 낸 꼬리표 (한글·체험판)
         public bool NeedsRtp;
         public string RtpName;
 

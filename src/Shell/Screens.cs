@@ -225,7 +225,113 @@ namespace TkoolLauncher
         bool dragging;
         Rectangle[] tabRects = new Rectangle[0];
 
-        public override GameInfo FocusedGame => focus < items.Count ? items[focus] : null;
+        // ── 쯔꾸르 탭: 가로 카드 + 분류 동그라미 줄(칩) ──
+        class Chip { public string Name; public Func<GameInfo, bool> Filter; }
+        List<Chip> chips = new List<Chip>();
+        static string chipSel = "전체";
+        static int sortMode;                 // 0 이름순 1 최근 추가 2 플레이 시간
+        static readonly string[] SortNames = { "이름순", "최근 추가", "플레이 시간" };
+        bool chipFocus;
+        int chipIdx, extraSel;   // extraSel: 0 칩, 1 정리 모드, 2 정렬
+        Rectangle[] chipRects = new Rectangle[0];
+        Rectangle sortRect, tidyRect;
+        bool Wide => tab < tabs.Count && tabs[tab].Name == "쯔꾸르";
+        int ChipH => Wide ? S(58) : 0;
+        int BandH => S(58);
+
+        public static string EngineShort(GameInfo g)
+        {
+            switch (g.Version)
+            {
+                case TkoolVersion.RM2000: return "2000";
+                case TkoolVersion.XP: return "XP";
+                case TkoolVersion.VX: return "VX";
+                case TkoolVersion.VXAce: return "Ace";
+                case TkoolVersion.MV: return "MV";
+                case TkoolVersion.MZ: return "MZ";
+            }
+            return "";
+        }
+
+        public static Color EngineColor(GameInfo g)
+        {
+            if (!g.IsTkool) return Color.FromArgb(110, 120, 135);
+            switch (g.Version)
+            {
+                case TkoolVersion.RM2000: return Color.FromArgb(228, 140, 60);
+                case TkoolVersion.XP: return Color.FromArgb(96, 176, 92);
+                case TkoolVersion.VX: return Color.FromArgb(70, 145, 225);
+                case TkoolVersion.VXAce: return Color.FromArgb(80, 100, 205);
+                case TkoolVersion.MV: return Color.FromArgb(160, 105, 225);
+                default: return Color.FromArgb(225, 95, 155);
+            }
+        }
+
+        public static bool IsKorean(GameInfo g) => g.Tags.Contains("한글") || !g.Japanese;
+
+        /// <summary>0 안 해봄 1 하는 중 2 다 깸</summary>
+        public static int Status(GameInfo g) { var st = GameData.Get(g); return st.Cleared ? 2 : st.LastPlayed > 0 ? 1 : 0; }
+
+        void BuildChips(List<GameInfo> pool)
+        {
+            chips = new List<Chip>
+            {
+                new Chip { Name = "전체", Filter = x => true },
+                new Chip { Name = "하는 중", Filter = x => Status(x) == 1 },
+                new Chip { Name = "안 해봄", Filter = x => Status(x) == 0 },
+                new Chip { Name = "다 깸", Filter = x => Status(x) == 2 },
+            };
+            if (pool.Any(IsKorean) && pool.Any(x => !IsKorean(x)))
+            {
+                chips.Add(new Chip { Name = "한글", Filter = IsKorean });
+                chips.Add(new Chip { Name = "일본어", Filter = x => !IsKorean(x) });
+            }
+            foreach (var v in new[] { TkoolVersion.RM2000, TkoolVersion.XP, TkoolVersion.VX, TkoolVersion.VXAce, TkoolVersion.MV, TkoolVersion.MZ })
+            {
+                var vv = v;
+                if (pool.Any(x => x.IsTkool && x.Version == vv))
+                    chips.Add(new Chip { Name = EngineShort(new GameInfo { Kind = GameKind.Tkool, Version = vv }), Filter = x => x.IsTkool && x.Version == vv });
+            }
+            if (pool.Any(x => x.Tags.Contains("체험판"))) chips.Add(new Chip { Name = "체험판", Filter = x => x.Tags.Contains("체험판") });
+            chipIdx = Math.Max(0, chips.FindIndex(c => c.Name == chipSel));
+        }
+
+        static readonly Dictionary<string, DateTime> addedCache = new Dictionary<string, DateTime>();
+        static DateTime Added(GameInfo g)
+        {
+            string k = g.Folder ?? g.Exe;
+            DateTime d;
+            if (k == null) return DateTime.MinValue;
+            if (!addedCache.TryGetValue(k, out d)) { try { d = System.IO.Directory.GetCreationTime(k); } catch { d = DateTime.MinValue; } addedCache[k] = d; }
+            return d;
+        }
+
+        List<GameInfo> SortWide(IEnumerable<GameInfo> src)
+        {
+            if (sortMode == 1) return src.OrderByDescending(Added).ToList();
+            if (sortMode == 2) return src.OrderByDescending(x => GameData.Get(x).TotalSeconds).ThenBy(x => x.Title, StringComparer.CurrentCulture).ToList();
+            return src.OrderBy(x => x.Title, StringComparer.CurrentCulture).ToList();
+        }
+
+        void PickChip(int i)
+        {
+            if (chips.Count == 0) return;
+            chipIdx = Math.Max(0, Math.Min(chips.Count - 1, i));
+            chipSel = chips[chipIdx].Name;
+            focus = 0; scroll = target = 0;
+            OnGamesChanged();
+            Shell.FocusChanged();
+        }
+
+        void NextSort()
+        {
+            sortMode = (sortMode + 1) % SortNames.Length;
+            focus = 0; scroll = target = 0;
+            OnGamesChanged();
+            Shell.ShowToast("정렬: " + SortNames[sortMode], 1500);
+        }
+
+        public override GameInfo FocusedGame => chipFocus ? null : focus < items.Count ? items[focus] : null;
 
         void BuildTabs()
         {
@@ -251,6 +357,13 @@ namespace TkoolLauncher
             if (ti >= 0) tab = ti;
             var f = tabs[tab].Filter;
             items = tabs[tab].Name == "최근 플레이" ? Shell.Recent(int.MaxValue).Where(f).ToList() : Shell.VisibleGames.Where(f).ToList();
+            if (Wide)
+            {
+                BuildChips(items);
+                var cf = chips[chipIdx].Filter;
+                items = SortWide(items.Where(cf));
+            }
+            else chipFocus = false;
             int i = cur != null ? items.FindIndex(x => x.Exe == cur.Exe) : -1;
             focus = i >= 0 ? i : 0;
             Follow();
@@ -280,10 +393,11 @@ namespace TkoolLauncher
         int TabH => S(60);
         int Pad0 => S(40);
         int Gap => S(18);
-        int Cols => Math.Max(3, (Area.Width - Pad0 * 2 + Gap) / (S(150) + Gap));
+        int Cols => Wide ? Math.Max(2, (Area.Width - Pad0 * 2 + Gap) / (S(250) + Gap))
+                         : Math.Max(3, (Area.Width - Pad0 * 2 + Gap) / (S(150) + Gap));
         int CapW => (Area.Width - Pad0 * 2 - Gap * (Cols - 1)) / Cols;
-        int CapH => CapW * 3 / 2;
-        Rectangle GridArea => new Rectangle(Area.X, Area.Y + TabH, Area.Width, Area.Height - TabH);
+        int CapH => Wide ? CapW * 3 / 4 + BandH : CapW * 3 / 2;   // 쯔꾸르: 4:3 타이틀 그림 + 아래 이름 띠
+        Rectangle GridArea => new Rectangle(Area.X, Area.Y + TabH + ChipH, Area.Width, Area.Height - TabH - ChipH);
 
         Rectangle CapRect(int i)
         {
@@ -344,6 +458,7 @@ namespace TkoolLauncher
             Draw.PadGlyph(g, Pad.RB, x + S(20), cy);
             Draw.Text(g, items.Count + "개", Draw.Body, new Rectangle(Area.Right - Pad0 - S(120), Area.Y, S(120), TabH), Theme.SubText, Draw.Right);
             using (var p = new Pen(Color.FromArgb(40, 255, 255, 255))) g.DrawLine(p, Area.X + Pad0, Area.Y + TabH, Area.Right - Pad0, Area.Y + TabH);
+            if (Wide) PaintChips(g);
 
             var clip = g.Clip;
             g.SetClip(GridArea);
@@ -360,7 +475,13 @@ namespace TkoolLauncher
                 var r = CapRect(i);
                 if (r.Bottom < GridArea.Top - S(20) || r.Top > GridArea.Bottom + S(20)) continue;
                 bool f = i == focus && Shell.ShowFocus;
-                if (f) r = Rectangle.Inflate(r, S(5), (int)(S(5) * 1.5f));
+                if (f && !Wide) r = Rectangle.Inflate(r, S(5), (int)(S(5) * 1.5f));
+                if (Wide)
+                {
+                    PaintWideCard(g, items[i], r);
+                    if (f) Draw.FocusGlow(g, r, S(6));
+                    continue;
+                }
                 var art = CoverArt.Get(items[i]);
                 if (art?.Capsule != null) Draw.Image(g, art.Capsule, r, S(4));
                 else
@@ -385,6 +506,124 @@ namespace TkoolLauncher
             }
         }
 
+        void PaintChips(Graphics g)
+        {
+            int y = Area.Y + TabH + S(10), h = S(38);
+            if (chipRects.Length != chips.Count) chipRects = new Rectangle[chips.Count];
+            int x = Area.X + Pad0;
+            var font = Theme.Px(14, true);
+            for (int i = 0; i < chips.Count; i++)
+            {
+                int w = Draw.Measure(g, chips[i].Name, font) + S(32);
+                var r = new Rectangle(x, y, w, h);
+                chipRects[i] = r;
+                bool on = i == chipIdx;
+                Draw.Fill(g, r, h / 2, on ? Theme.Accent : Color.FromArgb(46, 255, 255, 255));
+                Draw.Text(g, chips[i].Name, font, r, on ? Color.White : Theme.SubText, Draw.Center);
+                if (chipFocus && on && extraSel == 0 && Shell.ShowFocus) Draw.FocusGlow(g, r, h / 2);
+                x += w + S(10);
+            }
+            // 오른쪽: 정리 모드 · 정렬 바꾸기
+            string tdTxt = "정리 모드";
+            string st = "정렬 · " + SortNames[sortMode];
+            int sw = Draw.Measure(g, st, font) + S(32);
+            sortRect = new Rectangle(Area.Right - Pad0 - sw, y, sw, h);
+            int tw = Draw.Measure(g, tdTxt, font) + S(32);
+            tidyRect = new Rectangle(sortRect.X - S(10) - tw, y, tw, h);
+            if (tidyRect.X > x)
+            {
+                using (var pen = new Pen(Color.FromArgb(70, 255, 255, 255), Math.Max(1, S(1))))
+                {
+                    g.DrawPath(pen, Theme.Round(sortRect, h / 2));
+                    g.DrawPath(pen, Theme.Round(tidyRect, h / 2));
+                }
+                Draw.Text(g, st, font, sortRect, Theme.SubText, Draw.Center);
+                Draw.Text(g, tdTxt, font, tidyRect, Theme.SubText, Draw.Center);
+                if (chipFocus && extraSel == 1 && Shell.ShowFocus) Draw.FocusGlow(g, tidyRect, h / 2);
+                if (chipFocus && extraSel == 2 && Shell.ShowFocus) Draw.FocusGlow(g, sortRect, h / 2);
+            }
+            else sortRect = tidyRect = Rectangle.Empty;
+        }
+
+        /// <summary>쯔꾸르 카드: 위 4:3 타이틀 그림(늘리지 않고 맞춤) + 아래 띠(이름 한 줄 · 엔진·한/일 · 상태) + 맨 아래 상태 선</summary>
+        void PaintWideCard(Graphics g, GameInfo gm, Rectangle r)
+        {
+            int rad = S(6);
+            Draw.Fill(g, r, rad, Color.FromArgb(255, 28, 33, 41));
+            var imgR = new Rectangle(r.X, r.Y, r.Width, r.Height - BandH);
+            var art = CoverArt.Get(gm);
+            var ec = EngineColor(gm);
+            if (art?.Hero != null)
+            {
+                // 그림 비율 그대로 맞춰 넣기 (남는 곳은 어두운 바탕)
+                var src = art.Hero;
+                float k = Math.Min(imgR.Width / (float)src.Width, imgR.Height / (float)src.Height);
+                int w = (int)(src.Width * k), h = (int)(src.Height * k);
+                // 거의 꽉 차면(4:3 근처) 그냥 칸에 맞춰 살짝 잘라 꽉 채움
+                float fill = Math.Max(imgR.Width / (float)src.Width, imgR.Height / (float)src.Height);
+                if (fill / k < 1.08f) { k = fill; w = (int)(src.Width * k); h = (int)(src.Height * k); }
+                var dst = new Rectangle(imgR.X + (imgR.Width - w) / 2, imgR.Y + (imgR.Height - h) / 2, w, h);
+                using (var b = new SolidBrush(Color.FromArgb(255, 14, 17, 22))) using (var path = TopRound(imgR, rad)) g.FillPath(b, path);
+                var oc = g.Clip;
+                using (var path = TopRound(imgR, rad)) g.SetClip(path, System.Drawing.Drawing2D.CombineMode.Intersect);
+                Draw.Image(g, src, dst, 0);
+                g.Clip = oc;
+            }
+            else
+            {
+                // 그림 없음: 엔진 색 바탕 + 이름 첫 글자 (모든 카드 같은 모양)
+                using (var path = TopRound(imgR, rad))
+                using (var lg = new System.Drawing.Drawing2D.LinearGradientBrush(imgR, Color.FromArgb(255, ec.R * 2 / 3, ec.G * 2 / 3, ec.B * 2 / 3), Color.FromArgb(255, ec.R / 4, ec.G / 4, ec.B / 4), 60f))
+                    g.FillPath(lg, path);
+                string ch = string.IsNullOrEmpty(gm.Title) ? "?" : gm.Title.Substring(0, char.IsSurrogate(gm.Title[0]) && gm.Title.Length > 1 ? 2 : 1);
+                Draw.Text(g, ch, Theme.Px(Math.Max(20, imgR.Height / 3f / Theme.Scale), true), imgR, Color.FromArgb(200, 255, 255, 255), Draw.Center);
+            }
+            // 즐겨찾기 별
+            if (GameData.Get(gm).Favorite)
+                Draw.Star(g, new Rectangle(r.Right - S(28), r.Y + S(8), S(20), S(20)), true, Color.FromArgb(255, 205, 60));
+
+            // 아래 띠
+            int bx = r.X + S(12), bw = r.Width - S(24);
+            Draw.Text(g, gm.Title, Draw.BodyBold, new Rectangle(bx, imgR.Bottom + S(6), bw, S(26)), Theme.Text,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+            int ly = imgR.Bottom + S(33), lh = S(18);
+            int dx = bx;
+            // 엔진 색 점 + 이름
+            using (var b = new SolidBrush(ec)) g.FillEllipse(b, dx, ly + lh / 2 - S(4), S(8), S(8));
+            dx += S(13);
+            string eng = gm.IsTkool ? EngineShort(gm) : "PC";
+            var small = Theme.Px(12, true);
+            Draw.Text(g, eng, small, new Rectangle(dx, ly, S(60), lh), Theme.SubText, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+            dx += Draw.Measure(g, eng, small) + S(10);
+            string lang = IsKorean(gm) ? "한" : "日";
+            var lr = new Rectangle(dx, ly, S(22), lh);
+            using (var pen = new Pen(Color.FromArgb(110, 255, 255, 255), Math.Max(1, S(1)))) g.DrawPath(pen, Theme.Round(lr, S(4)));
+            Draw.Text(g, lang, small, lr, Theme.SubText, Draw.Center);
+            dx += lr.Width + S(8);
+            if (gm.Tags.Contains("체험판") && dx + S(50) < r.Right - S(70))
+                Draw.Text(g, "체험판", small, new Rectangle(dx, ly, S(56), lh), Color.FromArgb(230, 190, 110), TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+            // 상태 (오른쪽)
+            int stt = Status(gm);
+            string stTxt = stt == 2 ? "다 깸" : stt == 1 ? "하는 중" : "안 해봄";
+            var stCol = stt == 2 ? Color.FromArgb(110, 210, 120) : stt == 1 ? Theme.Accent : Color.FromArgb(120, 255, 255, 255);
+            Draw.Text(g, stTxt, small, new Rectangle(r.Right - S(80), ly, S(68), lh), stCol, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+            // 맨 아래 상태 선 (만화 뷰어 읽음 표시처럼)
+            if (stt > 0)
+                using (var b = new SolidBrush(stCol))
+                    g.FillRectangle(b, r.X + rad, r.Bottom - S(3), r.Width - rad * 2, S(3));
+        }
+
+        static System.Drawing.Drawing2D.GraphicsPath TopRound(Rectangle r, int rad)
+        {
+            var p = new System.Drawing.Drawing2D.GraphicsPath();
+            int d = rad * 2;
+            p.AddArc(r.X, r.Y, d, d, 180, 90);
+            p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            p.AddLine(r.Right, r.Bottom, r.X, r.Bottom);
+            p.CloseFigure();
+            return p;
+        }
+
         void Move(int d)
         {
             if (items.Count == 0) return;
@@ -397,13 +636,26 @@ namespace TkoolLauncher
         {
             switch (b)
             {
-                case Pad.Left: Move(-1); break;
-                case Pad.Right: Move(1); break;
-                case Pad.Up: if (focus - Cols >= 0) Move(-Cols); break;
-                case Pad.Down: if (focus + Cols < items.Count) Move(Cols); else if (focus / Cols < (items.Count - 1) / Cols) Move(items.Count - 1 - focus); break;
+                case Pad.Left: if (chipFocus) { if (extraSel > 0) extraSel--; else PickChip(chipIdx - 1); } else Move(-1); break;
+                case Pad.Right:
+                    if (chipFocus) { if (chipIdx < chips.Count - 1 && extraSel == 0) PickChip(chipIdx + 1); else extraSel = Math.Min(2, extraSel + 1); }   // 칸 끝에서 오른쪽 → 정리 모드 · 정렬
+                    else Move(1);
+                    break;
+                case Pad.Up:
+                    if (chipFocus) break;
+                    if (focus - Cols >= 0) Move(-Cols);
+                    else if (Wide) { chipFocus = true; target = 0; Shell.Animate(); Shell.FocusChanged(); }   // 맨 윗줄에서 위 → 분류 줄
+                    break;
+                case Pad.Down:
+                    if (chipFocus) { chipFocus = false; extraSel = 0; Shell.FocusChanged(); break; }
+                    if (focus + Cols < items.Count) Move(Cols); else if (focus / Cols < (items.Count - 1) / Cols) Move(items.Count - 1 - focus); break;
+                case Pad.X: if (Wide) NextSort(); break;
                 case Pad.LB: SetTab(tab - 1); break;
                 case Pad.RB: SetTab(tab + 1); break;
-                case Pad.A: if (FocusedGame != null) Shell.Push(new DetailScreen(FocusedGame)); break;
+                case Pad.A:
+                    if (chipFocus && extraSel == 1) { Shell.Push(new TidyScreen()); break; }
+                    if (chipFocus && extraSel == 2) { NextSort(); break; }
+                    if (chipFocus) { chipFocus = false; Shell.FocusChanged(); } else if (FocusedGame != null) Shell.Push(new DetailScreen(FocusedGame)); break;
                 case Pad.B: Shell.Pop(); break;
                 case Pad.Y: Shell.Push(new SearchScreen()); break;
             }
@@ -412,6 +664,12 @@ namespace TkoolLauncher
         public override void OnTap(Point p)
         {
             for (int i = 0; i < tabRects.Length; i++) if (tabRects[i].Contains(p)) { SetTab(i); return; }
+            if (Wide)
+            {
+                for (int i = 0; i < chipRects.Length; i++) if (chipRects[i].Contains(p)) { chipFocus = false; PickChip(i); return; }
+                if (sortRect.Contains(p)) { NextSort(); return; }
+                if (tidyRect.Contains(p)) { Shell.Push(new TidyScreen()); return; }
+            }
             if (!GridArea.Contains(p)) return;
             for (int i = 0; i < items.Count; i++)
                 if (CapRect(i).Contains(p)) { focus = i; Shell.FocusChanged(); Shell.Push(new DetailScreen(items[i])); return; }
@@ -428,8 +686,188 @@ namespace TkoolLauncher
         {
             new Hint(Pad.A, "열기", () => OnPad(Pad.A)),
             new Hint(Pad.Y, "검색", () => Shell.Push(new SearchScreen())),
+        }.Concat(Wide ? new List<Hint> { new Hint(Pad.X, "정렬", NextSort) } : new List<Hint>()).Concat(new List<Hint>
+        {
             new Hint(Pad.B, "뒤로", Shell.Pop),
             new Hint(Pad.RB, "탭 이동", () => SetTab(tab + 1)),
+        }).ToList();
+    }
+
+    // ═════════════════════ 정리 모드 (쯔꾸르) ═════════════════════
+    /// <summary>
+    /// 쯔꾸르 게임을 한 개씩 넘기며 이름·표지·상태를 정리. 손볼 게 많은 게임(그림 없음·이름 이상함)부터.
+    /// 이름은 타자 없이 후보(정리된 이름·원래 이름·폴더 이름·게임 창 제목) 중에서 고름.
+    /// </summary>
+    class TidyScreen : Screen
+    {
+        List<GameInfo> list = new List<GameInfo>();
+        int idx, focus;   // focus: 0 이름 1 다 깸 2 표지 찍기 3 숨기기
+        Rectangle[] btns = new Rectangle[4];
+        Rectangle prevBtn, nextBtn;
+
+        public override GameInfo FocusedGame => idx < list.Count ? list[idx] : null;
+
+        public override void OnGamesChanged()
+        {
+            var cur = FocusedGame;
+            list = Shell.VisibleGames.Where(x => x.FromFolder || x.IsTkool)
+                .OrderByDescending(Problems).ThenBy(x => x.Title, StringComparer.CurrentCulture).ToList();
+            int i = cur != null ? list.FindIndex(x => x.Exe == cur.Exe) : -1;
+            idx = i >= 0 ? i : 0;
+        }
+
+        static int Problems(GameInfo g)
+        {
+            int n = 0;
+            var art = CoverArt.Get(g);
+            if (art != null && art.Hero == null) n += 2;
+            if (GameCapture.IsGenericTitle(g, g.Title)) n += 2;
+            if (g.RawTitle != null && g.RawTitle != g.Title) n += 1;
+            return n;
+        }
+
+        List<string> Candidates(GameInfo g)
+        {
+            var c = new List<string>();
+            Action<string> add = t => { if (!string.IsNullOrWhiteSpace(t) && !c.Contains(t.Trim())) c.Add(t.Trim()); };
+            add(g.Title);
+            add(TitleTidy.Clean(g.RawTitle ?? g.Title, new List<string>()));
+            add(g.RawTitle);
+            string folder = g.Folder != null ? System.IO.Path.GetFileName(g.Folder.TrimEnd('\\')) : null;
+            add(TitleTidy.Clean(folder, new List<string>()));
+            add(folder);
+            return c;
+        }
+
+        void Act(int b)
+        {
+            var g = FocusedGame;
+            if (g == null) return;
+            var st = GameData.Get(g);
+            switch (b)
+            {
+                case 0:
+                    var c = Candidates(g);
+                    if (c.Count < 2) { Shell.ShowToast("다른 이름 후보가 없어요", 1500); return; }
+                    int i = c.IndexOf(g.Title);
+                    string next = c[(i + 1) % c.Count];
+                    g.Title = next; st.Title = "=" + next; GameData.Save();
+                    break;
+                case 1:
+                    st.Cleared = !st.Cleared; GameData.Save();
+                    break;
+                case 2:
+                    Shell.FindCovers(new List<GameInfo> { g });   // 15초쯤 켜서 타이틀 화면을 찍고 끔
+                    break;
+                case 3:
+                    st.Hidden = true; GameData.Save();
+                    Shell.ShowToast("숨겼어요 (설정에서 다시 보이게 할 수 있어요)", 2000);
+                    Shell.RefreshLists();
+                    return;
+            }
+            Shell.Invalidate();
+        }
+
+        void Go(int d)
+        {
+            if (list.Count == 0) return;
+            idx = (idx + d + list.Count) % list.Count;
+            Shell.FocusChanged();
+        }
+
+        public override void Paint(Graphics g)
+        {
+            var A = Area;
+            if (list.Count == 0) { Draw.Text(g, "정리할 쯔꾸르 게임이 없어요.", Draw.Menu, A, Theme.SubText, Draw.Center); return; }
+            var gm = list[idx];
+            var st = GameData.Get(gm);
+            int pad = S(40);
+            Draw.Text(g, "정리 모드", Theme.Px(20, true), new Rectangle(A.X + pad, A.Y + S(12), S(400), S(44)), Theme.Text, Draw.Left);
+            Draw.Text(g, (idx + 1) + " / " + list.Count + "  ·  손볼 게 많은 게임부터", Draw.Body, new Rectangle(A.Right - pad - S(500), A.Y + S(12), S(500), S(44)), Theme.SubText, Draw.Right);
+
+            // 왼쪽: 타이틀 그림 (비율 그대로)
+            int top = A.Y + S(70);
+            var imgBox = new Rectangle(A.X + pad + S(56), top, (int)(A.Width * 0.5f), (int)(A.Width * 0.5f * 3 / 4));
+            if (imgBox.Bottom > A.Bottom - S(20)) { int h = A.Bottom - S(20) - top; imgBox = new Rectangle(imgBox.X, top, h * 4 / 3, h); }
+            Draw.Fill(g, imgBox, S(6), Color.FromArgb(255, 14, 17, 22));
+            var art = CoverArt.Get(gm);
+            if (art?.Hero != null)
+            {
+                float k = Math.Min(imgBox.Width / (float)art.Hero.Width, imgBox.Height / (float)art.Hero.Height);
+                int w = (int)(art.Hero.Width * k), h = (int)(art.Hero.Height * k);
+                Draw.Image(g, art.Hero, new Rectangle(imgBox.X + (imgBox.Width - w) / 2, imgBox.Y + (imgBox.Height - h) / 2, w, h), S(4));
+            }
+            else Draw.Text(g, "타이틀 그림이 없어요\n'표지 찍기'로 채울 수 있어요", Draw.Menu, imgBox, Theme.SubText, Draw.Center | TextFormatFlags.WordBreak);
+            // 넘기기 화살표
+            prevBtn = new Rectangle(A.X + pad - S(4), imgBox.Y + imgBox.Height / 2 - S(40), S(48), S(80));
+            nextBtn = new Rectangle(imgBox.Right + S(8), imgBox.Y + imgBox.Height / 2 - S(40), S(48), S(80));
+            Draw.Text(g, "‹", Theme.Px(34, true), prevBtn, Theme.SubText, Draw.Center);
+            Draw.Text(g, "›", Theme.Px(34, true), nextBtn, Theme.SubText, Draw.Center);
+
+            // 오른쪽: 정보 + 버튼
+            int rx = nextBtn.Right + S(28), rw = A.Right - pad - rx;
+            int y = top;
+            Draw.Text(g, gm.Title, Theme.Px(22, true), new Rectangle(rx, y, rw, S(40)), Theme.Text,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+            y += S(44);
+            if (gm.RawTitle != null && gm.RawTitle != gm.Title)
+            {
+                Draw.Text(g, "원래 이름: " + gm.RawTitle, Draw.Body, new Rectangle(rx, y, rw, S(26)), Theme.SubText,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+                y += S(28);
+            }
+            string info = (gm.IsTkool ? LibraryScreen.EngineShort(gm) : "PC") + " · " + (LibraryScreen.IsKorean(gm) ? "한글" : "일본어") +
+                          (gm.Tags.Contains("체험판") ? " · 체험판" : "") + " · 플레이 " + (st.TotalSeconds / 3600 > 0 ? st.TotalSeconds / 3600 + "시간 " : "") + (st.TotalSeconds / 60 % 60) + "분";
+            Draw.Text(g, info, Draw.Body, new Rectangle(rx, y, rw, S(26)), Theme.SubText,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
+            y += S(46);
+
+            var names = new[]
+            {
+                "이름 바꾸기 (" + Candidates(gm).Count + "개 후보)",
+                st.Cleared ? "다 깸 ✓ (누르면 해제)" : "다 깸으로 표시",
+                "표지 찍기 (15초 켜서 찍음)",
+                "이 게임 숨기기",
+            };
+            for (int i = 0; i < 4; i++)
+            {
+                var r = new Rectangle(rx, y, Math.Min(rw, S(420)), S(56));
+                btns[i] = r;
+                Draw.Fill(g, r, S(6), i == 1 && st.Cleared ? Color.FromArgb(60, 140, 75) : Theme.Tile);
+                Draw.Text(g, names[i], Draw.BodyBold, Rectangle.Inflate(r, -S(16), 0), Theme.Text,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
+                if (i == focus && Shell.ShowFocus) Draw.FocusGlow(g, r, S(6));
+                y += S(66);
+            }
+        }
+
+        public override void OnPad(Pad b)
+        {
+            switch (b)
+            {
+                case Pad.Up: focus = Math.Max(0, focus - 1); break;
+                case Pad.Down: focus = Math.Min(3, focus + 1); break;
+                case Pad.Left: case Pad.LB: Go(-1); break;
+                case Pad.Right: case Pad.RB: Go(1); break;
+                case Pad.A: Act(focus); break;
+                case Pad.B: Shell.Pop(); return;
+            }
+            Shell.Invalidate();
+        }
+
+        public override void OnTap(Point p)
+        {
+            if (prevBtn.Contains(p)) { Go(-1); Shell.Invalidate(); return; }
+            if (nextBtn.Contains(p)) { Go(1); Shell.Invalidate(); return; }
+            for (int i = 0; i < 4; i++) if (btns[i].Contains(p)) { focus = i; Act(i); return; }
+        }
+
+        public override List<Hint> Hints() => new List<Hint>
+        {
+            new Hint(Pad.A, "선택", () => OnPad(Pad.A)),
+            new Hint(Pad.LB, "이전 게임", () => OnPad(Pad.LB)),
+            new Hint(Pad.RB, "다음 게임", () => OnPad(Pad.RB)),
+            new Hint(Pad.B, "끝내기", Shell.Pop),
         };
     }
 
@@ -438,7 +876,7 @@ namespace TkoolLauncher
     {
         readonly GameInfo game;
         int focus; // 0 플레이, 1 즐겨찾기, 2 숨기기, 3 해상도
-        Rectangle playBtn, favBtn, hideBtn, resBtn;
+        Rectangle playBtn, favBtn, hideBtn, resBtn, clearBtn;
 
         public DetailScreen(GameInfo g) { game = g; }
         public override GameInfo FocusedGame => game;
@@ -501,8 +939,14 @@ namespace TkoolLauncher
             Draw.Text(g, string.IsNullOrEmpty(st.Res) ? "그대로" : st.Res, Draw.BodyBold, new Rectangle(resBtn.X, resBtn.Y + S(28), resBtn.Width, S(30)), Theme.Text, Draw.Center);
             if (focus == 3 && Shell.ShowFocus) Draw.FocusGlow(g, resBtn, S(4));
 
+            // 다 깸 표시
+            clearBtn = new Rectangle(resBtn.Right + S(12), rowY, S(120), S(64));
+            Draw.Fill(g, clearBtn, S(4), st.Cleared ? Color.FromArgb(60, 140, 75) : Theme.Tile);
+            Draw.Text(g, st.Cleared ? "다 깸" : "다 깸?", Draw.BodyBold, clearBtn, st.Cleared ? Color.White : Theme.SubText, Draw.Center);
+            if (focus == 4 && Shell.ShowFocus) Draw.FocusGlow(g, clearBtn, S(4));
+
             // 기록
-            int ix = resBtn.Right + S(44);
+            int ix = clearBtn.Right + S(44);
             InfoBlock(g, ref ix, rowY + S(6), "마지막 플레이", GameData.LastPlayedText(st.LastPlayed));
             InfoBlock(g, ref ix, rowY + S(6), "플레이 시간", GameData.PlayTimeText(st.TotalSeconds));
 
@@ -577,8 +1021,8 @@ namespace TkoolLauncher
             switch (b)
             {
                 case Pad.Left: focus = Math.Max(0, focus - 1); break;
-                case Pad.Right: focus = Math.Min(3, focus + 1); break;
-                case Pad.A: if (focus == 0) Shell.Launch(game); else if (focus == 1) ToggleFav(); else if (focus == 2) Hide(); else NextRes(); break;
+                case Pad.Right: focus = Math.Min(4, focus + 1); break;
+                case Pad.A: if (focus == 0) Shell.Launch(game); else if (focus == 1) ToggleFav(); else if (focus == 2) Hide(); else if (focus == 3) NextRes(); else ToggleCleared(); break;
                 case Pad.Y: ToggleFav(); break;
                 case Pad.B: Shell.Pop(); break;
             }
@@ -591,6 +1035,16 @@ namespace TkoolLauncher
             else if (favBtn.Contains(p)) { focus = 1; ToggleFav(); }
             else if (hideBtn.Contains(p)) { focus = 2; Hide(); }
             else if (resBtn.Contains(p)) { focus = 3; NextRes(); }
+            else if (clearBtn.Contains(p)) { focus = 4; ToggleCleared(); }
+        }
+
+        void ToggleCleared()
+        {
+            var st = GameData.Get(game);
+            st.Cleared = !st.Cleared;
+            GameData.Save();
+            Shell.ShowToast(st.Cleared ? "다 깬 게임으로 표시했어요" : "다 깸 표시를 뺐어요", 1500);
+            Shell.Invalidate();
         }
 
         // 그대로 → 화면이 지원하는 해상도들 → 그대로 … 차례로
@@ -612,7 +1066,7 @@ namespace TkoolLauncher
 
         public override List<Hint> Hints() => new List<Hint>
         {
-            new Hint(Pad.A, focus == 0 ? "플레이" : focus == 1 ? "즐겨찾기" : focus == 2 ? "숨기기" : "해상도 바꾸기", () => OnPad(Pad.A)),
+            new Hint(Pad.A, focus == 0 ? "플레이" : focus == 1 ? "즐겨찾기" : focus == 2 ? "숨기기" : focus == 3 ? "해상도 바꾸기" : "다 깸 표시", () => OnPad(Pad.A)),
             new Hint(Pad.Y, "즐겨찾기", ToggleFav),
             new Hint(Pad.B, "뒤로", Shell.Pop),
         };
@@ -769,7 +1223,7 @@ namespace TkoolLauncher
                           Value = System.IO.File.Exists(Log.ErrPath) ? "있음" : "없음",
                           Act = () => ErrorPopup.Show2("최근 오류 기록", Log.Tail(900) is string t && t.Length > 0 ? t : "오류 기록이 없어요") },
                 new Row { Title = "표지·이름 한 번에 찾기", Sub = "표지나 이름이 빠진 게임을 하나씩 15초씩 켜서 타이틀 화면을 찍어요 (홈 버튼으로 멈춤)",
-                          Value = GameCapture.Missing(Shell.Games).Count + "개", Act = Shell.FindCovers },
+                          Value = GameCapture.Missing(Shell.Games).Count + "개", Act = () => Shell.FindCovers() },
                 new Row { Title = "표지 없는 게임 자동 표지", Toggle = Settings.AutoCover, Sub = "처음 켤 때 타이틀 화면을 찍어 표지로, 이름이 'Game'이면 창 제목으로 바꿔요",
                           Act = () => { Settings.AutoCover = !Settings.AutoCover; Settings.Save(); } },
                 new Row { Title = "쯔꾸르 게임 자동 확대", Toggle = Settings.AutoScaleTkool, Sub = "2000~VX Ace 게임을 켜면 작은 창을 도트 선명하게 꽉 채워요",

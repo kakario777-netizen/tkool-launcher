@@ -14,6 +14,7 @@ namespace TkoolLauncher
         public bool Hidden;
         public string Title;     // 게임 창 제목에서 가져온 진짜 이름 (없으면 null)
         public string Res;       // 이 게임 켤 때 강제할 해상도 "1280×720" (없으면 null)
+        public bool Cleared;     // 다 깸 (직접 표시)
     }
 
     static class GameData
@@ -62,6 +63,7 @@ namespace TkoolLauncher
                         Hidden = p.Length > 4 && p[4] == "1",
                         Title = p.Length > 5 && p[5].Length > 0 ? p[5].Replace("\u2502", "|") : null,
                         Res = p.Length > 6 && p[6].Length > 0 ? p[6] : null,
+                        Cleared = p.Length > 7 && p[7] == "1",
                     };
                     stats[p[0]] = s;
                 }
@@ -78,10 +80,10 @@ namespace TkoolLauncher
                 foreach (var kv in stats)
                 {
                     var s = kv.Value;
-                    if (!s.Favorite && s.LastPlayed == 0 && s.TotalSeconds == 0 && !s.Hidden && s.Title == null && s.Res == null) continue;
+                    if (!s.Favorite && s.LastPlayed == 0 && s.TotalSeconds == 0 && !s.Hidden && s.Title == null && s.Res == null && !s.Cleared) continue;
                     sb.Append(kv.Key).Append('|').Append(s.Favorite ? "1" : "0").Append('|')
                       .Append(s.LastPlayed).Append('|').Append(s.TotalSeconds).Append('|').Append(s.Hidden ? "1" : "0")
-                      .Append('|').Append((s.Title ?? "").Replace("|", "\u2502").Replace("\n", " ")).Append('|').Append(s.Res ?? "").AppendLine();
+                      .Append('|').Append((s.Title ?? "").Replace("|", "\u2502").Replace("\n", " ")).Append('|').Append(s.Res ?? "").Append('|').Append(s.Cleared ? "1" : "0").AppendLine();
                 }
                 File.WriteAllText(FilePath, sb.ToString(), new UTF8Encoding(false));
             }

@@ -1163,10 +1163,10 @@ namespace TkoolLauncher
         }
 
         /// <summary>표지·이름 없는 게임을 하나씩 잠깐 켜서 채우기</summary>
-        public void FindCovers()
+        public void FindCovers(List<GameInfo> only = null)
         {
             if (GameWatch.Running) { ShowToast("게임을 끈 다음에 해 주세요", 3000); return; }
-            var list = GameCapture.Missing(Games);
+            var list = only ?? GameCapture.Missing(Games);
             if (list.Count == 0) { ShowToast("표지·이름이 빠진 게임이 없어요", 3000); return; }
             Gamepad.MapKeys = false;
             WindowState = FormWindowState.Minimized;
@@ -1191,7 +1191,17 @@ namespace TkoolLauncher
             foreach (var g in found)
             {
                 string t = GameData.Get(g).Title;
+                bool fixedByUser = t != null && t.StartsWith("=");   // 정리 모드에서 직접 고른 이름은 그대로
+                if (fixedByUser) t = t.Substring(1);
+                g.RawTitle = g.Title;
                 if (!string.IsNullOrEmpty(t)) g.Title = t;
+                // 쯔꾸르: 버전·날짜·[꼬리표]·_kr 같은 걸 떼고 깔끔한 이름으로 (떼어 낸 건 꼬리표로)
+                g.Tags.Clear();
+                if (g.IsTkool || g.FromFolder)
+                {
+                    string cleaned = TitleTidy.Clean(g.Title, g.Tags);
+                    if (!fixedByUser) g.Title = cleaned;
+                }
             }
             Games = found;
             LayoutScreens();
