@@ -16,22 +16,26 @@ namespace TkoolLauncher
     {
         static readonly Dictionary<string, string> mem = new Dictionary<string, string>();
         static readonly HashSet<string> busy = new HashSet<string>();
+        static readonly object gate = new object();
+        static int lastCall;
         public static Action Changed;
 
         /// <summary>일본어(가나)나 한자가 꽤 있고 한글이 적은 글인지</summary>
         public static bool Needs(string s)
         {
             if (string.IsNullOrWhiteSpace(s)) return false;
-            int kana = 0, han = 0, hangul = 0, letters = 0;
+            int kana = 0, han = 0, hangul = 0, letters = 0, latin = 0;
             foreach (char c in s)
             {
                 if (c >= 0x3040 && c <= 0x30FF) kana++;
                 else if (c >= 0x4E00 && c <= 0x9FFF) han++;
                 else if (c >= 0xAC00 && c <= 0xD7A3) hangul++;
+                else if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) latin++;
                 if (char.IsLetter(c)) letters++;
             }
             int cjk = kana + han;
-            return cjk >= 8 && cjk > hangul * 2 && cjk * 5 >= letters;
+            if (cjk >= 8 && cjk > hangul * 2 && cjk * 5 >= letters) return true;   // 일본어·중국어
+            return latin >= 30 && latin > hangul * 4;                               // 영어 등 (한글이 거의 없을 때)
         }
 
         /// <summary>번역이 있으면 글, 하는 중이면 null, 실패면 ""</summary>
@@ -55,8 +59,11 @@ namespace TkoolLauncher
                         if (!string.IsNullOrEmpty(r)) { Directory.CreateDirectory(Path.GetDirectoryName(cp)); File.WriteAllText(cp, r, Encoding.UTF8); }
                     }
                 }
-                catch (Exception ex) { Log.Error("구글 번역", ex); r = ""; }
+                catch (Exception ex) { Log.Info("구글 번역 실패: " + ex.Message); r = ""; }
                 lock (mem) { mem[key] = r ?? ""; busy.Remove(key); }
+                // 실패는 잠깐만 기억했다가 다시 시도 (인터넷이 잠깐 끊겼거나 너무 자주 물어 막혔을 때)
+                if (string.IsNullOrEmpty(r))
+                    Task.Delay(30000).ContinueWith(_ => { lock (mem) { string v; if (mem.TryGetValue(key, out v) && v == "") mem.Remove(key); } try { Changed?.Invoke(); } catch { } });
                 try { Changed?.Invoke(); } catch { }
             });
             return null;
@@ -78,14 +85,38 @@ namespace TkoolLauncher
             ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
             foreach (var c in chunks)
             {
-                using (var wc = new WebClient { Encoding = Encoding.UTF8 })
+                string part = null;
+                Exception last = null;
+                // 너무 자주 물으면 막혀서 한 번에 하나씩, 실패하면 조금 쉬었다 다시 (최대 3번)
+                for (int attempt = 0; attempt < 3 && part == null; attempt++)
                 {
-                    wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0";
-                    wc.Headers[HttpRequestHeader.ContentType] = "application/x-www-form-urlencoded";
-                    string json = wc.UploadString("https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ko&dt=t",
-                        "q=" + Uri.EscapeDataString(c));
-                    outSb.Append(Parse(json));
+                    lock (gate)
+                    {
+                        int wait = 250 - (Environment.TickCount - lastCall);
+                        if (wait > 0) System.Threading.Thread.Sleep(wait);
+                        try
+                        {
+                            using (var wc = new WebClient { Encoding = Encoding.UTF8 })
+                            {
+                                wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0";
+                                string json;
+                                if (attempt == 1 && c.Length < 1500)   // 두 번째는 GET으로
+                                    json = wc.DownloadString("https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ko&dt=t&q=" + Uri.EscapeDataString(c));
+                                else
+                                {
+                                    wc.Headers[HttpRequestHeader.ContentType] = "application/x-www-form-urlencoded; charset=UTF-8";
+                                    json = wc.UploadString("https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ko&dt=t", "q=" + Uri.EscapeDataString(c));
+                                }
+                                part = Parse(json);
+                            }
+                        }
+                        catch (Exception ex) { last = ex; }
+                        finally { lastCall = Environment.TickCount; }
+                    }
+                    if (part == null) System.Threading.Thread.Sleep(1500 * (attempt + 1));
                 }
+                if (part == null) throw last ?? new Exception("번역 응답 없음");
+                outSb.Append(part);
             }
             return outSb.ToString().TrimEnd();
         }

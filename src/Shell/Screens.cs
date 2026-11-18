@@ -1421,7 +1421,7 @@ namespace TkoolLauncher
             string tr = needTr ? Translate.Get(GameData.IdOf(game) + "_" + ((uint)desc.GetHashCode()).ToString("x8"), desc) : null;   // 글이 바뀌면(예: 글자 깨짐 고침) 새로 번역
             Draw.Text(g, "소개", Draw.H2, new Rectangle(area.X, area.Y, S(80), S(30)), Theme.Text);
             if (needTr)
-                Draw.Text(g, tr == null ? "(구글 번역 중…)" : tr.Length > 0 ? "(구글 번역)" : "(번역 실패 — 원문)", Draw.Body,
+                Draw.Text(g, tr == null ? "(구글 번역 중…)" : tr.Length > 0 ? "(구글 번역)" : "(번역 안 됨 — 잠시 뒤 다시 시도, 원문)", Draw.Body,
                     new Rectangle(area.X + S(78), area.Y, S(300), S(30)), Color.FromArgb(90, 170, 255), TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
             var dr = new Rectangle(area.X, area.Y + S(40), area.Width, area.Height - S(40));
             descRect = dr;
