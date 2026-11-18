@@ -984,6 +984,7 @@ namespace TkoolLauncher
             var roots = Settings.GameFolders.ToList();
             Task.Run(() =>
             {
+                GameDoctor.RestoreRenamed(roots);   // 예전 버전이 바꿔 버린 폴더 이름 되돌리기
                 List<GameInfo> found;
                 try { found = GameScanner.ScanAll(roots); } catch { found = new List<GameInfo>(); }
                 BeginInvoke(new Action(() =>
@@ -1210,7 +1211,14 @@ namespace TkoolLauncher
                 else if (g.Launcher != null)
                     Process.Start(new ProcessStartInfo(g.Launcher, g.Args ?? "") { WorkingDirectory = Path.GetDirectoryName(g.Launcher), UseShellExecute = true });
                 else
-                    p = Process.Start(new ProcessStartInfo(g.Exe) { WorkingDirectory = g.Folder, UseShellExecute = true });
+                {
+                    // MV·MZ 경로에 # % ? 가 있으면 그 글자 없는 연결 경로로 실행 (폴더 이름은 그대로)
+                    string runDir = GameDoctor.SafeRunDir(g);
+                    string exe = g.Exe, wd = g.Folder;
+                    if (runDir != null && g.Exe.StartsWith(g.Folder, StringComparison.OrdinalIgnoreCase))
+                    { exe = runDir + g.Exe.Substring(g.Folder.TrimEnd('\\').Length); wd = runDir; }
+                    p = Process.Start(new ProcessStartInfo(exe) { WorkingDirectory = wd, UseShellExecute = true });
+                }
             }
             catch (Exception ex)
             {

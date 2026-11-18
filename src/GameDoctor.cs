@@ -153,16 +153,8 @@ namespace TkoolLauncher
                         },
                     });
             }
-            // 폴더 이름에 # % 가 있으면 nw.js가 주소를 잘못 읽어 폴더 목록·빈 화면이 뜸
-            string bad = new string(dir.Where(c => c == '#' || c == '%' || c == '?').Distinct().ToArray());
-            if (bad.Length > 0)
-                list.Add(new Issue
-                {
-                    Title = "폴더 이름에 쓰면 안 되는 글자(" + string.Join(" ", bad.ToCharArray()) + ")가 있어요",
-                    Explain = "MV·MZ 게임은 경로에 # % ? 가 있으면 게임 대신 폴더 목록이나 검은 화면이 떠요. 그 글자를 _ 로 바꾸면 돼요.",
-                    FixLabel = "폴더 이름 고치기",
-                    Fix = () => RenamePath(g, dir),
-                });
+            // 폴더 이름에 # % ? 가 있으면 nw.js가 주소를 잘못 읽음 → 폴더 이름은 건드리지 않고,
+            // 실행할 때 그 글자가 없는 연결 경로(정션)로 켬 (SafeRunDir)
             if (!File.Exists(Path.Combine(dir, "nw.pak")) && !File.Exists(Path.Combine(dir, "resources.pak")) && Path.GetFileName(g.Exe).Equals("Game.exe", StringComparison.OrdinalIgnoreCase))
                 list.Add(new Issue
                 {
@@ -291,26 +283,63 @@ namespace TkoolLauncher
             return false;
         }
 
-        static string RenamePath(GameInfo g, string dir)
+        /// <summary>MV·MZ 게임 경로에 # % ? 가 있으면, 그 글자 없는 연결 폴더(정션)를 만들어 그 경로를 돌려줌. 폴더 이름 자체는 안 바꿈</summary>
+        public static string SafeRunDir(GameInfo g)
         {
-            // 게임 폴더부터 위로 올라가며 # % ? 가 든 폴더 이름을 고침
-            string cur = dir;
-            var parts = new List<string>();
-            while (!string.IsNullOrEmpty(cur) && Path.GetDirectoryName(cur) != null) { parts.Insert(0, cur); cur = Path.GetDirectoryName(cur); }
-            string fixedDir = dir;
-            foreach (var p in parts)
+            try
             {
-                string nm = Path.GetFileName(p);
-                if (nm.IndexOfAny(new[] { '#', '%', '?' }) < 0) continue;
-                string actual = fixedDir.Substring(0, fixedDir.Length - dir.Length + p.Length);
-                string target = Path.Combine(Path.GetDirectoryName(actual), nm.Replace('#', '_').Replace('%', '_').Replace('?', '_'));
-                if (Directory.Exists(target)) target += "_";
-                Directory.Move(actual, target);
-                fixedDir = target + fixedDir.Substring(actual.Length);
+                if (g == null || !(g.Version == TkoolVersion.MV || g.Version == TkoolVersion.MZ)) return null;
+                if (g.Folder.IndexOfAny(new[] { '#', '%', '?' }) < 0) return null;
+                string root = Path.Combine(Settings.Dir, "run");
+                Directory.CreateDirectory(root);
+                string link = Path.Combine(root, "g" + ((uint)g.Folder.ToLowerInvariant().GetHashCode()).ToString("x8"));
+                if (!Directory.Exists(link))
+                {
+                    var p = Process.Start(new ProcessStartInfo("cmd.exe", "/c mklink /J \"" + link + "\" \"" + g.Folder + "\"")
+                    { CreateNoWindow = true, UseShellExecute = false });
+                    p.WaitForExit(5000);
+                }
+                if (!Directory.Exists(link)) return null;
+                Log.Info("경로에 # % ? 가 있어 연결 경로로 실행: " + link);
+                return link;
             }
-            g.Folder = fixedDir;
-            g.Exe = Path.Combine(fixedDir, Path.GetFileName(g.Exe));
-            return "폴더 이름을 고쳤어요 → " + fixedDir;
+            catch (Exception ex) { Log.Error("연결 경로 만들기", ex); return null; }
+        }
+
+        /// <summary>
+        /// 예전 버전(0.1.21~)이 # % ? 를 _ 로 바꾸며 게임 폴더 위쪽(설정한 게임 폴더까지) 이름을 바꿔 버린 것 되돌리기.
+        /// 설정한 폴더가 없고, 같은 자리에 글자만 _ 로 바뀐 폴더가 있으면 원래 이름으로 돌려놓음.
+        /// </summary>
+        public static void RestoreRenamed(IEnumerable<string> roots)
+        {
+            foreach (var root in roots)
+            {
+                try
+                {
+                    if (string.IsNullOrEmpty(root) || Directory.Exists(root)) continue;
+                    // 위에서부터 한 칸씩: 없는 칸이면 바뀐 이름을 찾아 되돌림
+                    string full = Path.GetFullPath(root).TrimEnd('\\');
+                    string cur = Path.GetPathRoot(full);
+                    foreach (var part in full.Substring(cur.Length).Split('\\'))
+                    {
+                        if (part.Length == 0) continue;
+                        string want = Path.Combine(cur, part);
+                        if (!Directory.Exists(want) && part.IndexOfAny(new[] { '#', '%', '?' }) >= 0)
+                        {
+                            string fixedName = part.Replace('#', '_').Replace('%', '_').Replace('?', '_');
+                            foreach (var cand in new[] { Path.Combine(cur, fixedName), Path.Combine(cur, fixedName + "_") })
+                                if (Directory.Exists(cand))
+                                {
+                                    try { Directory.Move(cand, want); Log.Info("바뀌었던 폴더 이름 되돌림: " + cand + " → " + want); }
+                                    catch (Exception ex) { Log.Error("폴더 이름 되돌리기", ex); }
+                                    break;
+                                }
+                        }
+                        cur = want;
+                    }
+                }
+                catch (Exception ex) { Log.Error("폴더 이름 되돌리기", ex); }
+            }
         }
 
         static IEnumerable<string> SafeFiles(string dir, string pattern, bool deep)
