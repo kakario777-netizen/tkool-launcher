@@ -1506,7 +1506,8 @@ namespace TkoolLauncher
                     name = name.Trim();
                 }
                 else name = c[k];
-                if (st.NameFrom == null || st.NameFrom == "-") st.NameFrom = NameFinder.Checked;   // 다시 자동으로 안 바꾸게
+                string orig = st.NameFrom != null && !st.NameFrom.StartsWith("-") ? st.NameFrom.Split(new[] { " · " }, StringSplitOptions.None)[0] : (game.RawTitle ?? game.Title);
+                st.NameFrom = orig + NameFinder.ByUser;   // 다시 자동으로 안 바꾸게 (원래 이름은 남김)
                 game.Title = name; st.Title = "=" + name; GameData.Save(); Shell.RefreshLists();
                 Shell.ShowToast("이름을 '" + name + "'(으)로 바꿨어요", 2000);
             }, "원래 이름: " + (game.RawTitle ?? game.Title));

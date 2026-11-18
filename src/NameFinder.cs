@@ -43,16 +43,19 @@ namespace TkoolLauncher
 
         /// <summary>찾아볼 게임: 뜻 없는 이름, 또는 한글판인데 이름에 한글이 없음</summary>
         /// <summary>확인 끝 표시 (2판: 모든 게임 확인·외국어 이름 번역·DLsite 이름 검색까지)</summary>
-        public const string Checked = "-2";
+        public const string Checked = "-3";   // 3판: 번역 실패로 "-2"가 붙어 외국어로 남은 게임까지 다시
+        public const string ByUser = " · 직접 고침";
 
         /// <summary>찾아볼 게임: 아직 2판으로 확인 안 한 모든 쯔꾸르 폴더 게임 (사용자가 직접 고른 이름은 빼고)</summary>
         public static bool Wants(GameInfo g)
         {
             if (!g.FromFolder || g.Folder == null) return false;
             var st = GameData.Get(g);
-            if (st.NameFrom != null && st.NameFrom != "-") return false;    // 2판으로 확인했거나 이미 찾아 바꿈
             if (st.Title != null && st.Title.StartsWith("=") && st.NameFrom == null) return false;  // 사용자가 고른 이름
-            return true;
+            if (st.NameFrom == null || st.NameFrom == "-" || st.NameFrom == "-2") return true;   // 아직 안 봤거나 예전 판
+            if (st.NameFrom == Checked || st.NameFrom.EndsWith(ByUser)) return false;
+            // 읽어보기·DLsite에서 찾았지만 아직 외국어 이름 → 번역만 다시
+            return Foreign(g.Title) && !st.NameFrom.Contains("구글 번역");
         }
 
         /// <summary>한글이 하나도 없는 외국어 이름 (일본어·영어 등)</summary>
@@ -315,6 +318,14 @@ namespace TkoolLauncher
                     foreach (var g in list)
                     {
                         Activity.Set("name", "이름 확인 중 · " + g.Title, ++k, list.Count);
+                        var st0 = GameData.Get(g);
+                        if (st0.NameFrom != null && !st0.NameFrom.StartsWith("-"))
+                        {
+                            // 이미 찾은 이름인데 외국어 → 번역만 (출처는 그대로 이어 씀)
+                            int cut = st0.NameFrom.IndexOf(" · ");
+                            pend.Add(new KeyValuePair<GameInfo, Found>(g, new Found { Name = g.Title, From = cut >= 0 ? st0.NameFrom.Substring(cut + 3) : "", NeedTr = true }));
+                            continue;
+                        }
                         Found f = null;
                         try { f = Find(g, online); } catch (Exception ex) { Log.Error("이름 찾기 " + g.Title, ex); }
                         if (f != null && f.NeedTr) pend.Add(new KeyValuePair<GameInfo, Found>(g, f));
@@ -355,7 +366,7 @@ namespace TkoolLauncher
                                 f.Name = ko;
                                 if (Apply(g, f)) n++;
                             }
-                            else if (f.From.Length > 0) { if (Apply(g, f)) n++; }   // 번역은 안 됐지만 DLsite·읽어보기 이름은 씀
+                            else if (f.From.Length > 0 && f.Name != g.Title) { if (Apply(g, f)) n++; }   // 번역은 안 됐지만 DLsite·읽어보기 이름은 씀
                             // 제목 번역만 실패한 건 표시 안 함 → 다음에 다시 시도
                         }
                         done2 += batch.Count;
@@ -399,7 +410,7 @@ namespace TkoolLauncher
         /// <summary>"이름 다시 찾기": 찾아본 표시를 지움</summary>
         public static void ResetTried(List<GameInfo> games)
         {
-            foreach (var g in games) { var st = GameData.Get(g); if (st.NameFrom == "-" || st.NameFrom == Checked) st.NameFrom = null; }
+            foreach (var g in games) { var st = GameData.Get(g); if (st.NameFrom == "-" || st.NameFrom == "-2" || st.NameFrom == Checked) st.NameFrom = null; }
             GameData.Save();
         }
     }
