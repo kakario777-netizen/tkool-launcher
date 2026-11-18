@@ -412,8 +412,9 @@ namespace TkoolLauncher
             quick.Open = false;
             quick.T = 0;
             CameFromGame = false;
-            WindowState = FormWindowState.Minimized;
-            if (gameHwnd != IntPtr.Zero) { ShowWindow(gameHwnd, 9); SetForegroundWindow(gameHwnd); }
+            if (curtain) Invalidate();   // 게임 뒤 빈 배경으로 (내리지 않음)
+            else WindowState = FormWindowState.Minimized;
+            if (gameHwnd != IntPtr.Zero) { ShowWindow(gameHwnd, 9); ForceForeground(gameHwnd); }
             if (scaleWas != 0 && gameHwnd != IntPtr.Zero) { int m = scaleWas; scaleWas = 0; Scaler.Start(m, gameHwnd); }
         }
 
@@ -816,12 +817,39 @@ namespace TkoolLauncher
             Draw.EnsureFonts();
 
             PaintBackground(g);
+            if (curtain && !CameFromGame) { PaintCurtain(g); return; }   // 게임 켜고 끌 때: 빈 배경 + 글자 하나
             Cur.Paint(g);
             PaintTopBar(g);
             menu.Paint(g, ClientRectangle);
             quick.Paint(g, ClientRectangle);
             PaintBottomBar(g);
             PaintToast(g);
+        }
+
+        // ───────── 게임 켜고 끌 때 가림막 ─────────
+        // 런처를 내리지 않고 게임 뒤에 빈 배경으로 깔아 둠 → 켜는 동안·끄고 돌아오는 동안 바탕화면·작업 표시줄이 안 보임
+        bool curtain, curtainSeen;
+        string curtainTitle;
+        IntPtr curtainGameWin;
+
+        void ShowCurtain(string title)
+        {
+            curtain = true; curtainSeen = false; curtainTitle = title;
+            menu.Open = false; quick.Open = false; quick.T = 0;
+            if (!Visible) Show();
+            WindowState = FormWindowState.Maximized;
+            Invalidate(); Update();
+        }
+
+        void PaintCurtain(Graphics g)
+        {
+            var r = ClientRectangle;
+            int cy = r.Height / 2;
+            if (!string.IsNullOrEmpty(curtainTitle))
+                Draw.Text(g, curtainTitle, Theme.Px(24, true), new Rectangle(r.X + Theme.S(40), cy - Theme.S(60), r.Width - Theme.S(80), Theme.S(44)), Theme.Text,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+            Draw.Text(g, curtainSeen ? "돌아가는 중…" : "불러오는 중…", Draw.Menu, new Rectangle(r.X, cy, r.Width, Theme.S(36)), Theme.SubText,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
         }
 
         void PaintTopBar(Graphics g)
@@ -1053,6 +1081,7 @@ namespace TkoolLauncher
                 playTimer?.Dispose(); playTimer = null;
                 Log.Info("게임 끝: " + g.Title + " (이번 " + (int)(DateTime.Now - sessionStart).TotalMinutes + "분, 총 " + st.TotalSeconds / 60 + "분)");
                 playStat = null; PlayingGame = null; TrackedExternal = false; GameProblem = null;
+                curtain = false;
                 if (coverFor != null) EndManualCover();
                 CameFromGame = false;
                 quick.Open = false; quick.T = 0;
@@ -1077,6 +1106,8 @@ namespace TkoolLauncher
         }
 
         delegate bool EnumWinProc(IntPtr h, IntPtr l);
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)] struct WRECT { public int L, T, R, B; }
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out WRECT r);
         [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool EnumWindows(EnumWinProc f, IntPtr l);
         [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
         [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool IsHungAppWindow(IntPtr h);
@@ -1102,6 +1133,7 @@ namespace TkoolLauncher
                 Task.Run(() =>
                 {
                     GameInfo attach = null; string problem = null; bool hung = false, anyWin = false;
+                    IntPtr bigWin = IntPtr.Zero; int bigArea = 0;
                     try
                     {
                         if (g == null && !front && !GameWatch.Running)
@@ -1129,6 +1161,8 @@ namespace TkoolLauncher
                                 if (mine)
                                 {
                                     anyWin = true;
+                                    WRECT wr;
+                                    if (GetWindowRect(h, out wr)) { int ar = (wr.R - wr.L) * (wr.B - wr.T); if (ar > bigArea) { bigArea = ar; bigWin = h; } }
                                     if (IsHungAppWindow(h)) hung = true;
                                     if (!tk && cls.ToString() == "#32770" && tt.Length > 0) problem = "게임에 오류 창이 떴어요: " + tt;
                                 }
@@ -1153,6 +1187,12 @@ namespace TkoolLauncher
                             if (PlayingGame == null) return;
                             // 런처로 켠 게임인데 게임 창이 15초 넘게 하나도 없으면(뒤에 남은 프로그램 때문에 안 끝나는 경우) 끝난 걸로
                             noWinCount = anyWin ? 0 : noWinCount + 1;
+                            if (anyWin && curtain)
+                            {
+                                if (!curtainSeen) { curtainSeen = true; Invalidate(); }
+                                // 게임 창이 가림막 뒤에 숨어 있으면 앞으로 (스팀으로 켠 게임 등)
+                                if (!CameFromGame && Form.ActiveForm == this && bigWin != IntPtr.Zero && !PopupOpen) ForceForeground(bigWin);
+                            }
                             if (!TrackedExternal && noWinCount >= 5 && (DateTime.Now - sessionStart).TotalSeconds > 25 && !GameWatch.ForceEnd)
                             {
                                 Log.Info("게임 창이 사라졌는데 프로그램이 남아 있어 끝난 걸로 봄: " + PlayingGame.Title);
@@ -1369,7 +1409,7 @@ namespace TkoolLauncher
                 catch { }
             });
 
-            WindowState = FormWindowState.Minimized; // 게임하는 동안 런처는 쉬기
+            ShowCurtain(g.Title);   // 게임하는 동안 런처는 빈 배경으로 게임 뒤에
 
             // 키보드 변환은 패드를 못 읽는 쯔꾸르(2000~VX Ace)만
             Gamepad.MapKeys = g.IsTkool && g.Version != TkoolVersion.MV && g.Version != TkoolVersion.MZ;

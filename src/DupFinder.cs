@@ -193,6 +193,34 @@ namespace TkoolLauncher
             catch { return 0; }
         }
 
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        struct SHFILEOPSTRUCT { public IntPtr hwnd; public uint wFunc; public string pFrom; public string pTo; public ushort fFlags; [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)] public bool fAnyOperationsAborted; public IntPtr hNameMappings; public string lpszProgressTitle; }
+        [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        static extern int SHFileOperation(ref SHFILEOPSTRUCT op);
+
+        /// <summary>게임 폴더를 휴지통으로 (되살릴 수 있게). 성공하면 true</summary>
+        public static bool DeleteToRecycle(GameInfo g, out string err)
+        {
+            err = null;
+            try
+            {
+                string dir = g.Folder;
+                if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) { err = "폴더가 없어요"; return false; }
+                // 설정한 게임 폴더 자체나 드라이브 통째는 절대 안 지움
+                foreach (var root in Settings.GameFolders)
+                    if (string.Equals(Path.GetFullPath(root).TrimEnd('\\'), Path.GetFullPath(dir).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) { err = "게임 폴더 전체는 지울 수 없어요"; return false; }
+                if (Path.GetPathRoot(dir).TrimEnd('\\').Length >= dir.TrimEnd('\\').Length) { err = "드라이브는 지울 수 없어요"; return false; }
+                var op = new SHFILEOPSTRUCT { wFunc = 3 /*FO_DELETE*/, pFrom = Path.GetFullPath(dir).TrimEnd('\\') + "\0\0", fFlags = 0x40 | 0x10 | 0x4 | 0x400 /*ALLOWUNDO|NOCONFIRM|SILENT|NOERRORUI*/ };
+                int rc = SHFileOperation(ref op);
+                if (rc != 0 || op.fAnyOperationsAborted || Directory.Exists(dir)) { err = "휴지통으로 옮기지 못했어요 (코드 " + rc + ")"; return false; }
+                Log.Info("중복 게임 폴더를 휴지통으로: " + dir);
+                foreach (var gr in Groups) gr.Games.Remove(g);
+                Groups.RemoveAll(x => x.Games.Count < 2);
+                return true;
+            }
+            catch (Exception ex) { Log.Error("게임 폴더 지우기", ex); err = ex.Message; return false; }
+        }
+
         /// <summary>탐색기에서 게임 폴더를 골라 둔 채로 열기</summary>
         public static void OpenFolder(GameInfo g)
         {

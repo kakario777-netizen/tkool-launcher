@@ -11,7 +11,7 @@ namespace TkoolLauncher
     class DupScreen : Screen
     {
         int gi, row;
-        Rectangle[] openR = new Rectangle[0], rowR = new Rectangle[0];
+        Rectangle[] openR = new Rectangle[0], rowR = new Rectangle[0], delR = new Rectangle[0];
         Rectangle notDupR, prevR, nextR;
         static readonly Dictionary<string, long> sizes = new Dictionary<string, long>();
 
@@ -43,7 +43,7 @@ namespace TkoolLauncher
 
             int y = Area.Y + S(64), rh = S(112);
             int n = grp.Games.Count;
-            if (openR.Length != n) { openR = new Rectangle[n]; rowR = new Rectangle[n]; }
+            if (openR.Length != n) { openR = new Rectangle[n]; rowR = new Rectangle[n]; delR = new Rectangle[n]; }
             for (int i = 0; i < n; i++)
             {
                 var gm = grp.Games[i];
@@ -61,7 +61,7 @@ namespace TkoolLauncher
                     int w = (int)(th.Width * k), h = (int)(th.Height * k);
                     Draw.Image(g, th, new Rectangle(tr.X + (tr.Width - w) / 2, tr.Y + (tr.Height - h) / 2, w, h), S(3));
                 }
-                int tx = tr.Right + S(16), tw = r.Right - S(190) - tx;
+                int tx = tr.Right + S(16), tw = r.Right - S(330) - tx;
                 Draw.Text(g, gm.Title + (i == 0 ? "   ← 가장 새 버전" : ""), Draw.BodyBold, new Rectangle(tx, r.Y + S(8), tw, S(28)), i == 0 ? Color.FromArgb(130, 220, 140) : Theme.Text,
                     TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
                 Draw.Text(g, "폴더: " + System.IO.Path.GetFileName(gm.Folder), Draw.Small, new Rectangle(tx, r.Y + S(38), tw, S(22)), Theme.SubText,
@@ -73,6 +73,9 @@ namespace TkoolLauncher
                 openR[i] = new Rectangle(r.Right - S(170), r.Y + (r.Height - S(50)) / 2, S(156), S(50));
                 Draw.Fill(g, openR[i], S(6), Color.FromArgb(255, 52, 62, 78));
                 Draw.Text(g, "폴더 열기", Draw.BodyBold, openR[i], Theme.Text, Draw.Center);
+                delR[i] = new Rectangle(openR[i].X - S(140), openR[i].Y, S(128), S(50));
+                Draw.Fill(g, delR[i], S(6), Color.FromArgb(255, 120, 45, 45));
+                Draw.Text(g, "삭제", Draw.BodyBold, delR[i], Color.White, Draw.Center);
                 if (i == row && Shell.ShowFocus) Draw.FocusGlow(g, r, S(8));
                 y += rh;
                 if (y > Area.Bottom - S(80)) break;
@@ -98,6 +101,22 @@ namespace TkoolLauncher
             }, "다음부터 이 게임들은 같이 묶지 않아요");
         }
 
+        void Delete(GameInfo gm)
+        {
+            PickerScreen.Confirm(Shell, "'" + gm.Title + "' 폴더를 삭제할까요?", "삭제 (휴지통으로)", () =>
+            {
+                string err;
+                if (DupFinder.DeleteToRecycle(gm, out err))
+                {
+                    Shell.ShowToast("폴더를 휴지통으로 옮겼어요 (휴지통에서 되살릴 수 있어요)", 3500);
+                    row = 0;
+                    Shell.RefreshLists();
+                    if (G.Count == 0) Shell.Pop();
+                }
+                else Shell.ShowToast("지우지 못했어요: " + err, 4000);
+            }, "폴더를 삭제합니다: " + gm.Folder);
+        }
+
         void Go(int d) { if (G.Count == 0) return; gi = (gi + d + G.Count) % G.Count; row = 0; }
 
         public override void OnPad(Pad b)
@@ -110,8 +129,8 @@ namespace TkoolLauncher
                 case Pad.LB: case Pad.Left: Go(-1); break;
                 case Pad.RB: case Pad.Right: Go(1); break;
                 case Pad.A: if (n > 0) DupFinder.OpenFolder(G[gi].Games[row]); break;
-                case Pad.Y: if (n > 0) Shell.Push(new DetailScreen(G[gi].Games[row])); break;
-                case Pad.X: NotDup(); return;
+                case Pad.X: if (n > 0) Delete(G[gi].Games[row]); return;
+                case Pad.Y: NotDup(); return;
                 case Pad.B: Shell.Pop(); return;
             }
             Shell.Invalidate();
@@ -126,6 +145,7 @@ namespace TkoolLauncher
             for (int i = 0; i < openR.Length && i < G[gi].Games.Count; i++)
             {
                 if (openR[i].Contains(p)) { row = i; DupFinder.OpenFolder(G[gi].Games[i]); return; }
+                if (delR[i].Contains(p)) { row = i; Delete(G[gi].Games[i]); return; }
                 if (rowR[i].Contains(p)) { row = i; Shell.Push(new DetailScreen(G[gi].Games[i])); return; }
             }
         }
@@ -133,8 +153,8 @@ namespace TkoolLauncher
         public override List<Hint> Hints() => new List<Hint>
         {
             new Hint(Pad.A, "폴더 열기", () => OnPad(Pad.A)),
-            new Hint(Pad.Y, "게임 정보", () => OnPad(Pad.Y)),
-            new Hint(Pad.X, "중복 아님", () => OnPad(Pad.X)),
+            new Hint(Pad.X, "삭제", () => OnPad(Pad.X)),
+            new Hint(Pad.Y, "중복 아님", () => OnPad(Pad.Y)),
             new Hint(Pad.RB, "다음 묶음", () => OnPad(Pad.RB)),
             new Hint(Pad.B, "뒤로", Shell.Pop),
         };
