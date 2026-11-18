@@ -89,8 +89,8 @@ namespace TkoolLauncher
             GameDesc.Changed = () => { try { BeginInvoke(new Action(Invalidate)); } catch { } };
             Translate.Changed = () => { try { BeginInvoke(new Action(Invalidate)); } catch { } };
 
-            var home = new HomeScreen { Shell = this };
-            stack.Add(home);
+            // 첫 화면 = 라이브러리 (설정의 "라이브러리 첫 탭"), 최근 게임 선반 홈은 안 씀
+            stack.Add(new LibraryScreen { Shell = this });
 
             Shown += (s, e) =>
             {
@@ -263,9 +263,7 @@ namespace TkoolLauncher
         /// <summary>라이브러리(탭 있는 게임 목록) 화면으로</summary>
         public void OpenLibrary()
         {
-            if (stack.Count > 0 && stack[stack.Count - 1] is LibraryScreen) return;
             GoHome();
-            Push(new LibraryScreen());
         }
 
         // ───────── 홈 버튼·빠른 설정 ─────────

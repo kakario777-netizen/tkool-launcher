@@ -833,7 +833,6 @@ namespace TkoolLauncher
             new Hint(Pad.Y, "검색", () => Shell.Push(new SearchScreen())),
         }.Concat(TkTab ? new List<Hint> { new Hint(Pad.X, "정렬", NextSort) } : new List<Hint>()).Concat(new List<Hint>
         {
-            new Hint(Pad.B, "뒤로", Shell.Pop),
             new Hint(Pad.RB, "탭 이동", () => SetTab(tab + 1)),
         }).ToList();
     }
@@ -1534,7 +1533,7 @@ namespace TkoolLauncher
         Rectangle panel;
         readonly List<Rectangle> rects = new List<Rectangle>();
 
-        string[] Names => new[] { "홈", "라이브러리", "설정", "게임 폴더 설정", "게임 다시 찾기", "런처 끄기" };
+        string[] Names => new[] { "라이브러리", "설정", "게임 폴더 설정", "게임 다시 찾기", "런처 끄기" };
 
         public bool Tick(float dt)
         {
@@ -1570,7 +1569,7 @@ namespace TkoolLauncher
                 Draw.Text(g, names[i], i == focus ? Theme.Px(18, true) : Draw.Menu, new Rectangle(r.X + Theme.S(22), r.Y, r.Width, r.Height),
                     i == names.Length - 1 ? Color.FromArgb(240, 140, 140) : Theme.Text);
                 y += Theme.S(60);
-                if (i == 1 || i == 4) y += Theme.S(14);
+                if (i == 1 || i == 3) y += Theme.S(14);
             }
         }
 
@@ -1583,11 +1582,10 @@ namespace TkoolLauncher
             switch (i)
             {
                 case 0: Shell.GoHome(); break;
-                case 1: Shell.GoHome(); Shell.Push(new LibraryScreen()); break;
-                case 2: Shell.GoHome(); Shell.Push(new SettingsScreen()); break;
-                case 3: Shell.OpenFolders(); break;
-                case 4: Shell.Rescan(); break;
-                case 5: Shell.Close(); break;
+                case 1: Shell.GoHome(); Shell.Push(new SettingsScreen()); break;
+                case 2: Shell.OpenFolders(); break;
+                case 3: Shell.Rescan(); break;
+                case 4: Shell.Close(); break;
             }
         }
 

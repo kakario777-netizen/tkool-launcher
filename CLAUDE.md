@@ -6,7 +6,7 @@
 - 로컬 확인: mono `mcs`로 컴파일 체크 (nuget 접속 불가). mcs는 foreach 튜플 분해 등 일부 최신 문법을 못 읽으니 피하기.
 - 자동 업데이트: 켤 때 releases/latest 확인 → exe 교체(.old) → --updated 로 재시작. 버전은 워크플로가 -p:Version=0.1.<run_number> 로 넣음.
 - 패드: XInput 직접 읽기(Gamepad.cs). 런처 화면은 IPadTarget, 게임 중엔 2000~VX Ace만 키보드로 변환(A=Z, B=X, X=Shift, Y=Esc, LB=Q, RB=W, Start=Enter).
-- 화면: src/Shell (스팀OS 게임 모드 모양 — 홈 선반·라이브러리 탭·상세·왼쪽 메뉴). 표지는 CoverArt(캐시: 내 문서\쯔꾸르 런처\cache), 타이틀 그림 추출은 ArtExtract(MV·MZ 암호화, rgssad/rgss2a/rgss3a, XYZ). 기록은 GameData(games.ini).
+- 화면: src/Shell (스팀OS 게임 모드 모양 — 라이브러리가 맨 아래 첫 화면(홈 선반 HomeScreen은 안 씀, 사용자 요청)·상세·왼쪽 메뉴). 표지는 CoverArt(캐시: 내 문서\쯔꾸르 런처\cache), 타이틀 그림 추출은 ArtExtract(MV·MZ 암호화, rgssad/rgss2a/rgss3a, XYZ). 기록은 GameData(games.ini).
 - 미리보기: Xvfb + mono로 ShellForm.DrawToBitmap 스크린샷 가능(배터리 읽기는 mono에서 예외 → try로 감쌈).
 - 게임 종류: GameKind(Tkool·Steam·Epic·Gog·Pc·Battle). 라이브러리 탭 순서: 전체(열면 Settings.LibStartTab, 기본 즐겨찾기, 비면 전체)·쯔꾸르·PC 게임·즐겨찾기·최근 플레이. "쯔꾸르"(설정에서 고른 게임 폴더에서 찾은 것만 — FromFolder, 쯔꾸르가 아닌 것도 포함하되 엔진 칸은 "기타") / "PC 게임"(스토어·배틀넷(Battle.net.exe --exec="launch 코드")·설치 기록 StoreScanner.Installed — 게임 회사·경로에 game 들어간 것만)로 나눔. 스토어는 StoreScanner, PC 폴더 게임은 GameScanner.DetectPc(폴더 하나=게임 하나), 직접 추가는 Settings.ManualGames. 실행 감시는 GameWatch(게임 폴더 안 프로세스가 다 꺼질 때까지). 검색은 SearchScreen(초성·알파벳·가나 줄).
 - 기기: 사용자 기기는 AYANEO AIR Plus (AMD 7320U 멘도시노, 보드명 AB05-Mendocino). 팬은 리눅스 oxp-sensors와 같은 EC 레지스터(pwm 0~100) — 윈도우에선 EC 접근 드라이버 필요.
