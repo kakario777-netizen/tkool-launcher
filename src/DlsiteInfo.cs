@@ -178,15 +178,45 @@ namespace TkoolLauncher
         public static volatile bool Busy;
 
         /// <summary>RJ 번호가 있는 쯔꾸르 폴더 게임 중 아직 안 받은 것만 뒤에서 받음</summary>
+        static bool ImgChecked(string code) => File.Exists(Path.Combine(Dir, code + ".imgchk"));
+        static readonly object one = new object();
+
+        /// <summary>이 게임 하나: 정보가 없으면 받고, 표지가 없으면 그림까지 (이미 한 건 건너뜀). 정보가 있으면 true</summary>
+        public static bool EnsureOne(GameInfo g)
+        {
+            string code = NameFinder.FindCode(g);
+            if (code == null) return false;
+            lock (one)
+            {
+                Info i;
+                if (!Tried(code))
+                {
+                    i = null;
+                    try { i = Fetch(code); } catch (Exception ex) { Log.Error("DLsite 정보 " + code, ex); }
+                    try { Save(code, i); } catch { }
+                    lock (mem) mem[code] = i;
+                    System.Threading.Thread.Sleep(400);   // 사이트에 부담 안 주게 천천히
+                }
+                else i = Get(g);
+                if (i != null && !ImgChecked(code))
+                {
+                    try { SaveCover(g, i); } catch { }
+                    try { Directory.CreateDirectory(Dir); File.WriteAllText(Path.Combine(Dir, code + ".imgchk"), ""); } catch { }
+                }
+                return i != null;
+            }
+        }
+
+        static bool again;
+
+        /// <summary>RJ 번호가 있는(또는 검색으로 찾은) 쯔꾸르 폴더 게임 중 아직 안 받은 것만 뒤에서 받음. 도는 중에 또 부르면 끝난 뒤 한 번 더</summary>
         public static void RunAll(List<GameInfo> games, Action<int> done)
         {
-            if (Busy) return;
-            var withCode = games.Where(g => g.FromFolder && NameFinder.FindCode(g) != null).ToList();
-            var list = withCode.Where(g => !Tried(NameFinder.FindCode(g))).ToList();
-            // 예전에 정보만 받고 그림을 못 넣은 게임 (표지 없음) → 그림만 다시
-            var needImg = withCode.Where(g => Tried(NameFinder.FindCode(g))).ToList();
-            if (list.Count == 0 && needImg.Count == 0) { Activity.Note("DLsite · 새로 받을 게임 없음"); done?.Invoke(0); return; }
-            Busy = true;
+            if (Busy) { again = true; return; }
+            var list = games.Where(g => g.FromFolder && NameFinder.FindCode(g) != null)
+                            .Where(g => { string c = NameFinder.FindCode(g); return !Tried(c) || (!ImgChecked(c) && File.Exists(Path.Combine(Dir, c + ".txt"))); }).ToList();
+            if (list.Count == 0) { Activity.Note("DLsite · 새로 받을 게임 없음"); done?.Invoke(0); return; }
+            Busy = true; again = false;
             var th = new System.Threading.Thread(() =>
             {
                 int n = 0;
@@ -196,24 +226,16 @@ namespace TkoolLauncher
                     foreach (var g in list)
                     {
                         Activity.Set("dlsite", "DLsite 정보 받는 중 · " + g.Title, ++k, list.Count);
-                        string code = NameFinder.FindCode(g);
-                        if (Tried(code)) continue;
-                        Info i = null;
-                        try { i = Fetch(code); } catch (Exception ex) { Log.Error("DLsite 정보 " + code, ex); }
-                        try { Save(code, i); } catch { }
-                        lock (mem) mem[code] = i;
-                        if (i != null) { n++; SaveCover(g, i); }
-                        System.Threading.Thread.Sleep(400);   // 사이트에 부담 안 주게 천천히
-                    }
-                    k = 0;
-                    foreach (var g in needImg)
-                    {
-                        Activity.Set("dlsite", "DLsite 그림 확인 중", ++k, needImg.Count);
-                        var i = Get(g);
-                        if (i != null && SaveCover(g, i)) { n++; System.Threading.Thread.Sleep(300); }
+                        if (EnsureOne(g)) n++;
                     }
                 }
-                finally { Activity.Done("dlsite", "DLsite 정보 끝 · " + list.Count + "개 확인, " + n + "개 채움"); Busy = false; done?.Invoke(n); }
+                finally
+                {
+                    Activity.Done("dlsite", "DLsite 정보 끝 · " + list.Count + "개 확인, " + n + "개 채움");
+                    Busy = false;
+                    done?.Invoke(n);
+                    if (again) RunAll(games, done);
+                }
             }) { IsBackground = true };
             th.Start();
         }

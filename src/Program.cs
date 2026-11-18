@@ -17,6 +17,7 @@ namespace TkoolLauncher
         static void Main(string[] args)
         {
             TaskbarHide.Show();   // 지난번에 숨긴 채로 꺼졌을 수도 있으니
+            try { System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12; } catch { }   // DLsite·구글 번역 https
             AppDomain.CurrentDomain.ProcessExit += (s, e) => { if (TaskbarHide.Hidden) TaskbarHide.Show(); };
             bool updated = args.Contains("--updated") || args.Contains("--elevated");
             string trayFlag = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "쯔꾸르 런처", "tray.flag");

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace TkoolLauncher
 {
@@ -72,8 +73,10 @@ namespace TkoolLauncher
                 string code = FindCode(g);
                 if (code != null && (meaningless || Foreign(g.Title))) { var d = FromDlsite(code); if (d != null) return d; }
                 // 3) 번호 없으면 원래 이름으로 DLsite 검색 (이름이 딱 맞을 때만)
-                if (code == null) SearchDlsite(g);
+                if (code == null) { SearchDlsite(g); if (FindCode(g) != null) Interlocked.Increment(ref statFound); }
                 code = FindCode(g);
+                // 번호가 있으면 정보·그림을 바로 받아 둠 (다 끝날 때까지 안 기다림)
+                if (code != null) { try { DlsiteInfo.EnsureOne(g); } catch { } }
                 if (code != null && meaningless) { var d = FromDlsite(code); if (d != null) return d; }
             }
             if (f != null) { f.NeedTr = online && Foreign(f.Name); return f; }   // 읽어보기 영어·일본어 제목 (뜻 없는 이름보다 나음)
@@ -83,6 +86,7 @@ namespace TkoolLauncher
         }
 
         // ───────── DLsite 이름 검색 (RJ 번호 없는 게임) ─────────
+        static int statSearched, statFound;
         static readonly Dictionary<string, string> found = new Dictionary<string, string>();   // 게임 id → RJ (찾은 것만)
         static bool foundLoaded;
         static string FoundPath => Path.Combine(Settings.Dir, "cache", "dlsite", "found.txt");
@@ -114,6 +118,7 @@ namespace TkoolLauncher
             var names = new List<string>();
             foreach (var s in new[] { g.RawTitle, TitleTidy.Clean(g.RawTitle ?? "", new List<string>()), TitleTidy.Clean(Path.GetFileName(g.Folder ?? ""), new List<string>()) })
                 if (!string.IsNullOrWhiteSpace(s) && Foreign(s) && !names.Contains(s.Trim()) && !Meaningless(g, s) && Norm(s).Length >= 2) names.Add(s.Trim());
+            if (names.Count > 0) Interlocked.Increment(ref statSearched);
             foreach (var name in names.Take(2))
             {
                 string q = Norm(name);
@@ -298,6 +303,7 @@ namespace TkoolLauncher
             var list = games.Where(Wants).ToList();
             if (list.Count == 0) { Activity.Note("이름 확인 · 새로 볼 게임 없음 (모두 확인됨)"); done?.Invoke(0); return; }
             Busy = true;
+            statSearched = statFound = 0;
             var th = new System.Threading.Thread(() =>
             {
                 int n = 0;
@@ -360,7 +366,7 @@ namespace TkoolLauncher
                 finally
                 {
                     GameData.Save();
-                    Activity.Done("name", "이름 확인 끝 · " + list.Count + "개 확인, " + n + "개 바꿈");
+                    Activity.Done("name", "이름 확인 끝 · " + list.Count + "개 확인, " + n + "개 바꿈 · DLsite 검색 " + statSearched + "개 중 " + statFound + "개 찾음");
                     Busy = false;
                     done?.Invoke(n);
                 }

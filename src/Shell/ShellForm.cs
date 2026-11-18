@@ -1467,6 +1467,8 @@ namespace TkoolLauncher
             CoverArt.Preload(found);   // 목록 썸네일을 미리 메모리에
             ScheduleDupScan();
             // 뜻 없는 이름(RJ번호·Game·my…)이나 한글판인데 영어 이름인 게임: 읽어보기·DLsite에서 진짜 이름 찾기 (한 번만)
+            // RJ 번호가 이미 있는 게임은 DLsite 정보부터 바로 (이름 확인과 같이 돎)
+            DlsiteInfo.RunAll(found, m => { if (m > 0) try { BeginInvoke(new Action(RefreshLists)); } catch { } });
             // 모든 쯔꾸르 게임 한 번씩 확인(흔적 남김): 이름 찾기·외국어 이름 번역·DLsite 검색 → 그다음 DLsite 정보·그림
             NameFinder.RunAll(found, true, n =>
             {
