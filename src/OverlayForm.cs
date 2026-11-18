@@ -165,7 +165,7 @@ namespace TkoolLauncher
                     else if (Fps.Problem != "" && GameWatch.Running) v[0] = "-";
                     if (Want(1)) v[1] = (cpu != null ? (int)cpu.NextValue() : 0) + "%";
                     if (Want(2)) { float t = Hardware.TempReady ? Hardware.CpuTemp() : 0; if (t > 0) v[2] = (int)t + "°C"; }
-                    if (Want(3)) { int tdp = Settings.SmartFps > 0 && GameWatch.Running ? SmartTdp.Current : Settings.Tdp; if (tdp > 0) v[3] = tdp + "W"; }
+                    if (Want(3)) { int tdp = Settings.SmartFps > 0 && GameWatch.Running ? SmartTdp.Current : PerfMode.Mode != PerfMode.Custom ? PerfMode.BaseTdp : Settings.Tdp; if (tdp > 0) v[3] = tdp + "W"; }
                     if (Want(4)) { float g = Gpu3D(); v[4] = g < 0 ? "-" : (int)g + "%"; }
                     if (Want(5))
                     {

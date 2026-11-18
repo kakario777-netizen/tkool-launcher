@@ -372,10 +372,9 @@ namespace TkoolLauncher
             if (!Ready) return;
             try
             {
-                if (SmuReady && Settings.Tdp > 0) SetTdp(Settings.Tdp);
+                PerfMode.Apply();   // 성능 모드(또는 직접 설정)가 TDP·팬을 맡음
                 if (EcReady)
                 {
-                    if (Settings.Fan >= 0) SetFan(Settings.Fan);
                     if (Settings.LedSet) SetLed(Settings.LedOn, Settings.LedR, Settings.LedG, Settings.LedB, Settings.LedBright);
                     UpdateEffect();
                 }

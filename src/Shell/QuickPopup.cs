@@ -14,6 +14,7 @@ namespace TkoolLauncher
         readonly QuickPanel qp;
         readonly ShellForm shell;
         readonly Timer slide = new Timer { Interval = 10 };
+        readonly Timer refresh = new Timer { Interval = 1500 };   // 지금 상태(TDP·팬·온도) 숫자 새로 그리기
         int targetX;
         List<Hint> hints = new List<Hint>();
         Point down; bool isDown, dragged;
@@ -54,6 +55,8 @@ namespace TkoolLauncher
             qp.Open = true; qp.T = 1f;
             Show();
             slide.Start();
+            refresh.Tick += (o, e) => { if (Visible) Invalidate(); };
+            refresh.Start();
             Activate();
         }
 

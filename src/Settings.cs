@@ -42,6 +42,7 @@ namespace TkoolLauncher
         public static bool GyroInvertX, GyroInvertY;
         public static int Tdp;          // 0 = 기기 기본
         public static int Fan = -1;     // -1 = 자동
+        public static int PerfMode = -1; // 성능 모드 0 저소음 1 균형 2 고성능 3 직접 (-1 = 처음, 직접으로 취급)
         public static bool LedSet, LedOn = true;
         public static int LedR = 255, LedG = 255, LedB = 255, LedBright = 60;
         public static List<string> ManualGames = new List<string>();
@@ -77,6 +78,7 @@ namespace TkoolLauncher
                     else if (key == "OvItems") int.TryParse(val, out OvItems);
                     else if (key == "OvMargin") int.TryParse(val, out OvMargin);
                     else if (key == "OvOn") OvOn = val == "1";
+                    else if (key == "PerfMode") int.TryParse(val, out PerfMode);
                     else if (key == "OvX") float.TryParse(val, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out OvX);
                     else if (key == "OvY") float.TryParse(val, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out OvY);
                     else if (key == "AdminTaskExe") AdminTaskExe = val;
@@ -138,7 +140,7 @@ namespace TkoolLauncher
                 sb.AppendLine("HardwareControl=" + (HardwareControl ? "1" : "0"));
                 sb.AppendLine("OvStyle=" + OvStyle); sb.AppendLine("OvPos=" + OvPos); sb.AppendLine("OvSize=" + OvSize);
                 sb.AppendLine("OvColor=" + OvColor); sb.AppendLine("OvBg=" + OvBg); sb.AppendLine("OvText=" + OvText); sb.AppendLine("OvItems=" + OvItems);
-                sb.AppendLine("OvMargin=" + OvMargin); sb.AppendLine("OvOn=" + (OvOn ? "1" : "0"));
+                sb.AppendLine("OvMargin=" + OvMargin); sb.AppendLine("OvOn=" + (OvOn ? "1" : "0")); sb.AppendLine("PerfMode=" + PerfMode);
                 sb.AppendLine("OvX=" + OvX.ToString(System.Globalization.CultureInfo.InvariantCulture)); sb.AppendLine("OvY=" + OvY.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 sb.AppendLine("AdminTaskExe=" + AdminTaskExe);
                 sb.AppendLine("Tdp=" + Tdp);

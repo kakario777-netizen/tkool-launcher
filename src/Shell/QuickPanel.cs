@@ -123,7 +123,19 @@ namespace TkoolLauncher
                 Kind = Kind.Toggle, Title = "블루투스", On = bt, Sub = radiosLoaded ? (hasBt ? null : "블루투스 장치를 못 찾았어요") : "확인 중...",
                 Change = v => { bt = v == 1; Task.Run(() => SystemControls.SetRadio("Bluetooth", v == 1)); }
             });
-            rows.Add(new Row { Kind = Kind.Choice, Title = "성능 모드", Choices = SystemControls.PowerNames, ChoiceIndex = power, Change = v => { power = v; SystemControls.SetPowerMode(v); } });
+            if (Hardware.Ready)
+            {
+                int pm = PerfMode.Mode;
+                rows.Add(new Row
+                {
+                    Kind = Kind.Choice, Title = "성능 모드", Choices = PerfMode.Names, ChoiceIndex = pm,
+                    Sub = PerfMode.Describe(pm),
+                    Change = v => { PerfMode.Set(v); power = SystemControls.GetPowerMode(); }
+                });
+                rows.Add(new Row { Kind = Kind.Action, Title = "지금 상태", Sub = PerfMode.Live(), Act = () => { } });
+            }
+            else
+                rows.Add(new Row { Kind = Kind.Choice, Title = "윈도우 전원 모드", Choices = SystemControls.PowerNames, ChoiceIndex = power, Change = v => { power = v; SystemControls.SetPowerMode(v); } });
             rows.Add(new Row { Kind = Kind.Toggle, Title = "성능 표시 (화면 위)", On = OverlayForm.IsOn, Change = v => OverlayForm.Toggle(v == 1) });
             AddOverlayRows();
             if (resList.Count > 1)
@@ -161,13 +173,14 @@ namespace TkoolLauncher
             {
                 var tdpNames = new List<string> { "기본" };
                 for (int w = Hardware.TdpMin; w <= Hardware.TdpMax; w++) tdpNames.Add(w + "W");
-                int ti = Settings.Tdp <= 0 ? 0 : Settings.Tdp - Hardware.TdpMin + 1;
+                int ti = PerfMode.Mode != PerfMode.Custom ? PerfMode.BaseTdp - Hardware.TdpMin + 1 : Settings.Tdp <= 0 ? 0 : Settings.Tdp - Hardware.TdpMin + 1;
                 rows.Add(new Row
                 {
                     Kind = Kind.Choice, Title = "TDP (전력 한계)", Choices = tdpNames.ToArray(), ChoiceIndex = ti,
                     Change = v =>
                     {
                         Settings.Tdp = v == 0 ? 0 : Hardware.TdpMin + v - 1;
+                        if (PerfMode.Mode != PerfMode.Custom) { Settings.PerfMode = PerfMode.Custom; PerfMode.Apply(); }   // 직접 고르면 '직접 설정'으로
                         Settings.Save();
                         int w2 = Settings.Tdp == 0 ? 12 : Settings.Tdp; // 기본 = 이 칩의 기본값 12W
                         Task.Run(() => Hardware.SetTdp(w2));
@@ -190,12 +203,14 @@ namespace TkoolLauncher
                 var fanNames = new List<string> { "자동" };
                 for (int f = 20; f <= 100; f += 10) fanNames.Add(f + "%");
                 int fi = Settings.Fan < 0 ? 0 : (Settings.Fan - 20) / 10 + 1;
+                if (PerfMode.Mode != PerfMode.Custom) { fanNames[0] = "모드가 조절"; fi = 0; }
                 rows.Add(new Row
                 {
                     Kind = Kind.Choice, Title = "팬 속도", Choices = fanNames.ToArray(), ChoiceIndex = fi,
                     Change = v =>
                     {
                         Settings.Fan = v == 0 ? -1 : 20 + (v - 1) * 10;
+                        if (PerfMode.Mode != PerfMode.Custom) { Settings.PerfMode = PerfMode.Custom; PerfMode.Apply(); }
                         Settings.Save();
                         int fan = Settings.Fan;
                         Task.Run(() => Hardware.SetFan(fan));
@@ -417,7 +432,7 @@ namespace TkoolLauncher
 
         static readonly string[][] Order =
         {
-            new[] { "팬 속도", "TDP", "스마트 TDP", "성능 모드", "성능 표시", "팬 · 조명 · TDP" },
+            new[] { "성능 모드", "지금 상태", "팬 속도", "TDP", "스마트 TDP", "윈도우 전원 모드", "성능 표시", "팬 · 조명 · TDP" },
             new[] { "밝기", "화면 확대", "해상도", "화면 회전" },
             new[] { "소리", "음소거", "와이파이", "블루투스", "비행기 모드" },
             new[] { "가상 패드", "컨트롤러 끄기", "진동 세기", "조이스틱 데드존", "조이스틱 감도", "연사 (", "연사 속도", "자이로 (", "자이로 감도", "자이로 켜는 법", "좌우 회전 축", "자이로 좌우", "자이로 상하", "조이스틱 마우스 모드" },
