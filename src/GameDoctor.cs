@@ -32,9 +32,11 @@ namespace TkoolLauncher
         public static List<Issue> Check(GameInfo g, string seen = "")
         {
             var list = new List<Issue>();
-            if (g == null || !g.IsTkool || !Directory.Exists(g.Folder)) return list;
+            if (g == null || g.Folder == null || !Directory.Exists(g.Folder)) return list;
             seen = seen ?? "";
             string low = seen.ToLowerInvariant();
+            try { var vc = VcIssue(g, low); if (vc != null) list.Add(vc); } catch { }
+            if (!g.IsTkool) return list;   // 쯔꾸르가 아니면 런타임(VC++) 안내만
             try { CheckBlocked(g, list); } catch { }
             try
             {
@@ -59,6 +61,76 @@ namespace TkoolLauncher
                     Fix = () => { Open("https://www.microsoft.com/download/details.aspx?id=35"); return "설치 페이지를 열었어요. 설치 후 다시 실행해 보세요"; },
                 });
             return list;
+        }
+
+        // ───────── Visual C++ 런타임 (msvcr120.dll 없음 같은 것) ─────────
+        static readonly System.Text.RegularExpressions.Regex VcDll = new System.Text.RegularExpressions.Regex(@"(msvcr|msvcp|mfc)(71|80|90|100|110|120|140)\w*\.dll|vcruntime140(_1)?\.dll|concrt140\.dll", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        public static Issue VcIssue(GameInfo g, string low)
+        {
+            var m = VcDll.Match(low ?? "");
+            if (!m.Success) return null;
+            string ver = m.Groups[2].Success && m.Groups[2].Value.Length > 0 ? m.Groups[2].Value : "140";
+            string year = ver == "71" ? "2003" : ver == "80" ? "2005" : ver == "90" ? "2008" : ver == "100" ? "2010" : ver == "110" ? "2012" : ver == "120" ? "2013" : "2015~2022";
+            bool x64 = Is64(g.Exe);
+            string arch = x64 ? "x64" : "x86";
+            string url = null, args = "/install /quiet /norestart";
+            switch (ver)
+            {
+                case "140": url = "https://aka.ms/vs/17/release/vc_redist." + arch + ".exe"; break;
+                case "120": url = x64 ? "https://aka.ms/highdpimfc2013x64enu" : "https://aka.ms/highdpimfc2013x86enu"; break;
+                case "110": url = "https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_" + arch + ".exe"; break;
+                case "100": url = "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_" + arch + ".exe"; args = "/q /norestart"; break;
+                case "90": url = "https://download.microsoft.com/download/5/D/8/5D8C65CB-C849-4025-8E95-C3966CAFD8AE/vcredist_" + arch + ".exe"; args = "/q"; break;
+            }
+            string dll = m.Value;
+            const string page = "https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist";
+            return new Issue
+            {
+                Title = "Visual C++ " + year + " 런타임이 없어요 (" + dll + ")",
+                Explain = "이 게임은 마이크로소프트 'Visual C++ " + year + " 재배포 패키지'(" + arch + ")가 있어야 돌아가요. 받아서 조용히 설치할게요 (1분 정도).",
+                FixLabel = url != null ? "받아서 설치하기" : "받는 곳 열기",
+                Fix = () =>
+                {
+                    if (url == null) { Open(page); return "받는 페이지를 열었어요. Visual C++ " + year + " " + arch + "를 설치해 주세요"; }
+                    try
+                    {
+                        string dir = Path.Combine(Settings.Dir, "tools");
+                        Directory.CreateDirectory(dir);
+                        string f = Path.Combine(dir, "vcredist_" + ver + "_" + arch + ".exe");
+                        System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12;
+                        using (var wc = new System.Net.WebClient()) { wc.Headers[System.Net.HttpRequestHeader.UserAgent] = "Mozilla/5.0"; wc.DownloadFile(url, f); }
+                        var pr = Process.Start(new ProcessStartInfo(f, args) { UseShellExecute = true });
+                        pr.WaitForExit(180000);
+                        Log.Info("VC++ " + year + " " + arch + " 설치 끝 (코드 " + (pr.HasExited ? pr.ExitCode.ToString() : "?") + ")");
+                        return "Visual C++ " + year + " (" + arch + ") 설치를 마쳤어요";
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error("VC++ 설치", ex);
+                        Open(page);
+                        return "자동 설치가 안 돼서 받는 페이지를 열었어요. Visual C++ " + year + " " + arch + "를 설치해 주세요";
+                    }
+                },
+            };
+        }
+
+        /// <summary>실행 파일이 64비트인지 (PE 머리 읽기)</summary>
+        static bool Is64(string exe)
+        {
+            try
+            {
+                using (var fs = File.OpenRead(exe))
+                using (var br = new BinaryReader(fs))
+                {
+                    fs.Seek(0x3C, SeekOrigin.Begin);
+                    int pe = br.ReadInt32();
+                    fs.Seek(pe + 4, SeekOrigin.Begin);
+                    ushort machine = br.ReadUInt16();
+                    return machine == 0x8664;
+                }
+            }
+            catch { return false; }
         }
 
         // 인터넷에서 받은 압축을 풀면 파일에 '다운로드한 파일' 표시가 붙어 dll을 못 읽는 경우가 있음
@@ -365,7 +437,8 @@ namespace TkoolLauncher
         /// <summary>게임 프로세스를 잠깐 지켜봄: 오류 창 글을 모으고, 금방 꺼지거나 폴더 목록이 뜨면 onProblem(본 글, 아직 켜져 있는지)</summary>
         public static void Watch(GameInfo g, Process p, Action<string, bool> onProblem)
         {
-            if (p == null || g == null || !g.IsTkool) return;
+            if (p == null || g == null) return;
+            string exeName = Path.GetFileName(g.Exe ?? "").ToLowerInvariant();
             var th = new Thread(() =>
             {
                 try
@@ -383,7 +456,7 @@ namespace TkoolLauncher
                         if (exited)
                         {
                             int code = 0; try { code = p.ExitCode; } catch { }
-                            if (box || sec < 12) { Log.Info("게임이 금방 꺼짐 (" + (int)sec + "초, 코드 " + code + ") " + seen.Replace("\n", " / ")); onProblem(seen, false); }
+                            if ((box || sec < 12) && (g.IsTkool || VcDll.IsMatch(seen))) { Log.Info("게임이 금방 꺼짐 (" + (int)sec + "초, 코드 " + code + ") " + seen.Replace("\n", " / ")); onProblem(seen, false); }
                             return;
                         }
                         // 게임 창들 읽기
@@ -391,8 +464,11 @@ namespace TkoolLauncher
                         EnumWindows((h, l) =>
                         {
                             GetWindowThreadProcessId(h, out uint wp);
-                            if (wp != pid || !IsWindowVisible(h)) return true;
+                            if (!IsWindowVisible(h)) return true;
                             string cls = Cls(h), title = Text(h);
+                            // "Game.exe - 시스템 오류"(dll 없음)는 윈도우가 따로 띄워서 게임 프로그램 창이 아님 → 제목으로 알아봄
+                            bool sysErr = wp != pid && cls == "#32770" && exeName.Length > 0 && title.ToLowerInvariant().StartsWith(exeName);
+                            if (wp != pid && !sysErr) return true;
                             if (cls == "#32770")   // 메시지 상자
                             {
                                 box = true;
@@ -414,6 +490,8 @@ namespace TkoolLauncher
                             return true;
                         }, IntPtr.Zero);
                         if (sec >= 9999) return;
+                        // dll 없음(Visual C++ 런타임) 창이면 바로 알려 줌 (창을 닫을 때까지 안 기다림)
+                        if (box && VcDll.IsMatch(seen)) { Log.Info("런타임 없음: " + seen.Replace("\n", " / ")); onProblem(seen, true); return; }
                         if (sec > 15 && !box) return;   // 잘 켜졌음
                         if (sec > 600) return;
                     }
