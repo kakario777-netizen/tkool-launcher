@@ -322,10 +322,10 @@ namespace TkoolLauncher
                                Change = v => Gamepad.MouseMode = v == 1 });
             rows.Add(new Row { Kind = Kind.Action, Title = "미니 모드", Sub = "런처를 작은 동그라미로 줄여요", Act = Shell.EnterMini });
             rows.Add(new Row { Kind = Kind.Action, Title = "ESC 보내기", Act = () => Shell.SendToGame(() => KeySender.Combo(KeySender.Esc)) });
-            rows.Add(new Row { Kind = Kind.Action, Title = "전체 화면 전환 (Alt+Enter)", Act = () => Shell.SendToGame(() => KeySender.Combo(KeySender.Alt, KeySender.Enter)) });
+            rows.Add(new Row { Kind = Kind.Action, Title = "전체 화면 전환", Act = () => Shell.SendToGame(() => KeySender.Combo(KeySender.Alt, KeySender.Enter)) });
             rows.Add(new Row { Kind = Kind.Action, Title = "스크린샷", Sub = "사진 › 스크린샷 폴더에 저장돼요", Act = () => Shell.SendToGame(() => KeySender.Combo(KeySender.Win, KeySender.PrtSc)) });
             rows.Add(new Row { Kind = Kind.Action, Title = "화상 키보드", Act = () => Shell.SendToGame(() => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("osk.exe") { UseShellExecute = true })) });
-            rows.Add(new Row { Kind = Kind.Action, Title = "작업 전환 (멀티태스킹)", Act = () => Shell.SendToGame(() => KeySender.Combo(KeySender.Win, KeySender.Tab)) });
+            rows.Add(new Row { Kind = Kind.Action, Title = "작업 전환", Act = () => Shell.SendToGame(() => KeySender.Combo(KeySender.Win, KeySender.Tab)) });
             rows.Add(new Row { Kind = Kind.Action, Title = "윈도우 시작 메뉴", Act = () => Shell.SendToGame(() => KeySender.Combo(KeySender.Win)) });
             rows.Add(new Row
             {
@@ -677,8 +677,13 @@ namespace TkoolLauncher
                 bool f = zone == 1 && i == focus;
                 Draw.Fill(g, r, S(8), f ? Theme.TileHot : Color.FromArgb(255, 23, 29, 37));
                 var tc = row.Danger ? Color.FromArgb(240, 140, 140) : Theme.Text;
-                Draw.Text(g, row.Title, Draw.BodyBold, new Rectangle(r.X + S(10), r.Y + S(6), r.Width - S(20), SubOf(row) != null ? S(36) : r.Height - S(12)), tc,
-                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+                // 한 줄로만 — 길면 글자를 줄여서 (어중간한 줄바꿈 없음)
+                var tr = new Rectangle(r.X + S(8), r.Y + S(6), r.Width - S(16), SubOf(row) != null ? S(36) : r.Height - S(12));
+                var tf = Draw.BodyBold;
+                if (Draw.Measure(g, row.Title, tf) > tr.Width) tf = Draw.Body;
+                if (Draw.Measure(g, row.Title, tf) > tr.Width) tf = Draw.Small;
+                Draw.Text(g, row.Title, tf, tr, tc,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
                 if (SubOf(row) != null) Draw.Text(g, SubOf(row), Draw.Tiny, new Rectangle(r.X + S(8), r.Y + S(44), r.Width - S(16), S(24)), Theme.SubText,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
                 if (f) Draw.Ring(g, r, S(8), Theme.Focus, S(2));
