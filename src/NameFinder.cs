@@ -41,29 +41,118 @@ namespace TkoolLauncher
         }
 
         /// <summary>찾아볼 게임: 뜻 없는 이름, 또는 한글판인데 이름에 한글이 없음</summary>
+        /// <summary>확인 끝 표시 (2판: 모든 게임 확인·외국어 이름 번역·DLsite 이름 검색까지)</summary>
+        public const string Checked = "-2";
+
+        /// <summary>찾아볼 게임: 아직 2판으로 확인 안 한 모든 쯔꾸르 폴더 게임 (사용자가 직접 고른 이름은 빼고)</summary>
         public static bool Wants(GameInfo g)
         {
             if (!g.FromFolder || g.Folder == null) return false;
             var st = GameData.Get(g);
-            if (st.NameFrom != null) return false;                         // 이미 찾아봄
-            if (st.Title != null && st.Title.StartsWith("=")) return false;  // 사용자가 고른 이름
-            if (Meaningless(g, g.Title)) return true;
-            return LibraryScreen.IsKorean(g) && !Hangul.IsMatch(g.Title ?? "");
+            if (st.NameFrom != null && st.NameFrom != "-") return false;    // 2판으로 확인했거나 이미 찾아 바꿈
+            if (st.Title != null && st.Title.StartsWith("=") && st.NameFrom == null) return false;  // 사용자가 고른 이름
+            return true;
         }
+
+        /// <summary>한글이 하나도 없는 외국어 이름 (일본어·영어 등)</summary>
+        public static bool Foreign(string t) => !string.IsNullOrWhiteSpace(t) && !Hangul.IsMatch(t) && t.Any(char.IsLetter);
 
         public class Found { public string Name, From; }
 
         /// <summary>이름 후보 찾기 (느릴 수 있음 — 백그라운드에서)</summary>
         public static Found Find(GameInfo g, bool online)
         {
+            // 1) 읽어보기의 한글 제목
             var f = FromReadme(g);
-            if (f != null) return f;
+            if (f != null && Hangul.IsMatch(f.Name)) return f;
+            bool meaningless = Meaningless(g, g.Title);
             if (online)
             {
+                // 2) RJ 번호 → DLsite 원제(+번역)
                 string code = FindCode(g);
-                if (code != null) return FromDlsite(code);
+                if (code != null && (meaningless || Foreign(g.Title))) { var d = FromDlsite(code); if (d != null) return d; }
+                // 3) 번호 없으면 원래 이름으로 DLsite 검색 (이름이 딱 맞을 때만)
+                if (code == null) SearchDlsite(g);
+                code = FindCode(g);
+                if (code != null && meaningless) { var d = FromDlsite(code); if (d != null) return d; }
+            }
+            if (f != null) return f;   // 읽어보기 영어·일본어 제목 (뜻 없는 이름보다 나음)
+            // 4) 외국어 이름은 구글 번역으로 한글 이름 (읽어보기 자동 번역처럼, 원래 이름은 정보에 남김)
+            if (online && Foreign(g.Title) && !meaningless)
+            {
+                string ko = null;
+                try { ko = Tidy(Translate.Run(g.Title)); } catch { }
+                if (ko != null && Hangul.IsMatch(ko) && ko != g.Title) return new Found { Name = ko, From = "구글 번역" };
             }
             return null;
+        }
+
+        // ───────── DLsite 이름 검색 (RJ 번호 없는 게임) ─────────
+        static readonly Dictionary<string, string> found = new Dictionary<string, string>();   // 게임 id → RJ (찾은 것만)
+        static bool foundLoaded;
+        static string FoundPath => Path.Combine(Settings.Dir, "cache", "dlsite", "found.txt");
+        static readonly Regex SearchItem = new Regex(@"<div class=""multiline_truncate"">\s*<a[^>]*product_id/((?:RJ|VJ|BJ)\d+)\.html""[^>]*title=""([^""]*)""");
+
+        static void LoadFound()
+        {
+            if (foundLoaded) return;
+            foundLoaded = true;
+            try
+            {
+                if (!File.Exists(FoundPath)) return;
+                foreach (var l in File.ReadAllLines(FoundPath, Encoding.UTF8))
+                {
+                    int k = l.IndexOf('=');
+                    if (k > 0) found[l.Substring(0, k)] = l.Substring(k + 1);
+                }
+            }
+            catch { }
+        }
+
+        static string Norm(string s) => new string(WebUtility.HtmlDecode(s ?? "").ToLowerInvariant().Where(c => char.IsLetterOrDigit(c)).ToArray());
+
+        /// <summary>원래 이름(게임 데이터·폴더)으로 DLsite 검색, 이름이 같으면 번호를 기억 → DLsite 정보·그림이 그걸로 채워짐</summary>
+        static void SearchDlsite(GameInfo g)
+        {
+            string id = GameData.IdOf(g);
+            lock (found) { LoadFound(); if (found.ContainsKey(id)) return; }
+            var names = new List<string>();
+            foreach (var s in new[] { g.RawTitle, TitleTidy.Clean(g.RawTitle ?? "", new List<string>()), TitleTidy.Clean(Path.GetFileName(g.Folder ?? ""), new List<string>()) })
+                if (!string.IsNullOrWhiteSpace(s) && Foreign(s) && !names.Contains(s.Trim()) && !Meaningless(g, s) && Norm(s).Length >= 2) names.Add(s.Trim());
+            foreach (var name in names.Take(2))
+            {
+                string q = Norm(name);
+                foreach (var site in new[] { "maniax", "home" })
+                {
+                    try
+                    {
+                        string json;
+                        using (var wc = new WebClient { Encoding = Encoding.UTF8 })
+                        {
+                            wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0";
+                            json = wc.DownloadString("https://www.dlsite.com/" + site + "/fsr/ajax/=/language/jp/keyword/" + Uri.EscapeDataString(name) + "/per_page/30/");
+                        }
+                        string html = TextDecode.JsonString(json, "search_result") ?? "";
+                        foreach (Match m in SearchItem.Matches(html))
+                        {
+                            string t = Norm(m.Groups[2].Value);
+                            // 이름이 똑같거나, 한쪽이 다른 쪽을 품고 길이가 거의 같을 때만 (엉뚱한 작품 막기)
+                            bool ok = t == q || (q.Length >= 4 && (t.Contains(q) || q.Contains(t)) && Math.Min(t.Length, q.Length) * 10 >= Math.Max(t.Length, q.Length) * 8);
+                            if (!ok) continue;
+                            string code = m.Groups[1].Value.ToUpperInvariant();
+                            lock (found)
+                            {
+                                found[id] = code;
+                                try { Directory.CreateDirectory(Path.GetDirectoryName(FoundPath)); File.AppendAllText(FoundPath, id + "=" + code + "\r\n", new UTF8Encoding(false)); } catch { }
+                            }
+                            Log.Info("DLsite 검색으로 찾음: " + name + " → " + code + " " + WebUtility.HtmlDecode(m.Groups[2].Value));
+                            return;
+                        }
+                    }
+                    catch (Exception ex) { Log.Info("DLsite 검색 " + name + ": " + ex.Message); }
+                    System.Threading.Thread.Sleep(300);
+                }
+            }
         }
 
         // ───────── 읽어보기에서 ─────────
@@ -152,6 +241,12 @@ namespace TkoolLauncher
         // ───────── DLsite (RJ 번호) ─────────
         public static string FindCode(GameInfo g)
         {
+            lock (found)
+            {
+                LoadFound();
+                string c;
+                if (g.Exe != null && found.TryGetValue(GameData.IdOf(g), out c)) return c;
+            }
             foreach (var s in new[] { g.RawTitle, g.Title, Path.GetFileName(g.Folder ?? "") })
             {
                 if (string.IsNullOrEmpty(s)) continue;
@@ -231,7 +326,8 @@ namespace TkoolLauncher
                             n++;
                             Log.Info("이름 찾음: " + st.NameFrom + " → " + f.Name);
                         }
-                        else st.NameFrom = "-";
+                        else st.NameFrom = Checked;   // 확인한 흔적
+                        System.Threading.Thread.Sleep(150);
                     }
                 }
                 finally
@@ -253,7 +349,7 @@ namespace TkoolLauncher
         /// <summary>"이름 다시 찾기": 찾아본 표시를 지움</summary>
         public static void ResetTried(List<GameInfo> games)
         {
-            foreach (var g in games) { var st = GameData.Get(g); if (st.NameFrom == "-") st.NameFrom = null; }
+            foreach (var g in games) { var st = GameData.Get(g); if (st.NameFrom == "-" || st.NameFrom == Checked) st.NameFrom = null; }
             GameData.Save();
         }
     }
