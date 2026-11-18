@@ -1681,6 +1681,8 @@ namespace TkoolLauncher
                           Act = () => { Settings.AutoCover = !Settings.AutoCover; Settings.Save(); } },
                 new Row { Title = "쯔꾸르 게임 자동 확대", Toggle = Settings.AutoScaleTkool, Sub = "2000~VX Ace 게임을 켜면 작은 창을 도트 선명하게 꽉 채워요",
                           Act = () => { Settings.AutoScaleTkool = !Settings.AutoScaleTkool; Settings.Save(); } },
+                new Row { Title = "게임 중 작업 표시줄 보이기", Toggle = Settings.TaskbarInGame, Sub = "끄면 창 모드 게임도 런처 검은 화면 위에만 떠요 (게임 끝나면 다시 보여요)",
+                          Act = () => { Settings.TaskbarInGame = !Settings.TaskbarInGame; Settings.Save(); if (Settings.TaskbarInGame) TaskbarHide.Show(); else if (Shell.PlayingGame != null) TaskbarHide.Hide(); } },
                 new Row { Title = "AYA 큰 버튼 연결", Sub = learning == 1 ? "지금 AYA 큰 버튼을 누르세요..." : "빠른 설정 열기 · 패드 가이드 버튼, 보기+메뉴 동시 누름도 돼요",
                           Value = Hotkeys.Describe(Settings.HomeKey), Act = () => Learn(1) },
                 new Row { Title = "AYA 큰 버튼 길게 누르기", Sub = learning == 3 ? "지금 AYA 큰 버튼을 길게 누르세요..." : "라이브러리 전체 화면 · 길게 눌러도 안 되면 여기서 배워 주세요",

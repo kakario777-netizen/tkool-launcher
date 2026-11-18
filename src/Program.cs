@@ -16,6 +16,8 @@ namespace TkoolLauncher
         [STAThread]
         static void Main(string[] args)
         {
+            TaskbarHide.Show();   // 지난번에 숨긴 채로 꺼졌을 수도 있으니
+            AppDomain.CurrentDomain.ProcessExit += (s, e) => { if (TaskbarHide.Hidden) TaskbarHide.Show(); };
             bool updated = args.Contains("--updated") || args.Contains("--elevated");
             string trayFlag = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "쯔꾸르 런처", "tray.flag");
             bool tray = args.Contains("--tray");

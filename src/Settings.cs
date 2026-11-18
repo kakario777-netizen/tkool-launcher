@@ -34,6 +34,7 @@ namespace TkoolLauncher
         public static bool LoopGuard = true;
         public static int LedEffect;          // 0 고정, 1 숨쉬기, 2 무지개
         public static bool AutoScaleTkool;
+        public static bool TaskbarInGame;   // 게임 중(창 모드) 작업 표시줄 보이기, 기본 끔
         public static bool AutoCover = true;   // 표지 없는 게임은 처음 켤 때 화면을 찍어 표지로    // 쯔꾸르(2000~VX Ace) 켤 때 자동으로 도트 선명 확대
         // 가상 패드
         public static bool VPadOn;
@@ -100,6 +101,7 @@ namespace TkoolLauncher
                     else if (key == "LoopGuard") LoopGuard = val != "0";
                     else if (key == "LedEffect") int.TryParse(val, out LedEffect);
                     else if (key == "AutoScaleTkool") AutoScaleTkool = val == "1";
+                    else if (key == "TaskbarInGame") TaskbarInGame = val == "1";
                     else if (key == "AutoCover") AutoCover = val != "0";
                     else if (key == "VPad")
                     {
@@ -161,6 +163,7 @@ namespace TkoolLauncher
                 sb.AppendLine("LoopGuard=" + (LoopGuard ? "1" : "0"));
                 sb.AppendLine("LedEffect=" + LedEffect);
                 sb.AppendLine("AutoScaleTkool=" + (AutoScaleTkool ? "1" : "0"));
+                sb.AppendLine("TaskbarInGame=" + (TaskbarInGame ? "1" : "0"));
                 sb.AppendLine("AutoCover=" + (AutoCover ? "1" : "0"));
                 sb.AppendLine("VPad=" + string.Join(",", new object[] { VPadOn ? 1 : 0, Vibration, StickDeadzone, StickSens, TurboMask, TurboHz,
                     GyroMode, GyroSens, GyroHold, GyroAxis, GyroInvertX ? 1 : 0, GyroInvertY ? 1 : 0, 0 }));

@@ -743,7 +743,7 @@ namespace TkoolLauncher
 
         public void ExitForReal()
         {
-            realExit = true;
+            realExit = true; TaskbarHide.Show();
             Log.Info("알림 아이콘에서 완전히 종료");
             Close();
         }
@@ -828,27 +828,49 @@ namespace TkoolLauncher
 
         // ───────── 게임 켜고 끌 때 가림막 ─────────
         // 런처를 내리지 않고 게임 뒤에 빈 배경으로 깔아 둠 → 켜는 동안·끄고 돌아오는 동안 바탕화면·작업 표시줄이 안 보임
-        bool curtain, curtainSeen;
+        bool curtain, curtainSeen, curtainLeaving;
         string curtainTitle;
         IntPtr curtainGameWin;
 
         void ShowCurtain(string title)
         {
-            curtain = true; curtainSeen = false; curtainTitle = title;
+            curtain = true; curtainSeen = false; curtainLeaving = false; curtainTitle = title;
             menu.Open = false; quick.Open = false; quick.T = 0;
             if (!Visible) Show();
             WindowState = FormWindowState.Maximized;
             Invalidate(); Update();
         }
 
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool IsZoomed(IntPtr h);
+
+        /// <summary>창 모드 게임은 검은 판 한가운데로 (꽉 찬 창·전체 화면은 그대로)</summary>
+        void CenterGameWin(IntPtr h)
+        {
+            try
+            {
+                if (h == IntPtr.Zero || IsZoomed(h) || PlayingGame == null) return;
+                if (GameData.Get(PlayingGame).WinMode != 0) return;
+                WRECT wr; if (!GetWindowRect(h, out wr)) return;
+                var sb = System.Windows.Forms.Screen.FromHandle(h).Bounds;
+                int w = wr.R - wr.L, ht = wr.B - wr.T;
+                if (w >= sb.Width - 8 && ht >= sb.Height - 8) return;     // 전체 화면
+                if (w > sb.Width || ht > sb.Height) return;
+                SetWindowPos(h, IntPtr.Zero, sb.X + (sb.Width - w) / 2, sb.Y + (sb.Height - ht) / 2, 0, 0, 0x0001 | 0x0004 | 0x0010);
+            }
+            catch (Exception ex) { Log.Error("게임 창 가운데로", ex); }
+        }
+
         void PaintCurtain(Graphics g)
         {
             var r = ClientRectangle;
+            // 플레이 중엔 런처 안에서 게임이 뜬 것처럼 검은 판만 (게임 창이 그 위에)
+            if (curtainSeen && !curtainLeaving) { g.Clear(Color.Black); return; }
             int cy = r.Height / 2;
             if (!string.IsNullOrEmpty(curtainTitle))
                 Draw.Text(g, curtainTitle, Theme.Px(24, true), new Rectangle(r.X + Theme.S(40), cy - Theme.S(60), r.Width - Theme.S(80), Theme.S(44)), Theme.Text,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
-            Draw.Text(g, curtainSeen ? "돌아가는 중…" : "불러오는 중…", Draw.Menu, new Rectangle(r.X, cy, r.Width, Theme.S(36)), Theme.SubText,
+            Draw.Text(g, curtainLeaving ? "돌아가는 중…" : "불러오는 중…", Draw.Menu, new Rectangle(r.X, cy, r.Width, Theme.S(36)), Theme.SubText,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
         }
 
@@ -1081,7 +1103,8 @@ namespace TkoolLauncher
                 playTimer?.Dispose(); playTimer = null;
                 Log.Info("게임 끝: " + g.Title + " (이번 " + (int)(DateTime.Now - sessionStart).TotalMinutes + "분, 총 " + st.TotalSeconds / 60 + "분)");
                 playStat = null; PlayingGame = null; TrackedExternal = false; GameProblem = null;
-                curtain = false;
+                if (curtain && ours) { curtainLeaving = true; Invalidate(); Update(); System.Threading.Thread.Sleep(450); }
+                curtain = false; curtainLeaving = false; TaskbarHide.Show();
                 if (coverFor != null) EndManualCover();
                 CameFromGame = false;
                 quick.Open = false; quick.T = 0;
@@ -1189,7 +1212,7 @@ namespace TkoolLauncher
                             noWinCount = anyWin ? 0 : noWinCount + 1;
                             if (anyWin && curtain)
                             {
-                                if (!curtainSeen) { curtainSeen = true; Invalidate(); }
+                                if (!curtainSeen) { curtainSeen = true; Invalidate(); CenterGameWin(bigWin); if (!Settings.TaskbarInGame) TaskbarHide.Hide(); }
                                 // 게임 창이 가림막 뒤에 숨어 있으면 앞으로 (스팀으로 켠 게임 등)
                                 if (!CameFromGame && Form.ActiveForm == this && bigWin != IntPtr.Zero && !PopupOpen) ForceForeground(bigWin);
                             }
