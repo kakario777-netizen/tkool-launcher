@@ -18,6 +18,7 @@ namespace TkoolLauncher
         public string Sig;       // 같은 게임 알아보기: 실행 파일 이름|크기|게임 데이터 제목 (폴더를 옮겨도 그대로)
         public string FolderName;// 마지막으로 본 게임 폴더 이름 (표지 파일 이름 옮기기용)
         public int Lang;         // 언어 직접 지정: 0 자동 1 한글 2 일본어
+        public int WinMode;      // 창 모양: 0 그대로 1 꽉 찬 창(작업 표시줄 보임)
     }
 
     static class GameData
@@ -131,6 +132,7 @@ namespace TkoolLauncher
                         Sig = p.Length > 8 && p[8].Length > 0 ? p[8].Replace("\u2502", "|") : null,
                         FolderName = p.Length > 9 && p[9].Length > 0 ? p[9] : null,
                         Lang = p.Length > 10 && int.TryParse(p[10], out int lg) ? lg : 0,
+                        WinMode = p.Length > 11 && int.TryParse(p[11], out int wm) ? wm : 0,
                     };
                     stats[p[0]] = s;
                 }
@@ -147,11 +149,11 @@ namespace TkoolLauncher
                 foreach (var kv in stats)
                 {
                     var s = kv.Value;
-                    if (!s.Favorite && s.LastPlayed == 0 && s.TotalSeconds == 0 && !s.Hidden && s.Title == null && s.Res == null && !s.Cleared && s.Lang == 0) continue;
+                    if (!s.Favorite && s.LastPlayed == 0 && s.TotalSeconds == 0 && !s.Hidden && s.Title == null && s.Res == null && !s.Cleared && s.Lang == 0 && s.WinMode == 0) continue;
                     sb.Append(kv.Key).Append('|').Append(s.Favorite ? "1" : "0").Append('|')
                       .Append(s.LastPlayed).Append('|').Append(s.TotalSeconds).Append('|').Append(s.Hidden ? "1" : "0")
                       .Append('|').Append((s.Title ?? "").Replace("|", "\u2502").Replace("\n", " ")).Append('|').Append(s.Res ?? "").Append('|').Append(s.Cleared ? "1" : "0")
-                      .Append('|').Append((s.Sig ?? "").Replace("|", "\u2502")).Append('|').Append(s.FolderName ?? "").Append('|').Append(s.Lang).AppendLine();
+                      .Append('|').Append((s.Sig ?? "").Replace("|", "\u2502")).Append('|').Append(s.FolderName ?? "").Append('|').Append(s.Lang).Append('|').Append(s.WinMode).AppendLine();
                 }
                 File.WriteAllText(FilePath, sb.ToString(), new UTF8Encoding(false));
             }

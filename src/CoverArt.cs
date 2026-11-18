@@ -70,6 +70,31 @@ namespace TkoolLauncher
             return bmp;
         }
 
+        /// <summary>썸네일의 8×8 평균 해시 (비슷한 그림 찾기용, 없으면 0)</summary>
+        public static ulong ThumbHash(GameInfo g)
+        {
+            byte[] b;
+            lock (lk) thumbs.TryGetValue(GameData.IdOf(g), out b);
+            if (b == null) return 0;
+            try
+            {
+                using (var ms = new MemoryStream(b))
+                using (var src = Image.FromStream(ms))
+                using (var small = new Bitmap(8, 8, PixelFormat.Format24bppRgb))
+                {
+                    using (var gr = Graphics.FromImage(small)) { gr.InterpolationMode = InterpolationMode.HighQualityBilinear; gr.DrawImage(src, 0, 0, 8, 8); }
+                    var v = new int[64]; int sum = 0;
+                    for (int i = 0; i < 64; i++) { var c = small.GetPixel(i % 8, i / 8); v[i] = (c.R * 3 + c.G * 6 + c.B) / 10; sum += v[i]; }
+                    int avg = sum / 64; ulong h = 0;
+                    for (int i = 0; i < 64; i++) if (v[i] > avg) h |= 1UL << i;
+                    // 거의 한 색(검은 화면 등)은 비교하지 않음
+                    int ones = 0; for (int i = 0; i < 64; i++) if ((h >> i & 1) != 0) ones++;
+                    return ones < 4 || ones > 60 ? 0 : h;
+                }
+            }
+            catch { return 0; }
+        }
+
         public static bool HasNoHero(GameInfo g) { lock (lk) return NoHero.Contains(GameData.IdOf(g)); }
 
         /// <summary>목록이 바뀌면 뒤에서 썸네일 파일을 미리 다 읽어 둠 (없는 건 천천히 만듦)</summary>

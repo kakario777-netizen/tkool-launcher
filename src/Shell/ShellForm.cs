@@ -1028,7 +1028,7 @@ namespace TkoolLauncher
         public string GameProblem;            // 응답 없음·오류 창 등 (팝업 맨 위에 표시)
         GameStat playStat; DateTime playStart;
         Timer playTimer, healthTimer;
-        int hungCount; bool healthBusy;
+        int hungCount, noWinCount; bool healthBusy;
 
         public TimeSpan PlayingFor => PlayingGame != null ? DateTime.Now - sessionStart : TimeSpan.Zero;
         DateTime sessionStart;
@@ -1039,7 +1039,7 @@ namespace TkoolLauncher
             st.LastPlayed = DateTime.Now.Ticks;
             GameData.Save();
             playStat = st; playStart = sessionStart = DateTime.Now;
-            PlayingGame = g; TrackedExternal = !ours; GameProblem = null; hungCount = 0;
+            PlayingGame = g; TrackedExternal = !ours; GameProblem = null; hungCount = 0; noWinCount = 0;
             Log.Info((ours ? "게임 시작: " : "런처 밖에서 켠 게임 확인: ") + g.Title);
             playTimer?.Dispose();
             playTimer = new Timer { Interval = 60000 };   // 1분마다 플레이 시간 저장 (꺼져도 안 잃게)
@@ -1100,7 +1100,7 @@ namespace TkoolLauncher
                 if (lib == null) { healthBusy = false; return; }
                 Task.Run(() =>
                 {
-                    GameInfo attach = null; string problem = null; bool hung = false;
+                    GameInfo attach = null; string problem = null; bool hung = false, anyWin = false;
                     try
                     {
                         if (g == null && !front && !GameWatch.Running)
@@ -1127,6 +1127,7 @@ namespace TkoolLauncher
                                 var tt = new System.Text.StringBuilder(256); GetWindowText(h, tt, 256);
                                 if (mine)
                                 {
+                                    anyWin = true;
                                     if (IsHungAppWindow(h)) hung = true;
                                     if (!tk && cls.ToString() == "#32770" && tt.Length > 0) problem = "게임에 오류 창이 떴어요: " + tt;
                                 }
@@ -1149,6 +1150,14 @@ namespace TkoolLauncher
                             healthBusy = false;
                             if (attach != null && PlayingGame == null && !GameWatch.Running) { SmartTdp.Reset(); Track(attach, null, false); ResForce.Apply(attach); return; }
                             if (PlayingGame == null) return;
+                            // 런처로 켠 게임인데 게임 창이 15초 넘게 하나도 없으면(뒤에 남은 프로그램 때문에 안 끝나는 경우) 끝난 걸로
+                            noWinCount = anyWin ? 0 : noWinCount + 1;
+                            if (!TrackedExternal && noWinCount >= 5 && (DateTime.Now - sessionStart).TotalSeconds > 25 && !GameWatch.ForceEnd)
+                            {
+                                Log.Info("게임 창이 사라졌는데 프로그램이 남아 있어 끝난 걸로 봄: " + PlayingGame.Title);
+                                GameWatch.ForceEnd = true;
+                                return;
+                            }
                             hungCount = hung ? hungCount + 1 : 0;
                             if (problem == null && hungCount >= 4) problem = "게임이 응답하지 않아요 (12초 넘게 멈춤)";
                             if (problem != null && problem != GameProblem)
@@ -1232,6 +1241,34 @@ namespace TkoolLauncher
                 })));
         }
 
+        Timer dupTimer;
+        int dupShown = -1;
+        /// <summary>썸네일이 다 읽힌 뒤(20초 뒤) 중복 게임 찾기</summary>
+        void ScheduleDupScan()
+        {
+            dupTimer?.Dispose();
+            dupTimer = new Timer { Interval = 20000 };
+            dupTimer.Tick += (o, e) =>
+            {
+                dupTimer.Stop();
+                DupFinder.Scan(Games, () =>
+                {
+                    try
+                    {
+                        BeginInvoke(new Action(() =>
+                        {
+                            int n = DupFinder.Groups.Count;
+                            if (n > 0 && n != dupShown && Visible) ShowToast("중복으로 보이는 게임 " + n + "묶음 — 쯔꾸르 탭 '중복 확인'", 5000);
+                            dupShown = n;
+                            Invalidate();
+                        }));
+                    }
+                    catch { }
+                });
+            };
+            dupTimer.Start();
+        }
+
         public void SetGames(List<GameInfo> found)
         {
             GameDoctor.Library = found;
@@ -1254,6 +1291,7 @@ namespace TkoolLauncher
             }
             Games = found;
             CoverArt.Preload(found);   // 목록 썸네일을 미리 메모리에
+            ScheduleDupScan();
             LayoutScreens();
             foreach (var s in stack) s.OnGamesChanged();
             FocusChanged();
@@ -1337,8 +1375,10 @@ namespace TkoolLauncher
             CameFromGame = false;
             SmartTdp.Reset();
             Track(g, p, true);
+            int winMode = GameData.Get(g).WinMode;
+            if (winMode == 1) WinFit.Apply(g.InstallDir ?? g.Folder);   // 꽉 찬 창 (작업 표시줄 보임)
             if (Settings.AutoCover) GameCapture.Watch(this, g);
-            if (Settings.AutoScaleTkool && Gamepad.MapKeys)
+            if (Settings.AutoScaleTkool && Gamepad.MapKeys && winMode == 0)
             {
                 // 게임 창이 뜰 때까지 조금 기다렸다가 확대 (앞 창이 게임 폴더 프로그램일 때만)
                 int tries = 0;

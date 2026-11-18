@@ -21,6 +21,7 @@ namespace TkoolLauncher
 
         public static volatile string Dir;      // 지금 지켜보는 게임 폴더
         public static volatile bool Running;
+        public static volatile bool ForceEnd;   // 게임 창이 다 사라졌는데 뒤에 남은 프로그램 때문에 안 끝날 때 → 끝난 걸로
 
         public static string PathOf(int pid)
         {
@@ -58,21 +59,22 @@ namespace TkoolLauncher
         {
             Dir = dir;
             Running = true;
+            ForceEnd = false;
             var th = new Thread(() =>
             {
                 try
                 {
-                    if (first != null) { try { first.WaitForExit(); } catch { } }
+                    if (first != null) { try { while (!first.HasExited && !ForceEnd) Thread.Sleep(500); } catch { } }
                     // 스토어 실행이면 게임이 뜰 때까지 최대 2분 기다림
                     bool seen = first != null;
-                    for (int i = 0; i < 60 && !seen; i++)
+                    for (int i = 0; i < 60 && !seen && !ForceEnd; i++)
                     {
                         if (AnyInDir(dir)) seen = true;
                         else Thread.Sleep(2000);
                     }
                     // 폴더 안 프로그램이 모두 꺼질 때까지
                     int quiet = 0;
-                    while (quiet < 2)
+                    while (quiet < 2 && !ForceEnd)
                     {
                         Thread.Sleep(3000);
                         if (dir != null && AnyInDir(dir)) quiet = 0; else quiet++;

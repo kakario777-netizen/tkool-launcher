@@ -233,9 +233,20 @@ namespace TkoolLauncher
         static int sortMode;                 // 0 이름순 1 최근 추가 2 플레이 시간
         static readonly string[] SortNames = { "이름순", "최근 추가", "플레이 시간" };
         bool chipFocus;
-        int chipIdx, extraSel;   // extraSel: 0 칩, 1 정리 모드, 2 정렬
+        int chipIdx, extraSel;   // extraSel: 0 칩, 1.. 오른쪽 단추(중복 확인·정리 모드·정렬)
+        Rectangle[] extraRects = new Rectangle[0];
+
+        List<KeyValuePair<string, Action>> Extras()
+        {
+            var l = new List<KeyValuePair<string, Action>>();
+            int n = DupFinder.Groups.Count;
+            if (n > 0) l.Add(new KeyValuePair<string, Action>("중복 확인 " + n, () => Shell.Push(new DupScreen())));
+            l.Add(new KeyValuePair<string, Action>("정리 모드", () => Shell.Push(new TidyScreen())));
+            l.Add(new KeyValuePair<string, Action>("정렬 · " + SortNames[sortMode], NextSort));
+            return l;
+        }
         Rectangle[] chipRects = new Rectangle[0];
-        Rectangle sortRect, tidyRect;
+
         // 모든 탭이 같은 가로 카드 모양, 분류 칩·정렬은 쯔꾸르 탭에만
         bool Wide => true;
         bool TkTab => tab < tabs.Count && tabs[tab].Name == "쯔꾸르";
@@ -302,6 +313,8 @@ namespace TkoolLauncher
                     chips.Add(new Chip { Name = EngineShort(new GameInfo { Kind = GameKind.Tkool, Version = vv }), Filter = x => x.IsTkool && x.Version == vv });
             }
             if (pool.Any(x => x.Tags.Contains("체험판"))) chips.Add(new Chip { Name = "체험판", Filter = x => x.Tags.Contains("체험판") });
+            if (Shell.Games != null && Shell.Games.Any(x => x.FromFolder && GameData.Get(x).Hidden))
+                chips.Add(new Chip { Name = "숨긴 게임", Filter = x => false });   // 목록은 따로 (숨긴 게임만)
             // 설정한 순서·숨김 적용
             var order = ChipEditScreen.Order();
             var sorted = new List<Chip>();
@@ -385,7 +398,9 @@ namespace TkoolLauncher
             {
                 BuildChips(items);
                 var cf = chips[chipIdx].Filter;
-                items = SortWide(items.Where(cf));
+                items = chips[chipIdx].Name == "숨긴 게임"
+                    ? SortWide(Shell.Games.Where(x => x.FromFolder && GameData.Get(x).Hidden))
+                    : SortWide(items.Where(cf));
             }
             else chipFocus = false;
             int i = cur != null ? items.FindIndex(x => x.Exe == cur.Exe) : -1;
@@ -569,26 +584,30 @@ namespace TkoolLauncher
                 if (chipFocus && on && extraSel == 0 && Shell.ShowFocus) Draw.FocusGlow(g, r, h / 2);
                 x += w + S(10);
             }
-            // 오른쪽: 정리 모드 · 정렬 바꾸기
-            string tdTxt = "정리 모드";
-            string st = "정렬 · " + SortNames[sortMode];
-            int sw = Draw.Measure(g, st, font) + S(32);
-            sortRect = new Rectangle(Area.Right - Pad0 - sw, y, sw, h);
-            int tw = Draw.Measure(g, tdTxt, font) + S(32);
-            tidyRect = new Rectangle(sortRect.X - S(10) - tw, y, tw, h);
-            if (tidyRect.X > x)
+            // 오른쪽 단추들: (중복 확인) · 정리 모드 · 정렬
+            var ex = Extras();
+            int rx = Area.Right - Pad0;
+            extraRects = new Rectangle[ex.Count];
+            for (int i = ex.Count - 1; i >= 0; i--)
             {
-                using (var pen = new Pen(Color.FromArgb(70, 255, 255, 255), Math.Max(1, S(1))))
-                {
-                    g.DrawPath(pen, Theme.Round(sortRect, h / 2));
-                    g.DrawPath(pen, Theme.Round(tidyRect, h / 2));
-                }
-                Draw.Text(g, st, font, sortRect, Theme.SubText, Draw.Center);
-                Draw.Text(g, tdTxt, font, tidyRect, Theme.SubText, Draw.Center);
-                if (chipFocus && extraSel == 1 && Shell.ShowFocus) Draw.FocusGlow(g, tidyRect, h / 2);
-                if (chipFocus && extraSel == 2 && Shell.ShowFocus) Draw.FocusGlow(g, sortRect, h / 2);
+                int w = Draw.Measure(g, ex[i].Key, font) + S(32);
+                rx -= w;
+                extraRects[i] = new Rectangle(rx, y, w, h);
+                rx -= S(10);
             }
-            else sortRect = tidyRect = Rectangle.Empty;
+            if (ex.Count > 0 && extraRects[0].X > x)
+            {
+                for (int i = 0; i < ex.Count; i++)
+                {
+                    var r = extraRects[i];
+                    bool dup = ex[i].Key.StartsWith("중복");
+                    if (dup) Draw.Fill(g, r, h / 2, Color.FromArgb(200, 190, 120, 40));
+                    else using (var pen = new Pen(Color.FromArgb(70, 255, 255, 255), Math.Max(1, S(1)))) g.DrawPath(pen, Theme.Round(r, h / 2));
+                    Draw.Text(g, ex[i].Key, font, r, dup ? Color.White : Theme.SubText, Draw.Center);
+                    if (chipFocus && extraSel == i + 1 && Shell.ShowFocus) Draw.FocusGlow(g, r, h / 2);
+                }
+            }
+            else extraRects = new Rectangle[0];
         }
 
         /// <summary>쯔꾸르 카드: 위 4:3 타이틀 그림(늘리지 않고 맞춤) + 아래 띠(이름 한 줄 · 엔진·한/일 · 상태) + 맨 아래 상태 선</summary>
@@ -687,7 +706,7 @@ namespace TkoolLauncher
             {
                 case Pad.Left: if (chipFocus) { if (extraSel > 0) extraSel--; else PickChip(chipIdx - 1); } else Move(-1); break;
                 case Pad.Right:
-                    if (chipFocus) { if (chipIdx < chips.Count - 1 && extraSel == 0) PickChip(chipIdx + 1); else extraSel = Math.Min(2, extraSel + 1); }   // 칸 끝에서 오른쪽 → 정리 모드 · 정렬
+                    if (chipFocus) { if (chipIdx < chips.Count - 1 && extraSel == 0) PickChip(chipIdx + 1); else extraSel = Math.Min(Extras().Count, extraSel + 1); }   // 칸 끝에서 오른쪽 → 오른쪽 단추들
                     else Move(1);
                     break;
                 case Pad.Up:
@@ -702,8 +721,7 @@ namespace TkoolLauncher
                 case Pad.LB: SetTab(tab - 1); break;
                 case Pad.RB: SetTab(tab + 1); break;
                 case Pad.A:
-                    if (chipFocus && extraSel == 1) { Shell.Push(new TidyScreen()); break; }
-                    if (chipFocus && extraSel == 2) { NextSort(); break; }
+                    if (chipFocus && extraSel > 0) { var ex = Extras(); if (extraSel <= ex.Count) ex[extraSel - 1].Value(); break; }
                     if (chipFocus) { chipFocus = false; Shell.FocusChanged(); } else if (FocusedGame != null) Shell.Push(new DetailScreen(FocusedGame)); break;
                 case Pad.B: Shell.Pop(); break;
                 case Pad.Y: Shell.Push(new SearchScreen()); break;
@@ -716,8 +734,8 @@ namespace TkoolLauncher
             if (TkTab)
             {
                 for (int i = 0; i < chipRects.Length; i++) if (chipRects[i].Contains(p)) { chipFocus = false; PickChip(i); return; }
-                if (sortRect.Contains(p)) { NextSort(); return; }
-                if (tidyRect.Contains(p)) { Shell.Push(new TidyScreen()); return; }
+                var exs = Extras();
+                for (int i = 0; i < extraRects.Length && i < exs.Count; i++) if (extraRects[i].Contains(p)) { exs[i].Value(); return; }
             }
             if (MaxScroll > 0 && BarZone.Contains(p)) { BarJump(p.Y); return; }
             if (!GridArea.Contains(p)) return;
@@ -754,7 +772,7 @@ namespace TkoolLauncher
     class ChipEditScreen : Screen
     {
         public class Item { public string Name; public bool Hidden; }
-        static readonly string[] All = { "전체", "하는 중", "안 해봄", "다 깸", "한글", "일본어", "2000", "XP", "VX", "Ace", "MV", "MZ", "체험판" };
+        static readonly string[] All = { "전체", "하는 중", "안 해봄", "다 깸", "한글", "일본어", "2000", "XP", "VX", "Ace", "MV", "MZ", "체험판", "숨긴 게임" };
         List<Item> items;
         int focus;
         Rectangle[] rowR = new Rectangle[0], upR = new Rectangle[0], downR = new Rectangle[0];
@@ -1233,13 +1251,16 @@ namespace TkoolLauncher
         {
             var st = GameData.Get(game);
             string[] langs = { "자동", "한글", "일본어" };
+            string[] wins = { "그대로", "꽉 찬 창 (작업 표시줄 보임)" };
             var opts = new[]
             {
                 "표지 직접 찍기 (게임 켜고 Y 두 번)",
                 "표지 지우기",
                 "언어: " + langs[Math.Max(0, Math.Min(2, st.Lang))] + (st.Lang == 0 ? " (" + (LibraryScreen.IsKorean(game) ? "한글" : "일본어") + "로 보임)" : ""),
                 "이름 바꾸기",
-                "숨기기",
+                st.Hidden ? "다시 보이기 (숨김 풀기)" : "숨기기",
+                "게임 위치 열기 (탐색기)",
+                "창 모양: " + wins[Math.Max(0, Math.Min(1, st.WinMode))],
             };
             PickerScreen.Show(Shell, game.Title, opts, -1, i =>
             {
@@ -1263,7 +1284,15 @@ namespace TkoolLauncher
                             game.Title = c[k]; st.Title = "=" + c[k]; GameData.Save(); Shell.RefreshLists();
                         }, "원래 이름: " + (game.RawTitle ?? game.Title));
                         break;
-                    case 4: Hide(); break;
+                    case 4:
+                        if (st.Hidden) { st.Hidden = false; GameData.Save(); Shell.ShowToast("다시 보이게 했어요", 1500); Shell.RefreshLists(); }
+                        else Hide();
+                        break;
+                    case 5: DupFinder.OpenFolder(game); break;
+                    case 6:
+                        PickerScreen.Show(Shell, "창 모양", wins, st.WinMode, k => { st.WinMode = k; GameData.Save(); },
+                            "꽉 찬 창: 테두리 없이 작업 표시줄만 남기고 화면을 채움 (다음 실행부터)");
+                        break;
                 }
             });
         }
