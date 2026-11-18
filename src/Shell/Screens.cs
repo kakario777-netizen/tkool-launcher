@@ -382,6 +382,7 @@ namespace TkoolLauncher
             chipSel = chips[chipIdx].Name;
             focus = 0; scroll = target = 0;
             OnGamesChanged();
+            ChipFollow();
             Shell.FocusChanged();
         }
 
@@ -594,24 +595,16 @@ namespace TkoolLauncher
             Shell.Invalidate();
         }
 
+        // 칩 줄: 왼쪽 칩 칸과 오른쪽 단추 칸을 나눠 고정. 칩이 넘치면 좌우로 밀어 보기(끌기·화살표·패드로 따라감)
+        int chipScroll, chipScrollStart, chipTotalW;
+        Rectangle chipArea, chipLeftR, chipRightR;
+        bool chipDrag;
+
         void PaintChips(Graphics g)
         {
             int y = Area.Y + TabH + S(10), h = S(38);
-            if (chipRects.Length != chips.Count) chipRects = new Rectangle[chips.Count];
-            int x = Area.X + Pad0;
             var font = Theme.Px(14, true);
-            for (int i = 0; i < chips.Count; i++)
-            {
-                int w = Draw.Measure(g, chips[i].Name, font) + S(32);
-                var r = new Rectangle(x, y, w, h);
-                chipRects[i] = r;
-                bool on = i == chipIdx;
-                Draw.Fill(g, r, h / 2, on ? Theme.Accent : Color.FromArgb(46, 255, 255, 255));
-                Draw.Text(g, chips[i].Name, font, r, on ? Color.White : Theme.SubText, Draw.Center);
-                if (chipFocus && on && extraSel == 0 && Shell.ShowFocus) Draw.FocusGlow(g, r, h / 2);
-                x += w + S(10);
-            }
-            // 오른쪽 단추들: (중복 확인) · 정리 모드 · 정렬
+            // 1) 오른쪽 단추 (자리 고정)
             var ex = Extras();
             int rx = Area.Right - Pad0;
             extraRects = new Rectangle[ex.Count];
@@ -622,19 +615,62 @@ namespace TkoolLauncher
                 extraRects[i] = new Rectangle(rx, y, w, h);
                 rx -= S(10);
             }
-            if (ex.Count > 0 && extraRects[0].X > x)
+            for (int i = 0; i < ex.Count; i++)
             {
-                for (int i = 0; i < ex.Count; i++)
-                {
-                    var r = extraRects[i];
-                    bool dup = ex[i].Key.StartsWith("중복");
-                    if (dup) Draw.Fill(g, r, h / 2, Color.FromArgb(200, 190, 120, 40));
-                    else using (var pen = new Pen(Color.FromArgb(70, 255, 255, 255), Math.Max(1, S(1)))) g.DrawPath(pen, Theme.Round(r, h / 2));
-                    Draw.Text(g, ex[i].Key, font, r, dup ? Color.White : Theme.SubText, Draw.Center);
-                    if (chipFocus && extraSel == i + 1 && Shell.ShowFocus) Draw.FocusGlow(g, r, h / 2);
-                }
+                var r = extraRects[i];
+                bool dup = ex[i].Key.StartsWith("중복");
+                if (dup) Draw.Fill(g, r, h / 2, Color.FromArgb(200, 190, 120, 40));
+                else using (var pen = new Pen(Color.FromArgb(70, 255, 255, 255), Math.Max(1, S(1)))) g.DrawPath(pen, Theme.Round(r, h / 2));
+                Draw.Text(g, ex[i].Key, font, r, dup ? Color.White : Theme.SubText, Draw.Center);
+                if (chipFocus && extraSel == i + 1 && Shell.ShowFocus) Draw.FocusGlow(g, r, h / 2);
             }
-            else extraRects = new Rectangle[0];
+            // 2) 왼쪽 칩 칸
+            chipArea = new Rectangle(Area.X + Pad0, y - S(4), rx - S(14) - (Area.X + Pad0), h + S(8));
+            if (chipRects.Length != chips.Count) chipRects = new Rectangle[chips.Count];
+            int x = 0;
+            var widths = new int[chips.Count];
+            for (int i = 0; i < chips.Count; i++) { widths[i] = Draw.Measure(g, chips[i].Name, font) + S(32); x += widths[i] + S(10); }
+            chipTotalW = Math.Max(0, x - S(10));
+            int maxScroll = Math.Max(0, chipTotalW - chipArea.Width);
+            chipScroll = Math.Max(0, Math.Min(maxScroll, chipScroll));
+            var oc = g.Clip;
+            g.SetClip(chipArea, System.Drawing.Drawing2D.CombineMode.Intersect);
+            x = chipArea.X - chipScroll;
+            for (int i = 0; i < chips.Count; i++)
+            {
+                var r = new Rectangle(x, y, widths[i], h);
+                chipRects[i] = r;
+                bool on = i == chipIdx;
+                Draw.Fill(g, r, h / 2, on ? Theme.Accent : Color.FromArgb(46, 255, 255, 255));
+                Draw.Text(g, chips[i].Name, font, r, on ? Color.White : Theme.SubText, Draw.Center);
+                if (chipFocus && on && extraSel == 0 && Shell.ShowFocus) Draw.FocusGlow(g, r, h / 2);
+                x += widths[i] + S(10);
+            }
+            // 넘치면 양끝에 밀기 화살표
+            chipLeftR = chipRightR = Rectangle.Empty;
+            if (chipScroll > 0)
+            {
+                chipLeftR = new Rectangle(chipArea.X, chipArea.Y, S(44), chipArea.Height);
+                using (var lg = new System.Drawing.Drawing2D.LinearGradientBrush(chipLeftR, Color.FromArgb(240, 18, 22, 28), Color.FromArgb(0, 18, 22, 28), 0f)) g.FillRectangle(lg, chipLeftR);
+                Draw.Text(g, "‹", Theme.Px(22, true), chipLeftR, Theme.Text, Draw.Left);
+            }
+            if (chipScroll < maxScroll)
+            {
+                chipRightR = new Rectangle(chipArea.Right - S(44), chipArea.Y, S(44), chipArea.Height);
+                using (var lg = new System.Drawing.Drawing2D.LinearGradientBrush(chipRightR, Color.FromArgb(0, 18, 22, 28), Color.FromArgb(240, 18, 22, 28), 0f)) g.FillRectangle(lg, chipRightR);
+                Draw.Text(g, "›", Theme.Px(22, true), chipRightR, Theme.Text, Draw.Right);
+            }
+            g.Clip = oc;
+        }
+
+        /// <summary>고른 칩이 칸 안에 보이게 밀기</summary>
+        void ChipFollow()
+        {
+            if (chipIdx < 0 || chipIdx >= chipRects.Length || chipArea.Width <= 0) return;
+            var r = chipRects[chipIdx];
+            int left = r.X - chipArea.X + chipScroll, right = left + r.Width;
+            if (left < chipScroll + S(40)) chipScroll = Math.Max(0, left - S(40));
+            else if (right > chipScroll + chipArea.Width - S(40)) chipScroll = right - chipArea.Width + S(40);
         }
 
         /// <summary>쯔꾸르 카드: 위 4:3 타이틀 그림(늘리지 않고 맞춤) + 아래 띠(이름 한 줄 · 엔진·한/일 · 상태) + 맨 아래 상태 선</summary>
@@ -760,7 +796,9 @@ namespace TkoolLauncher
             for (int i = 0; i < tabRects.Length; i++) if (tabRects[i].Contains(p)) { SetTab(i); return; }
             if (TkTab)
             {
-                for (int i = 0; i < chipRects.Length; i++) if (chipRects[i].Contains(p)) { chipFocus = false; PickChip(i); return; }
+                if (chipLeftR.Contains(p)) { chipScroll -= chipArea.Width * 2 / 3; Shell.Invalidate(); return; }
+                if (chipRightR.Contains(p)) { chipScroll += chipArea.Width * 2 / 3; Shell.Invalidate(); return; }
+                for (int i = 0; i < chipRects.Length; i++) if (chipRects[i].Contains(p) && chipArea.Contains(p)) { chipFocus = false; PickChip(i); return; }
                 var exs = Extras();
                 for (int i = 0; i < extraRects.Length && i < exs.Count; i++) if (extraRects[i].Contains(p)) { exs[i].Value(); return; }
             }
@@ -772,8 +810,13 @@ namespace TkoolLauncher
 
         public override void OnDrag(int dx, int dy, bool start)
         {
-            if (start) { dragStart = scroll; dragging = true; barDrag = MaxScroll > 0 && BarZone.Contains(DownAt); }
-            if (dx == int.MinValue) { dragging = false; barDrag = false; target = Math.Max(0, Math.Min(MaxScroll, scroll)); Shell.Animate(); return; }
+            if (start)
+            {
+                dragStart = scroll; dragging = true; barDrag = MaxScroll > 0 && BarZone.Contains(DownAt);
+                chipDrag = TkTab && chipArea.Contains(DownAt); chipScrollStart = chipScroll;
+            }
+            if (dx == int.MinValue) { dragging = false; barDrag = false; chipDrag = false; target = Math.Max(0, Math.Min(MaxScroll, scroll)); Shell.Animate(); return; }
+            if (chipDrag) { chipScroll = Math.Max(0, Math.Min(Math.Max(0, chipTotalW - chipArea.Width), chipScrollStart - dx)); return; }
             if (barDrag)
             {
                 // 손잡이를 끌면 목록 전체 길이에 맞춰 크게 움직임
@@ -1252,7 +1295,7 @@ namespace TkoolLauncher
         {
             string desc = GameDesc.Get(game);
             bool needTr = desc != null && Translate.Needs(desc);
-            string tr = needTr ? Translate.Get(GameData.IdOf(game), desc) : null;
+            string tr = needTr ? Translate.Get(GameData.IdOf(game) + "_" + ((uint)desc.GetHashCode()).ToString("x8"), desc) : null;   // 글이 바뀌면(예: 글자 깨짐 고침) 새로 번역
             Draw.Text(g, "소개", Draw.H2, new Rectangle(area.X, area.Y, S(80), S(30)), Theme.Text);
             if (needTr)
                 Draw.Text(g, tr == null ? "(구글 번역 중…)" : tr.Length > 0 ? "(구글 번역)" : "(번역 실패 — 원문)", Draw.Body,

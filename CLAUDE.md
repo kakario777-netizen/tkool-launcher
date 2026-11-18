@@ -32,6 +32,8 @@
 - 소개 번역: Translate.cs(구글 무료 주소 translate.googleapis.com client=gtx, POST q, 1200자 덩어리, cache\id_ko.txt). 가나·한자 많으면 상세 소개에 "(구글 번역)" 파란 글 + 번역(하늘색) / 구분선 / 원문, 스크롤(위아래·끌기). 읽어보기는 150줄·5000자까지.
 - 엔진: EngineDetect.cs(Unity·유나이트·Unreal·Ren'Py·울프RPG·픽겜MV·SRPG·SGB/바킨·키리키리·엔스크립터·라이브메이커·게임메이커·Godot·AGS·퓨전·HSP·LÖVE·MonoGame/FNA/XNA·Java·플래시·DX라이브러리·티라노·컨스트럭트·VN메이커·일렉트론/NW.js) → GameInfo.Engine, 카드·칩에 짧은 이름. 번역 방식: TransDetect(XUnity·BepInEx·xdelta·MTool·이지트랜스·아네모네·후킹·Translator++·기계 번역·설치형 패치·로케일 필요·글꼴 설치·직접 번역) 상세 정보에 "번역: …" 배지.
 - 내 태그: GameStat.UserTags(13번째 칸), Settings.TagList, 상세 "+ 태그"/X → 고르기 창(●/○), 새 태그는 InputDialog(터치 키보드 TabTip). 쯔꾸르 탭 칩에 "#태그"·엔진 칸 자동 추가.
+- 칩 줄: 오른쪽 단추 자리 고정, 왼쪽 칩 칸은 넘치면 좌우로 밀기(끌기·‹ › 누르기·패드 따라감, chipScroll). 빠른 설정 탭 보이는 순서: 바로가기→성능→화면→소리·연결→컨트롤러→조명→오버레이(QuickPanel.TabOrder, 처음 탭 바로가기).
+- 글자 인코딩: TextDecode.Decode는 BOM/UTF-16(BOM 없음 포함)/UTF-8 다음 Shift-JIS·CP949·EUC-JP를 점수로 고름(가나·흔한 한글 KS X 1001 +, 드문 UHC 한글·자모·그리스·・·제어문자 −). 깨진 소개 글 원인이 EUC-JP·한자 많은 SJIS를 CP949로 읽던 것. 번역 캐시 키에 글 해시 포함. 게임 폴더 동봉 번역기(아네모네·아랄트랜스·Textractor·VNR·이지트랜스·로케일 에뮬레이터)는 exe 이름으로 "번역: … 동봉" 표시.
 - 쯔꾸르 탭 정리: 가로 카드(4:3 타이틀 그림 비율 그대로 + 아래 띠: 이름 한 줄·엔진 색 점·한/日·체험판·상태, 맨 아래 상태 선 — 하는 중 파랑/다 깸 초록), 그림 없으면 엔진 색 바탕+첫 글자. 위 동그라미 칩(전체·하는 중·안 해봄·다 깸·한글·일본어·엔진별·체험판) + 정리 모드·정렬(이름순/최근 추가/플레이 시간, X). 패드: 맨 윗줄에서 위 → 칩 줄, 칩 끝에서 오른쪽 → 정리 모드·정렬.
 - 이름 정리: TitleTidy.Clean(버전·날짜·[꼬리표]·_kr·한글패치·체험판 떼기 → Tags). SetGames에서 쯔꾸르에 적용, RawTitle 보관. GameStat.Title이 "="로 시작하면 사용자가 고른 이름(정리 안 함). GameStat.Cleared(games.ini 8번째 칸) = 다 깸, 상세 화면 버튼.
 - 정리 모드: TidyScreen — 손볼 게 많은 쯔꾸르부터 하나씩, 이름 후보 돌리기(타자 없음)·다 깸·표지 찍기(FindCovers 한 개)·숨기기.

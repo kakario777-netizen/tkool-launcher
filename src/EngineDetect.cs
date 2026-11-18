@@ -92,6 +92,22 @@ namespace TkoolLauncher
             Func<string, bool> Has = pattern => Regex.IsMatch(t, pattern);
             try
             {
+                // 게임 폴더에 같이 들어 있는 번역기 (이름으로)
+                var exes = new List<string>();
+                try
+                {
+                    exes.AddRange(Directory.EnumerateFiles(dir, "*.exe").Select(Path.GetFileName));
+                    foreach (var sub in Directory.EnumerateDirectories(dir).Take(40))
+                        try { exes.AddRange(Directory.EnumerateFiles(sub, "*.exe").Take(30).Select(x => Path.GetFileName(sub) + "\\" + Path.GetFileName(x))); } catch { }
+                }
+                catch { }
+                string ex = string.Join("|", exes).ToLowerInvariant();
+                if (ex.Contains("anemone") || ex.Contains("아네모네")) r.Add("아네모네 동봉");
+                if (ex.Contains("araltrans") || ex.Contains("aral")) r.Add("아랄트랜스 동봉");
+                if (ex.Contains("textractor") || ex.Contains("ithvnr") || ex.Contains("\\ith")) r.Add("Textractor 동봉");
+                if (ex.Contains("visual novel reader") || ex.Contains("vnr")) r.Add("VNR 동봉");
+                if (ex.Contains("j2kengine") || ex.Contains("eztrans") || ex.Contains("ehnd")) r.Add("이지트랜스 동봉");
+                if (ex.Contains("leproc") || ex.Contains("localeemulator")) r.Add("로케일 에뮬레이터 동봉");
                 if (D("BepInEx") && (D("BepInEx\\plugins\\XUnity.AutoTranslator") || D("AutoTranslator") || Any("*AutoTranslator*"))) r.Add("XUnity 자동번역");
                 else if (D("BepInEx")) r.Add("BepInEx 플러그인");
                 if (Any("*.xdelta") || Any("*.vcdiff") || Has(@"xdelta")) r.Add("xdelta 패치");

@@ -422,7 +422,10 @@ namespace TkoolLauncher
 
         // ═════════ AYASpace 모양: 위 빠른 타일 줄 + 왼쪽 탭 + 오른쪽 기능 ═════════
         public static readonly string[] TabNames = { "성능", "화면", "소리·연결", "컨트롤러", "조명", "바로가기", "오버레이" };
-        static int tab;                 // 지금 탭 (껐다 켜도 기억)
+        static int tab = 5;             // 지금 탭 (껐다 켜도 기억) — 처음은 바로가기
+        // 왼쪽 탭 보이는 순서: 바로가기 → 성능 → 화면 → 소리·연결 → 컨트롤러 → 조명 → 오버레이
+        static readonly int[] TabOrder = { 5, 0, 1, 2, 3, 4, 6 };
+        static int TabPos(int t) { int p = Array.IndexOf(TabOrder, t); return p < 0 ? 0 : p; }
         int zone = 1;                   // 0 = 위 타일 줄, 1 = 오른쪽 기능
         int tileFocus;
         readonly List<Rectangle> tabRects = new List<Rectangle>();
@@ -528,9 +531,10 @@ namespace TkoolLauncher
             int railW = w < S(480) ? S(76) : S(92);
             tabRects.Clear();
             int tabH = Math.Min(S(64), (bottom - top) / TabNames.Length);
-            for (int i = 0; i < TabNames.Length; i++)
+            for (int k = 0; k < TabOrder.Length; k++)
             {
-                var r = new Rectangle(x + S(8), top + i * tabH, railW - S(8), tabH - S(6));
+                int i = TabOrder[k];
+                var r = new Rectangle(x + S(8), top + k * tabH, railW - S(8), tabH - S(6));
                 tabRects.Add(r);
                 bool on = i == tab;
                 if (on)
@@ -677,6 +681,9 @@ namespace TkoolLauncher
 
         int RowH(Row r) => r.Kind == Kind.Slider ? S(62) : r.Sub != null ? S(62) : S(50);
 
+        /// <summary>보이는 순서로 다음/이전 탭</summary>
+        void StepTab(int d) => SetTab(TabOrder[(TabPos(tab) + d + TabOrder.Length) % TabOrder.Length]);
+
         void SetTab(int t)
         {
             tab = (t + TabNames.Length) % TabNames.Length;
@@ -707,8 +714,8 @@ namespace TkoolLauncher
             try { Build(); Categorize(); } catch { }
             switch (b)
             {
-                case Pad.LB: SetTab(tab - 1); return;
-                case Pad.RB: SetTab(tab + 1); return;
+                case Pad.LB: StepTab(-1); return;
+                case Pad.RB: StepTab(1); return;
                 case Pad.B: case Pad.Start: case Pad.Guide:
                     if (Popup) { Shell.ClosePopup(); return; }
                     if (GameWatch.Running && Shell.CameFromGame) Shell.ReturnToGame(); else Hide();
@@ -748,7 +755,7 @@ namespace TkoolLauncher
                 if (GameWatch.Running && Shell.CameFromGame) Shell.ReturnToGame(); else Hide();
                 return;
             }
-            for (int i = 0; i < tabRects.Count; i++) if (tabRects[i].Contains(p)) { SetTab(i); return; }
+            for (int i = 0; i < tabRects.Count; i++) if (tabRects[i].Contains(p)) { SetTab(TabOrder[i]); return; }
             for (int i = 0; i < tileRects.Count && i < tiles.Count; i++)
                 if (tileRects[i].Contains(p)) { zone = 0; tileFocus = i; Activate(tiles[i]); return; }
             for (int i = 0; i < view.Count; i++)
@@ -790,7 +797,7 @@ namespace TkoolLauncher
         {
             return new List<Hint>
             {
-                new Hint(Pad.RB, "탭", () => SetTab(tab + 1)),
+                new Hint(Pad.RB, "탭", () => StepTab(1)),
                 new Hint(Pad.A, "선택", () => OnPad(Pad.A)),
                 new Hint(Pad.B, Popup || (GameWatch.Running && Shell.CameFromGame) ? (GameWatch.Running ? "게임으로" : "닫기") : "닫기", () => OnPad(Pad.B)),
             };
