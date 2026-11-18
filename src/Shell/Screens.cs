@@ -230,28 +230,26 @@ namespace TkoolLauncher
         void BuildTabs()
         {
             var all = Shell.VisibleGames.ToList();
-            tabs = new List<Tab>
-            {
-                new Tab { Name = "최근 플레이", Filter = x => GameData.Get(x).LastPlayed > 0 },
-                new Tab { Name = "즐겨찾기", Filter = x => GameData.Get(x).Favorite },
-                new Tab { Name = "전체", Filter = x => true },
-            };
+            // 첫 탭은 '전체' (라이브러리를 열면 여기서 시작)
+            tabs = new List<Tab> { new Tab { Name = "전체", Filter = x => true } };
             // 쯔꾸르 폴더에서 찾은 건 '쯔꾸르'에만, 스팀·배틀넷·에픽·GOG·설치된 게임은 'PC 게임'에
             Func<GameInfo, bool> isT = x => x.FromFolder || x.IsTkool;
             if (all.Any(isT)) tabs.Add(new Tab { Name = "쯔꾸르", Filter = isT });
             if (all.Any(x => !isT(x))) tabs.Add(new Tab { Name = "PC 게임", Filter = x => !isT(x) });
+            tabs.Add(new Tab { Name = "즐겨찾기", Filter = x => GameData.Get(x).Favorite });
+            tabs.Add(new Tab { Name = "최근 플레이", Filter = x => GameData.Get(x).LastPlayed > 0 });
             tab = Math.Max(0, tabs.FindIndex(t => t.Name == lastTab));
         }
 
         public override void OnGamesChanged()
         {
             var cur = FocusedGame;
-            string keep = tabs.Count > 0 ? tabs[tab].Name : lastTab;
+            string keep = tabs.Count > 0 ? tabs[tab].Name : "전체";   // 라이브러리를 새로 열면 항상 전체부터
             BuildTabs();
             int ti = tabs.FindIndex(t => t.Name == keep);
             if (ti >= 0) tab = ti;
             var f = tabs[tab].Filter;
-            items = tab == 0 ? Shell.Recent(int.MaxValue).Where(f).ToList() : Shell.VisibleGames.Where(f).ToList();
+            items = tabs[tab].Name == "최근 플레이" ? Shell.Recent(int.MaxValue).Where(f).ToList() : Shell.VisibleGames.Where(f).ToList();
             int i = cur != null ? items.FindIndex(x => x.Exe == cur.Exe) : -1;
             focus = i >= 0 ? i : 0;
             Follow();
@@ -341,8 +339,9 @@ namespace TkoolLauncher
             g.SetClip(GridArea);
             if (items.Count == 0)
             {
-                string msg = tab == 1 ? "즐겨찾기한 게임이 없어요.\n게임 화면에서 ★를 누르면 여기에 모여요." :
-                             tab == 0 ? "아직 플레이한 게임이 없어요." : "게임이 없어요.";
+                string tn = tab < tabs.Count ? tabs[tab].Name : "";
+                string msg = tn == "즐겨찾기" ? "즐겨찾기한 게임이 없어요.\n게임 화면에서 ★를 누르면 여기에 모여요." :
+                             tn == "최근 플레이" ? "아직 플레이한 게임이 없어요." : "게임이 없어요.";
                 if (tabs.Count == 0) msg = "";
                 Draw.Text(g, msg, Draw.Menu, GridArea, Theme.SubText, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
             }

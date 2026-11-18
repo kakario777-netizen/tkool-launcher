@@ -568,7 +568,20 @@ namespace TkoolLauncher
             Invalidate();
         }
 
+        // 초점이 머문 뒤에만 배경을 바꿈 — 목록을 빠르게 넘길 때마다 전체 화면 배경을 다시 만드는 게 렉의 큰 원인
+        Timer bgDelay;
         void UpdateBg()
+        {
+            if (bgDelay == null)
+            {
+                bgDelay = new Timer { Interval = 260 };
+                bgDelay.Tick += (s, e) => { bgDelay.Stop(); UpdateBgNow(); };
+            }
+            bgDelay.Stop();
+            bgDelay.Start();
+        }
+
+        void UpdateBgNow()
         {
             var g = stack.Count > 0 ? Cur.FocusedGame : null;
             string id = g != null ? GameData.IdOf(g) : null;
@@ -590,7 +603,7 @@ namespace TkoolLauncher
         {
             var r = ClientRectangle;
             if (r.Width <= 0 || r.Height <= 0) return;
-            int fq = bgFade >= 1f ? 100 : (int)(bgFade * 12);
+            int fq = bgFade >= 1f ? 100 : (int)(bgFade * 4);   // 바뀌는 동안 4번만 다시 만듦
             if (bgCache == null || bgKeySize != r.Size || bgKeyA != bgImage || bgKeyB != bgPrev || bgKeyC != bgCur || bgKeyFade != fq)
             {
                 var nb = new Bitmap(r.Width, r.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
@@ -624,7 +637,7 @@ namespace TkoolLauncher
             using (var lg = new LinearGradientBrush(r, Color.FromArgb(40, 0, 0, 0), Color.FromArgb(220, 9, 12, 16), 90f)) g.FillRectangle(lg, r);
         }
 
-        float bgKeyFadeValue() => Math.Min(1f, (int)(bgFade * 12) / 12f);
+        float bgKeyFadeValue() => Math.Min(1f, (int)(bgFade * 4) / 4f);
 
         static void DrawBg(Graphics g, Bitmap b, float alpha)
         {
@@ -658,7 +671,7 @@ namespace TkoolLauncher
             bool more = Cur.Tick(dt);
             more |= menu.Tick(dt);
             more |= quick.Tick(dt);
-            if (bgFade < 1f) { bgFade = Math.Min(1f, bgFade + dt * 3f); more = true; }
+            if (bgFade < 1f) { bgFade = Math.Min(1f, bgFade + dt * 4f); more = true; }
             if (toast != null && now > toastUntil) toast = null;
             Invalidate();
             if (!more) anim.Stop();
