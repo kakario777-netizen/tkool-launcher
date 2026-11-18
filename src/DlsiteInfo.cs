@@ -148,9 +148,17 @@ namespace TkoolLauncher
         /// <summary>표지가 없으면 DLsite 대표 그림을 표지로 (covers\폴더.auto.png)</summary>
         static bool SaveCover(GameInfo g, Info i)
         {
-            if (string.IsNullOrEmpty(i.Image) || !CoverArt.Needs(g)) return false;
+            if (string.IsNullOrEmpty(i.Image) || g.Folder == null) return false;
+            // 이미 표지(직접·찍은 것)가 있으면 그대로
+            string name = Path.GetFileName(g.Folder);
+            foreach (var ext in new[] { ".png", ".jpg", ".jpeg", ".auto.png", ".pending.png" })
+                if (File.Exists(Path.Combine(CoverArt.CoverDir, name + ext))) return false;
+            // 게임 안 타이틀 그림이 있으면 그걸 씀 — 그림을 못 찾은 게임만 (아직 안 만들어 봤으면 지금 확인)
+            if (!CoverArt.Needs(g) && !CoverArt.HasNoHero(g))
+            {
+                try { using (var t = ArtExtract.FindTitleImage(g)) if (t != null) return false; } catch { }
+            }
             string dest = CoverArt.AutoShotPath(g);
-            if (File.Exists(dest)) return false;
             try
             {
                 byte[] b;
@@ -173,9 +181,11 @@ namespace TkoolLauncher
         public static void RunAll(List<GameInfo> games, Action<int> done)
         {
             if (Busy) return;
-            var list = games.Where(g => g.FromFolder && NameFinder.FindCode(g) != null).ToList();
-            list = list.Where(g => !Tried(NameFinder.FindCode(g))).ToList();
-            if (list.Count == 0) { done?.Invoke(0); return; }
+            var withCode = games.Where(g => g.FromFolder && NameFinder.FindCode(g) != null).ToList();
+            var list = withCode.Where(g => !Tried(NameFinder.FindCode(g))).ToList();
+            // 예전에 정보만 받고 그림을 못 넣은 게임 (표지 없음) → 그림만 다시
+            var needImg = withCode.Where(g => Tried(NameFinder.FindCode(g))).ToList();
+            if (list.Count == 0 && needImg.Count == 0) { done?.Invoke(0); return; }
             Busy = true;
             var th = new System.Threading.Thread(() =>
             {
@@ -192,6 +202,11 @@ namespace TkoolLauncher
                         lock (mem) mem[code] = i;
                         if (i != null) { n++; SaveCover(g, i); }
                         System.Threading.Thread.Sleep(400);   // 사이트에 부담 안 주게 천천히
+                    }
+                    foreach (var g in needImg)
+                    {
+                        var i = Get(g);
+                        if (i != null && SaveCover(g, i)) { n++; System.Threading.Thread.Sleep(300); }
                     }
                 }
                 finally { Busy = false; done?.Invoke(n); }
