@@ -204,6 +204,7 @@ namespace TkoolLauncher
 
         public void ShowPopup()
         {
+            if (cheatOpen) { CheatLink.Send("hide"); EndCheatInput(); }   // 치트 팝업이 떠 있으면 내리고 빠른 설정을 띄움
             IntPtr fg = GetForegroundWindow();
             if (fg != Handle) gameHwnd = fg;
             CameFromGame = GameWatch.Running;
@@ -486,12 +487,93 @@ namespace TkoolLauncher
 
         public bool CanQuitForeground => !GameWatch.Running && ForegroundAppDir() != null;
 
+        // ───────── 치트 모드 (MiniCheat --panel): 게임 옆 팝업 자리에 포커스 없이 ─────────
+        bool cheatOpen, cheatMapWas, cheatPadOffWas;
+        DateTime cheatSince;
+        Timer cheatWatch;
+        CheatPad cheatPad;
+
+        public void OpenCheatPanel()
+        {
+            IntPtr g = PopupOpen ? gameHwnd : GetForegroundWindow();
+            if (g == Handle) g = gameHwnd;
+            string dir = GameWatch.Dir ?? ForegroundAppDir();
+            uint pid = 0;
+            if (g != IntPtr.Zero) GetWindowThreadProcessId(g, out pid);
+            if (PopupOpen) ClosePopup(false);
+            string exe = FindCheat();
+            if (exe != null) { RunCheatPanel(exe, dir, (int)pid); return; }
+            DownloadCheat(path => RunCheatPanel(path, dir, (int)pid));
+        }
+
+        void RunCheatPanel(string exe, string dir, int pid)
+        {
+            try
+            {
+                var sc = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
+                int w = QuickPanel.PanelWidth();
+                var r = new Rectangle(sc.Right - w, sc.Top, w, sc.Height);
+                string d = (dir ?? "").TrimEnd('\\');
+                string cmd = "show\t" + d + "\t" + pid + "\t" + r.X + "\t" + r.Y + "\t" + r.Width + "\t" + r.Height;
+                if (!CheatLink.Send(cmd))
+                    Process.Start(new ProcessStartInfo(exe, "--panel --dir \"" + d + "\" --pid " + pid + " --rect " + r.X + "," + r.Y + "," + r.Width + "," + r.Height)
+                    { WorkingDirectory = System.IO.Path.GetDirectoryName(exe), UseShellExecute = false });
+                BeginCheatInput();
+                Log.Info("치트 모드: " + d);
+            }
+            catch (Exception ex) { Log.Error("치트 모드", ex); ShowToast("치트 모드를 켜지 못했어요: " + ex.Message, 5000); }
+        }
+
+        // 치트 팝업이 떠 있는 동안: 게임엔 버튼이 안 가고(빠른 설정 팝업과 같게), 패드는 치트 팝업으로 보냄
+        void BeginCheatInput()
+        {
+            cheatSince = DateTime.Now;
+            if (cheatOpen) return;
+            cheatOpen = true;
+            cheatMapWas = Gamepad.MapKeys; Gamepad.MapKeys = false;
+            cheatPadOffWas = VirtualPad.ControllerOff;
+            if (VirtualPad.Running) VirtualPad.ControllerOff = true;
+            if (cheatPad == null) cheatPad = new CheatPad();
+            Gamepad.Overlay = cheatPad;
+            if (cheatWatch == null)
+            {
+                cheatWatch = new Timer { Interval = 300 };
+                // ✕ 로 닫으면 미니 치트 창이 숨으니 그걸 보고 되돌림 (처음 켤 땐 창이 뜰 때까지 6초 기다림)
+                cheatWatch.Tick += (s, e) => { if ((DateTime.Now - cheatSince).TotalSeconds > 6 && !CheatLink.Visible()) EndCheatInput(); };
+            }
+            cheatWatch.Start();
+        }
+
+        void EndCheatInput()
+        {
+            if (!cheatOpen) return;
+            cheatOpen = false;
+            if (cheatWatch != null) cheatWatch.Stop();
+            if (Gamepad.Overlay == cheatPad) Gamepad.Overlay = null;
+            Gamepad.MapKeys = cheatMapWas && GameWatch.Running;
+            VirtualPad.ControllerOff = cheatPadOffWas;
+        }
+
+        class CheatPad : IPadTarget
+        {
+            public void OnPad(Pad b)
+            {
+                string n = b == Pad.B ? "B" : b == Pad.LB ? "LB" : b == Pad.RB ? "RB" : b == Pad.Up ? "Up" : b == Pad.Down ? "Down" : null;
+                if (n != null) CheatLink.Send("pad\t" + n);
+            }
+        }
+
         // ───────── 치트 에디터 (MiniCheat) ─────────
         public void OpenCheat()
         {
             if (PopupOpen) ClosePopup(false);
             string exe = FindCheat();
             if (exe != null) { RunCheat(exe); return; }
+            DownloadCheat(RunCheat);
+        }
+
+        void DownloadCheat(Action<string> then)
+        {
             // 없으면 GitHub 최신 릴리스에서 받아 tools 폴더에 둠
             string dest = System.IO.Path.Combine(Settings.Dir, "tools", "MiniCheat.exe");
             ShowToast("치트 에디터를 받는 중...", 8000);
@@ -510,7 +592,7 @@ namespace TkoolLauncher
                         wc.Headers[System.Net.HttpRequestHeader.UserAgent] = "TkoolLauncher";
                         wc.DownloadFile(url, dest);
                     }
-                    BeginInvoke(new Action(() => { Settings.CheatExe = dest; Settings.Save(); RunCheat(dest); }));
+                    BeginInvoke(new Action(() => { Settings.CheatExe = dest; Settings.Save(); then(dest); }));
                 }
                 catch (Exception ex)
                 {
@@ -772,6 +854,7 @@ namespace TkoolLauncher
 
         public void ExitForReal()
         {
+            CheatLink.Send("quit");
             realExit = true; TaskbarHide.Show();
             Log.Info("알림 아이콘에서 완전히 종료");
             Close();
