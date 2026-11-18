@@ -150,7 +150,7 @@ namespace TkoolLauncher
         }
 
         // ───────── DLsite (RJ 번호) ─────────
-        static string FindCode(GameInfo g)
+        public static string FindCode(GameInfo g)
         {
             foreach (var s in new[] { g.RawTitle, g.Title, Path.GetFileName(g.Folder ?? "") })
             {
@@ -162,7 +162,7 @@ namespace TkoolLauncher
         }
 
         /// <summary>RJ37082 → RJ037082 (DLsite 번호는 6자리나 8자리로 0을 채움)</summary>
-        static List<string> CodeVariants(string code)
+        public static List<string> CodeVariants(string code)
         {
             var m = Regex.Match(code, @"(?i)^([A-Z]+)(\d+)$");
             var l = new List<string>();

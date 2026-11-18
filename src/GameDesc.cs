@@ -52,6 +52,7 @@ namespace TkoolLauncher
             string d = "";
             if (g.Kind == GameKind.Steam) d = Steam(g);
             if (string.IsNullOrEmpty(d)) d = Readme(g);
+            if (string.IsNullOrEmpty(d)) { var dl = DlsiteInfo.Get(g); if (dl != null && !string.IsNullOrEmpty(dl.Desc)) d = dl.Desc + "\n\n(DLsite 작품 소개)"; }
             if (!string.IsNullOrEmpty(d) && g.Kind == GameKind.Steam)
             {
                 try { Directory.CreateDirectory(Path.GetDirectoryName(cp)); File.WriteAllText(cp, d, Encoding.UTF8); } catch { }

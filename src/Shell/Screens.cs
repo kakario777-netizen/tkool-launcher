@@ -1245,6 +1245,22 @@ namespace TkoolLauncher
                 Draw.Badge(g, ref bx, y, "RTP 필요" + (string.IsNullOrEmpty(game.RtpName) ? "" : " (" + game.RtpName + ")"), Color.FromArgb(70, 80, 96));
                 y += S(30); bx = ix0;
             }
+            // DLsite 서클·장르 (최대 2줄)
+            var dl = DlsiteInfo.Get(game);
+            if (dl != null)
+            {
+                int lines = 0;
+                var items = new List<string>();
+                if (!string.IsNullOrEmpty(dl.Circle)) items.Add("서클 " + dl.Circle);
+                for (int k = 0; k < dl.Genres.Count; k++) items.Add(k < dl.GenresKo.Count && dl.GenresKo[k].Length > 0 ? dl.GenresKo[k] : dl.Genres[k]);
+                foreach (var t in items)
+                {
+                    int w = Draw.Measure(g, t, Draw.Small) + S(20);
+                    if (bx + w > ix0 + infoW) { if (++lines >= 2) break; y += S(30); bx = ix0; }
+                    Draw.Badge(g, ref bx, y, t, t.StartsWith("서클 ") ? Color.FromArgb(150, 95, 40) : Color.FromArgb(110, 70, 130));
+                }
+                y += S(30); bx = ix0;
+            }
             // 내 태그 + 추가
             tagRects.Clear();
             foreach (var t in GameData.TagsOf(game))

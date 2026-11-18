@@ -12,6 +12,16 @@ namespace TkoolLauncher
     /// </summary>
     class SearchScreen : Screen
     {
+        /// <summary>DLsite 원제·서클·장르(한글)로도 찾기</summary>
+        static bool DlMatch(GameInfo g, string q)
+        {
+            var d = DlsiteInfo.Get(g);
+            if (d == null) return false;
+            foreach (var t in new[] { d.Name, d.Circle }.Concat(d.Genres).Concat(d.GenresKo))
+                if (!string.IsNullOrEmpty(t) && t.ToUpperInvariant().Contains(q)) return true;
+            return false;
+        }
+
         static readonly string[][] Keys =
         {
             new[] { "ㄱ","ㄴ","ㄷ","ㄹ","ㅁ","ㅂ","ㅅ","ㅇ","ㅈ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ" },
@@ -40,7 +50,7 @@ namespace TkoolLauncher
             else
             {
                 string q = query.ToUpperInvariant();
-                results = all.Where(g => Key(g.Title).Contains(q) || g.Title.ToUpperInvariant().Contains(q)).Take(40).ToList();
+                results = all.Where(g => Key(g.Title).Contains(q) || g.Title.ToUpperInvariant().Contains(q) || DlMatch(g, q)).Take(40).ToList();
             }
             rfocus = Math.Min(rfocus, Math.Max(0, results.Count - 1));
             if (results.Count == 0) onResults = false;

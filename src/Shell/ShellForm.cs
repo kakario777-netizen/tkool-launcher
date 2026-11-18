@@ -1357,6 +1357,7 @@ namespace TkoolLauncher
             CoverArt.Preload(found);   // 목록 썸네일을 미리 메모리에
             ScheduleDupScan();
             // 뜻 없는 이름(RJ번호·Game·my…)이나 한글판인데 영어 이름인 게임: 읽어보기·DLsite에서 진짜 이름 찾기 (한 번만)
+            DlsiteInfo.RunAll(found, n => { if (n > 0) try { BeginInvoke(new Action(() => { RefreshLists(); ShowToast("DLsite에서 게임 " + n + "개의 정보(장르·서클·소개)를 가져왔어요", 4000); })); } catch { } });
             NameFinder.RunAll(found, true, n => { if (n > 0) try { BeginInvoke(new Action(() => { RefreshLists(); ShowToast("게임 " + n + "개의 이름을 찾아 바꿨어요 (상세 화면에 원래 이름)", 5000); })); } catch { } });
             LayoutScreens();
             foreach (var s in stack) s.OnGamesChanged();
