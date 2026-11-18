@@ -57,7 +57,7 @@ namespace TkoolLauncher
         /// <summary>한글이 하나도 없는 외국어 이름 (일본어·영어 등)</summary>
         public static bool Foreign(string t) => !string.IsNullOrWhiteSpace(t) && !Hangul.IsMatch(t) && t.Any(char.IsLetter);
 
-        public class Found { public string Name, From; }
+        public class Found { public string Name, From; public bool NeedTr; }   // NeedTr: 나중에 몰아서 한글로 번역
 
         /// <summary>이름 후보 찾기 (느릴 수 있음 — 백그라운드에서)</summary>
         public static Found Find(GameInfo g, bool online)
@@ -76,14 +76,9 @@ namespace TkoolLauncher
                 code = FindCode(g);
                 if (code != null && meaningless) { var d = FromDlsite(code); if (d != null) return d; }
             }
-            if (f != null) return f;   // 읽어보기 영어·일본어 제목 (뜻 없는 이름보다 나음)
-            // 4) 외국어 이름은 구글 번역으로 한글 이름 (읽어보기 자동 번역처럼, 원래 이름은 정보에 남김)
-            if (online && Foreign(g.Title) && !meaningless)
-            {
-                string ko = null;
-                try { ko = Tidy(Translate.Run(g.Title)); } catch { }
-                if (ko != null && Hangul.IsMatch(ko) && ko != g.Title) return new Found { Name = ko, From = "구글 번역" };
-            }
+            if (f != null) { f.NeedTr = online && Foreign(f.Name); return f; }   // 읽어보기 영어·일본어 제목 (뜻 없는 이름보다 나음)
+            // 4) 외국어 이름은 구글 번역으로 한글 이름 (읽어보기 자동 번역처럼, 원래 이름은 정보에 남김) — 번역은 RunAll에서 몰아서
+            if (online && Foreign(g.Title) && !meaningless) return new Found { Name = g.Title, From = "", NeedTr = true };
             return null;
         }
 
@@ -286,12 +281,7 @@ namespace TkoolLauncher
                         string name = TextDecode.JsonString(json, "work_name");
                         if (string.IsNullOrWhiteSpace(name)) continue;
                         name = WebUtility.HtmlDecode(name).Trim();
-                        string ko = null;
-                        try { ko = Translate.Run(name); } catch { }
-                        ko = Tidy(ko);
-                        if (ko != null && Hangul.IsMatch(ko))
-                            return new Found { Name = ko, From = "DLsite " + id + " · 원제 " + name + " (구글 번역)" };
-                        return new Found { Name = name, From = "DLsite " + id };
+                        return new Found { Name = name, From = "DLsite " + id + " · 원제 " + name, NeedTr = Foreign(name) };
                     }
                     catch (Exception ex) { Log.Info("DLsite 이름 찾기 " + id + " " + site + ": " + ex.Message); }
                 }
@@ -313,23 +303,58 @@ namespace TkoolLauncher
                 int n = 0;
                 try
                 {
+                    // 1) 게임마다 찾기 (읽어보기·DLsite) — 번역이 필요한 건 모아 둠
+                    var pend = new List<KeyValuePair<GameInfo, Found>>();
                     int k = 0;
                     foreach (var g in list)
                     {
                         Activity.Set("name", "이름 확인 중 · " + g.Title, ++k, list.Count);
                         Found f = null;
                         try { f = Find(g, online); } catch (Exception ex) { Log.Error("이름 찾기 " + g.Title, ex); }
-                        var st = GameData.Get(g);
-                        if (f != null && f.Name != g.Title)
+                        if (f != null && f.NeedTr) pend.Add(new KeyValuePair<GameInfo, Found>(g, f));
+                        else if (Apply(g, f)) n++;
+                        if (k % 50 == 0) GameData.Save();
+                    }
+                    // 2) 번역은 몰아서: 이름 여러 개를 줄바꿈으로 이어 한 번에 보내고, 묶음 사이에 쉬기
+                    int done2 = 0;
+                    for (int i = 0; i < pend.Count; )
+                    {
+                        var batch = new List<KeyValuePair<GameInfo, Found>>();
+                        int len = 0;
+                        while (i < pend.Count && batch.Count < 40 && len + pend[i].Value.Name.Length < 1100)
+                        { len += pend[i].Value.Name.Length + 1; batch.Add(pend[i]); i++; }
+                        if (batch.Count == 0) { batch.Add(pend[i]); i++; }
+                        Activity.Set("name", "이름 한글로 번역 중", done2, pend.Count);
+                        List<string> kos = null;
+                        try
                         {
-                            st.NameFrom = (g.RawTitle ?? g.Title) + " · " + f.From;
-                            st.Title = "=" + f.Name;
-                            g.Title = f.Name;
-                            n++;
-                            Log.Info("이름 찾음: " + st.NameFrom + " → " + f.Name);
+                            string joined = string.Join("\n", batch.Select(x => x.Value.Name.Replace("\n", " ")));
+                            kos = (Translate.Run(joined) ?? "").Replace("\r", "").Split('\n').Select(x => x.Trim()).ToList();
+                            if (kos.Count != batch.Count) { Log.Info("이름 몰아 번역: 줄 수가 달라 하나씩 다시 (" + kos.Count + "/" + batch.Count + ")"); kos = null; }
                         }
-                        else st.NameFrom = Checked;   // 확인한 흔적
-                        System.Threading.Thread.Sleep(150);
+                        catch (Exception ex) { Log.Info("이름 몰아 번역 실패: " + ex.Message); }
+                        if (kos == null)   // 줄이 섞였거나 실패 → 이 묶음만 하나씩
+                        {
+                            kos = new List<string>();
+                            foreach (var x in batch) { string t = null; try { t = Translate.Run(x.Value.Name); } catch { } kos.Add((t ?? "").Trim()); }
+                        }
+                        for (int j = 0; j < batch.Count; j++)
+                        {
+                            var g = batch[j].Key; var f = batch[j].Value;
+                            string ko = Tidy(kos[j]);
+                            bool okKo = ko != null && Hangul.IsMatch(ko) && ko != f.Name;
+                            if (okKo)
+                            {
+                                f.From = f.From.Length == 0 ? "구글 번역" : f.From + " (구글 번역)";
+                                f.Name = ko;
+                                if (Apply(g, f)) n++;
+                            }
+                            else if (f.From.Length > 0) { if (Apply(g, f)) n++; }   // 번역은 안 됐지만 DLsite·읽어보기 이름은 씀
+                            // 제목 번역만 실패한 건 표시 안 함 → 다음에 다시 시도
+                        }
+                        done2 += batch.Count;
+                        GameData.Save();
+                        System.Threading.Thread.Sleep(2000);   // 묶음 사이에 쉬기
                     }
                 }
                 finally
@@ -341,6 +366,22 @@ namespace TkoolLauncher
                 }
             }) { IsBackground = true };
             th.Start();
+        }
+
+        /// <summary>찾은 이름 적용 (없으면 확인 흔적만)</summary>
+        static bool Apply(GameInfo g, Found f)
+        {
+            var st = GameData.Get(g);
+            if (f != null && !string.IsNullOrWhiteSpace(f.Name) && f.Name != g.Title)
+            {
+                st.NameFrom = (g.RawTitle ?? g.Title) + " · " + f.From;
+                st.Title = "=" + f.Name;
+                g.Title = f.Name;
+                Log.Info("이름 찾음: " + st.NameFrom + " → " + f.Name);
+                return true;
+            }
+            st.NameFrom = Checked;   // 확인한 흔적
+            return false;
         }
 
         /// <summary>정리 모드 이름 후보용 (읽어보기만, 빠름)</summary>
