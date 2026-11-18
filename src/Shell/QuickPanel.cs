@@ -29,7 +29,7 @@ namespace TkoolLauncher
         class Row
         {
             public Kind Kind;
-            public string Title, Sub;
+            public string Title, Sub; public bool Keep;
             public int Num;                 // 슬라이더 값 0~100
             public bool On;
             public string[] Choices;
@@ -102,7 +102,7 @@ namespace TkoolLauncher
                 {
                     Kind = Kind.Action, Danger = true,
                     Title = confirmQuit ? "한 번 더 누르면 게임을 끝내요" : Shell.GameProblem != null ? "게임 끝내기 (문제 생김)" : "게임 끝내기",
-                    Sub = confirmQuit ? "저장 안 한 내용은 사라져요" : Shell.GameProblem ?? (fgApp ? "앞에 있던 프로그램을 끝내요" : null),
+                    Keep = confirmQuit, Sub = confirmQuit ? "저장 안 한 내용은 사라져요" : Shell.GameProblem ?? (fgApp ? "앞에 있던 프로그램을 끝내요" : null),
                     Act = () => { if (!confirmQuit) { confirmQuit = true; } else { confirmQuit = false; Shell.QuitGame(); } }
                 });
             }
@@ -132,7 +132,7 @@ namespace TkoolLauncher
                     Sub = PerfMode.Describe(pm),
                     Change = v => { PerfMode.Set(v); power = SystemControls.GetPowerMode(); }
                 });
-                rows.Add(new Row { Kind = Kind.Action, Title = "지금 상태", Sub = PerfMode.Live(), Act = () => { } });
+                rows.Add(new Row { Kind = Kind.Action, Title = "지금 상태", Keep = true, Sub = PerfMode.Live(), Act = () => { } });
             }
             else
                 rows.Add(new Row { Kind = Kind.Choice, Title = "윈도우 전원 모드", Choices = SystemControls.PowerNames, ChoiceIndex = power, Change = v => { power = v; SystemControls.SetPowerMode(v); } });
@@ -466,7 +466,7 @@ namespace TkoolLauncher
                                    Act = () => { Hide(); Shell.GoHome(); Shell.Push(new SettingsScreen()); } });
             // 위 빠른 타일: 와이파이·블루투스·음소거·성능 표시·마우스 모드
             tiles = new List<Row>();
-            foreach (var t in new[] { "와이파이", "블루투스", "음소거", "성능 표시", "조이스틱 마우스 모드" })
+            foreach (var t in new[] { "와이파이", "블루투스", "비행기 모드", "음소거", "성능 표시", "조이스틱 마우스 모드" })
             {
                 var r = rows.FirstOrDefault(x => x.Title.StartsWith(t) && x.Kind == Kind.Toggle);
                 if (r != null) tiles.Add(r);
@@ -475,7 +475,7 @@ namespace TkoolLauncher
             if (tileFocus >= tiles.Count) tileFocus = Math.Max(0, tiles.Count - 1);
         }
 
-        static readonly string[] TileNames = { "와이파이", "블루투스", "음소거", "성능 표시", "마우스" };
+        static readonly string[] TileNames = { "와이파이", "블루투스", "비행기 모드", "음소거", "성능 표시", "마우스" };
 
         bool IsGrid => tab == 5;   // 바로가기 탭은 2열 단추판
 
@@ -511,18 +511,24 @@ namespace TkoolLauncher
 
             // ── 빠른 타일 줄 ──
             tileRects.Clear();
-            int ty = S(80), th = S(62), tg = S(8);
-            int tw = tiles.Count > 0 ? (w - S(32) - tg * (tiles.Count - 1)) / tiles.Count : 0;
+            // 두 줄 × 3개
+            int ty = S(80), tg = S(8), th1 = S(58);
+            int tw = (w - S(32) - tg * 2) / 3;
+            int trows = (tiles.Count + 2) / 3;
+            int th = trows * th1 + Math.Max(0, trows - 1) * tg;
             for (int i = 0; i < tiles.Count; i++)
             {
-                var r = new Rectangle(x + S(16) + i * (tw + tg), ty, tw, th);
+                var r = new Rectangle(x + S(16) + (i % 3) * (tw + tg), ty + (i / 3) * (th1 + tg), tw, th1);
                 tileRects.Add(r);
                 bool on = tiles[i].On;
                 Draw.Fill(g, r, S(8), on ? Theme.Accent : Color.FromArgb(35, 41, 51));
-                int ti = Array.FindIndex(new[] { "와이파이", "블루투스", "음소거", "성능 표시", "조이스틱 마우스 모드" }, t => tiles[i].Title.StartsWith(t));
+                int ti = Array.FindIndex(new[] { "와이파이", "블루투스", "비행기 모드", "음소거", "성능 표시", "조이스틱 마우스 모드" }, t => tiles[i].Title.StartsWith(t));
                 string name = ti >= 0 ? TileNames[ti] : tiles[i].Title;
-                Draw.Text(g, name, Draw.Label, new Rectangle(r.X, r.Y + S(8), r.Width, S(24)), Color.White, Draw.Center);
-                Draw.Text(g, on ? "켜짐" : "꺼짐", Draw.Small, new Rectangle(r.X, r.Y + S(32), r.Width, S(20)), on ? Color.White : Theme.SubText, Draw.Center);
+                Draw.Text(g, name, Draw.Label, new Rectangle(r.X + S(4), r.Y + S(6), r.Width - S(8), S(24)), Color.White, Draw.Center | TextFormatFlags.EndEllipsis);
+                // 켜짐/꺼짐 글자 대신 토글 스위치 모양
+                var sw = new Rectangle(r.X + (r.Width - S(40)) / 2, r.Y + S(32), S(40), S(20));
+                Draw.Fill(g, sw, S(10), on ? Color.FromArgb(255, 255, 255) : Color.FromArgb(70, 78, 90));
+                using (var kb = new SolidBrush(on ? Theme.Accent : Color.FromArgb(200, 205, 212))) g.FillEllipse(kb, on ? sw.Right - S(18) : sw.X + S(2), sw.Y + S(2), S(16), S(16));
                 if (zone == 0 && i == tileFocus) Draw.Ring(g, Rectangle.Inflate(r, S(2), S(2)), S(9), Theme.Focus, S(2.5f));
             }
 
@@ -630,25 +636,25 @@ namespace TkoolLauncher
                         using (var b = new SolidBrush(Color.White)) g.FillEllipse(b, kx - S(9), track.Y + S(3) - S(9), S(18), S(18));
                         break;
                     case Kind.Toggle:
-                        Draw.Text(g, row.Title, Draw.Body, new Rectangle(ix, r.Y, r.Width - S(90), row.Sub != null ? h - S(18) : h), tc);
-                        if (row.Sub != null) Draw.Text(g, row.Sub, Draw.Small, new Rectangle(ix, r.Y + h - S(26), r.Width - S(80), S(20)), Theme.SubText);
+                        Draw.Text(g, row.Title, Draw.Body, new Rectangle(ix, r.Y, r.Width - S(90), SubOf(row) != null ? h - S(18) : h), tc);
+                        if (SubOf(row) != null) Draw.Text(g, SubOf(row), Draw.Small, new Rectangle(ix, r.Y + h - S(26), r.Width - S(80), S(20)), Theme.SubText);
                         var t = new Rectangle(r.Right - S(16) - S(50), r.Y + (h - S(26)) / 2, S(50), S(26));
                         Draw.Fill(g, t, S(13), row.On ? Theme.Accent : Color.FromArgb(70, 78, 90));
                         using (var b = new SolidBrush(Color.White)) g.FillEllipse(b, row.On ? t.Right - S(23) : t.X + S(3), t.Y + S(3), S(20), S(20));
                         break;
                     case Kind.Choice:
-                        Draw.Text(g, row.Title, Draw.Body, new Rectangle(ix, r.Y, r.Width / 2, row.Sub != null ? h - S(18) : h), tc);
-                        if (row.Sub != null) Draw.Text(g, row.Sub, Draw.Small, new Rectangle(ix, r.Y + h - S(26), r.Width - S(30), S(20)), Theme.SubText);
+                        Draw.Text(g, row.Title, Draw.Body, new Rectangle(ix, r.Y, r.Width / 2, SubOf(row) != null ? h - S(18) : h), tc);
+                        if (SubOf(row) != null) Draw.Text(g, SubOf(row), Draw.Small, new Rectangle(ix, r.Y + h - S(26), r.Width - S(30), S(20)), Theme.SubText);
                         string v = row.Choices[Math.Max(0, Math.Min(row.Choices.Length - 1, row.ChoiceIndex))];
                         int vw = Math.Min(S(176), r.Width / 2);
-                        var vr = new Rectangle(r.Right - vw - S(12), r.Y, vw, row.Sub != null ? h - S(18) : h);
+                        var vr = new Rectangle(r.Right - vw - S(12), r.Y, vw, SubOf(row) != null ? h - S(18) : h);
                         Draw.Text(g, "‹", Draw.H2, new Rectangle(vr.X, vr.Y, S(22), vr.Height), f ? Theme.Text : Theme.Dim, Draw.Center);
                         Draw.Text(g, v, Draw.BodyBold, new Rectangle(vr.X + S(22), vr.Y, vr.Width - S(44), vr.Height), Theme.Text, Draw.Center);
                         Draw.Text(g, "›", Draw.H2, new Rectangle(vr.Right - S(22), vr.Y, S(22), vr.Height), f ? Theme.Text : Theme.Dim, Draw.Center);
                         break;
                     default:
-                        Draw.Text(g, row.Title, Draw.Body, new Rectangle(ix, r.Y, r.Width - S(20), row.Sub != null ? h - S(18) : h), tc);
-                        if (row.Sub != null) Draw.Text(g, row.Sub, Draw.Small, new Rectangle(ix, r.Y + h - S(26), r.Width - S(30), S(20)), Theme.SubText);
+                        Draw.Text(g, row.Title, Draw.Body, new Rectangle(ix, r.Y, r.Width - S(20), SubOf(row) != null ? h - S(18) : h), tc);
+                        if (SubOf(row) != null) Draw.Text(g, SubOf(row), Draw.Small, new Rectangle(ix, r.Y + h - S(26), r.Width - S(30), S(20)), Theme.SubText);
                         break;
                 }
                 y += h + S(8);
@@ -671,15 +677,17 @@ namespace TkoolLauncher
                 bool f = zone == 1 && i == focus;
                 Draw.Fill(g, r, S(8), f ? Theme.TileHot : Color.FromArgb(255, 23, 29, 37));
                 var tc = row.Danger ? Color.FromArgb(240, 140, 140) : Theme.Text;
-                Draw.Text(g, row.Title, Draw.BodyBold, new Rectangle(r.X + S(10), r.Y + S(6), r.Width - S(20), row.Sub != null ? S(36) : r.Height - S(12)), tc,
+                Draw.Text(g, row.Title, Draw.BodyBold, new Rectangle(r.X + S(10), r.Y + S(6), r.Width - S(20), SubOf(row) != null ? S(36) : r.Height - S(12)), tc,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
-                if (row.Sub != null) Draw.Text(g, row.Sub, Draw.Tiny, new Rectangle(r.X + S(8), r.Y + S(44), r.Width - S(16), S(24)), Theme.SubText,
+                if (SubOf(row) != null) Draw.Text(g, SubOf(row), Draw.Tiny, new Rectangle(r.X + S(8), r.Y + S(44), r.Width - S(16), S(24)), Theme.SubText,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
                 if (f) Draw.Ring(g, r, S(8), Theme.Focus, S(2));
             }
         }
 
-        int RowH(Row r) => r.Kind == Kind.Slider ? S(62) : r.Sub != null ? S(62) : S(50);
+        int RowH(Row r) => r.Kind == Kind.Slider ? S(62) : SubOf(r) != null ? S(62) : S(50);
+        /// <summary>미세 설명은 빼고, 성능 "지금 상태"·끝내기 확인만 보임</summary>
+        string SubOf(Row r) => r.Keep ? r.Sub : null;
 
         /// <summary>보이는 순서로 다음/이전 탭</summary>
         void StepTab(int d) => SetTab(TabOrder[(TabPos(tab) + d + TabOrder.Length) % TabOrder.Length]);
@@ -725,9 +733,10 @@ namespace TkoolLauncher
             {
                 switch (b)
                 {
-                    case Pad.Left: tileFocus = Math.Max(0, tileFocus - 1); break;
-                    case Pad.Right: tileFocus = Math.Min(tiles.Count - 1, tileFocus + 1); break;
-                    case Pad.Down: zone = 1; break;
+                    case Pad.Left: if (tileFocus % 3 > 0) tileFocus--; break;
+                    case Pad.Right: if (tileFocus % 3 < 2 && tileFocus + 1 < tiles.Count) tileFocus++; break;
+                    case Pad.Up: if (tileFocus >= 3) tileFocus -= 3; break;
+                    case Pad.Down: if (tileFocus + 3 < tiles.Count) tileFocus += 3; else if (tileFocus < 3 && tiles.Count > 3) tileFocus = tiles.Count - 1; else zone = 1; break;
                     case Pad.A: if (tileFocus < tiles.Count) Activate(tiles[tileFocus]); break;
                 }
                 Redraw();
