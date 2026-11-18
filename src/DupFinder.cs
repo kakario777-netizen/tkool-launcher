@@ -187,6 +187,39 @@ namespace TkoolLauncher
             return "0" + DataDate(g).ToString("yyyyMMddHHmm");
         }
 
+        /// <summary>중복 비교용 자세한 정보 (폴더 한 번 훑기)</summary>
+        public class Detail { public long Size; public int Files, Saves; public DateTime LastSave, Newest; public List<string> Extras = new List<string>(); }
+
+        static readonly Regex SaveName = new Regex(@"(?i)^(save\d*\.(rxdata|rvdata2?|lsd)|file\d+\.rpgsave|file\d+\.rmmzsave|.*\.(rpgsave|rmmzsave|sav)|save\d+\.lsd)$");
+        static readonly string[] PatchHints = { "한글", "kor", "korean", "패치", "patch", "번역" };
+
+        public static Detail GetDetail(GameInfo g)
+        {
+            var d = new Detail();
+            try
+            {
+                int n = 0;
+                foreach (var f in Directory.EnumerateFiles(g.Folder, "*", SearchOption.AllDirectories))
+                {
+                    if (++n > 30000) break;
+                    FileInfo fi; try { fi = new FileInfo(f); } catch { continue; }
+                    d.Size += fi.Length; d.Files++;
+                    var t = fi.LastWriteTime;
+                    if (SaveName.IsMatch(fi.Name) && !fi.Name.StartsWith("config", StringComparison.OrdinalIgnoreCase) && !fi.Name.StartsWith("global", StringComparison.OrdinalIgnoreCase))
+                    { d.Saves++; if (t > d.LastSave) d.LastSave = t; }
+                    else if (t > d.Newest) d.Newest = t;
+                    // 폴더 바로 아래에 있는 한글 패치·번역 흔적
+                    if (fi.DirectoryName.Length == g.Folder.TrimEnd('\\').Length)
+                    {
+                        string low = fi.Name.ToLowerInvariant();
+                        if (PatchHints.Any(h => low.Contains(h)) && d.Extras.Count < 3) d.Extras.Add(fi.Name);
+                    }
+                }
+            }
+            catch { }
+            return d;
+        }
+
         public static long FolderSize(GameInfo g)
         {
             try { return Directory.EnumerateFiles(g.Folder, "*", SearchOption.AllDirectories).Take(20000).Sum(f => new FileInfo(f).Length); }

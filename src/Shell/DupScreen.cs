@@ -13,21 +13,27 @@ namespace TkoolLauncher
         int gi, row;
         Rectangle[] openR = new Rectangle[0], rowR = new Rectangle[0], delR = new Rectangle[0];
         Rectangle notDupR, prevR, nextR;
-        static readonly Dictionary<string, long> sizes = new Dictionary<string, long>();
+        static readonly Dictionary<string, DupFinder.Detail> details = new Dictionary<string, DupFinder.Detail>();
+        int top;   // 묶음이 길면 위아래로 밀기
 
         List<DupFinder.Group> G => DupFinder.Groups;
 
-        string SizeText(GameInfo g)
+        DupFinder.Detail DetailOf(GameInfo g)
         {
             string id = GameData.IdOf(g);
-            lock (sizes)
+            lock (details)
             {
-                if (sizes.TryGetValue(id, out long v)) return v < 0 ? "…" : v >= 1L << 30 ? (v / (double)(1L << 30)).ToString("0.0") + "GB" : (v >> 20) + "MB";
-                sizes[id] = -1;
+                if (details.TryGetValue(id, out var d)) return d;
+                details[id] = null;
             }
-            Task.Run(() => { long v = DupFinder.FolderSize(g); lock (sizes) sizes[id] = v; try { Shell.BeginInvoke(new Action(Shell.Invalidate)); } catch { } });
-            return "…";
+            Task.Run(() => { var v = DupFinder.GetDetail(g); lock (details) details[id] = v; try { Shell.BeginInvoke(new Action(Shell.Invalidate)); } catch { } });
+            return null;
         }
+
+        static string Size(long v) => v >= 1L << 30 ? (v / (double)(1L << 30)).ToString("0.0") + "GB" : (v >> 20) + "MB";
+        static string Day(DateTime t) => t > DateTime.MinValue ? t.ToString("yyyy.MM.dd") : "-";
+        const TextFormatFlags One = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+        const TextFormatFlags PathF = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.PathEllipsis | TextFormatFlags.NoPrefix;
 
         public override void Paint(Graphics g)
         {
@@ -41,18 +47,28 @@ namespace TkoolLauncher
                 new Rectangle(Area.X + pad + S(200), Area.Y + S(10), Area.Width - pad * 2 - S(200), S(44)), Theme.SubText,
                 TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
 
-            int y = Area.Y + S(64), rh = S(112);
-            int n = grp.Games.Count;
+            int rh = S(176), listTop = Area.Y + S(64), listBottom = Area.Bottom - S(80);
+            int n = grp.Games.Count, fit = Math.Max(1, (listBottom - listTop) / rh);
+            if (row < top) top = row; if (row >= top + fit) top = row - fit + 1;
+            top = Math.Max(0, Math.Min(top, Math.Max(0, n - fit)));
             if (openR.Length != n) { openR = new Rectangle[n]; rowR = new Rectangle[n]; delR = new Rectangle[n]; }
-            for (int i = 0; i < n; i++)
+            for (int i = 0; i < n; i++) { openR[i] = rowR[i] = delR[i] = Rectangle.Empty; }
+            // 묶음 안에서 가장 큰/세이브 최근 표시용
+            var ds = grp.Games.Select(DetailOf).ToList();
+            long maxSize = ds.Where(x => x != null).Select(x => x.Size).DefaultIfEmpty(0).Max();
+            DateTime maxSave = ds.Where(x => x != null).Select(x => x.LastSave).DefaultIfEmpty(DateTime.MinValue).Max();
+            int y = listTop;
+            for (int i = top; i < n && i < top + fit; i++)
             {
                 var gm = grp.Games[i];
                 var st = GameData.Get(gm);
+                var dt = ds[i];
                 var r = new Rectangle(Area.X + pad, y, Area.Width - pad * 2, rh - S(10));
                 rowR[i] = r;
                 Draw.Fill(g, r, S(8), Theme.Tile);
-                // 작은 그림
-                var tr = new Rectangle(r.X + S(10), r.Y + S(10), (r.Height - S(20)) * 4 / 3, r.Height - S(20));
+                // 작은 그림 (4:3)
+                int thH = S(108);
+                var tr = new Rectangle(r.X + S(12), r.Y + S(12), thH * 4 / 3, thH);
                 Draw.Fill(g, tr, S(4), Color.FromArgb(255, 14, 17, 22));
                 var th = CoverArt.Thumb(gm);
                 if (th != null)
@@ -61,25 +77,49 @@ namespace TkoolLauncher
                     int w = (int)(th.Width * k), h = (int)(th.Height * k);
                     Draw.Image(g, th, new Rectangle(tr.X + (tr.Width - w) / 2, tr.Y + (tr.Height - h) / 2, w, h), S(3));
                 }
-                int tx = tr.Right + S(16), tw = r.Right - S(330) - tx;
-                Draw.Text(g, gm.Title + (i == 0 ? "   ← 가장 새 버전" : ""), Draw.BodyBold, new Rectangle(tx, r.Y + S(8), tw, S(28)), i == 0 ? Color.FromArgb(130, 220, 140) : Theme.Text,
-                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
-                Draw.Text(g, "폴더: " + System.IO.Path.GetFileName(gm.Folder), Draw.Small, new Rectangle(tx, r.Y + S(38), tw, S(22)), Theme.SubText,
-                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
-                string info = (gm.IsTkool ? LibraryScreen.EngineShort(gm) : "기타") + " · " + DupFinder.VersionText(gm) + " · " + SizeText(gm) +
-                              " · 플레이 " + GameData.PlayTimeText(st.TotalSeconds) + (st.Favorite ? " · ★" : "") + (st.Cleared ? " · 다 깸" : "");
-                Draw.Text(g, info, Draw.Small, new Rectangle(tx, r.Y + S(62), tw, S(22)), Theme.SubText,
-                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
-                openR[i] = new Rectangle(r.Right - S(170), r.Y + (r.Height - S(50)) / 2, S(156), S(50));
+                // 단추 (오른쪽 세로로)
+                openR[i] = new Rectangle(r.Right - S(150), r.Y + S(16), S(136), S(56));
+                delR[i] = new Rectangle(openR[i].X, openR[i].Bottom + S(10), S(136), S(56));
                 Draw.Fill(g, openR[i], S(6), Color.FromArgb(255, 52, 62, 78));
                 Draw.Text(g, "폴더 열기", Draw.BodyBold, openR[i], Theme.Text, Draw.Center);
-                delR[i] = new Rectangle(openR[i].X - S(140), openR[i].Y, S(128), S(50));
                 Draw.Fill(g, delR[i], S(6), Color.FromArgb(255, 120, 45, 45));
                 Draw.Text(g, "삭제", Draw.BodyBold, delR[i], Color.White, Draw.Center);
+
+                int tx = tr.Right + S(16), tw = openR[i].X - S(14) - tx, ly = r.Y + S(8), lh = S(26);
+                Draw.Text(g, gm.Title + (i == 0 ? "   ← 가장 새 버전" : ""), Draw.BodyBold, new Rectangle(tx, ly, tw, S(30)), i == 0 ? Color.FromArgb(130, 220, 140) : Theme.Text, One);
+                ly += S(32);
+                // 경로 전체
+                Draw.Text(g, gm.Folder ?? "", Draw.Small, new Rectangle(tx, ly, tw, lh), Color.FromArgb(150, 190, 235), PathF);
+                ly += lh;
+                // 엔진·버전·파일 날짜·크기·파일 수
+                string verName = DupFinder.VersionText(gm);
+                string l3 = (gm.IsTkool ? LibraryScreen.EngineShort(gm) : (string.IsNullOrEmpty(gm.Engine) ? "기타" : gm.Engine)) +
+                            (verName.StartsWith("v") ? " · " + verName : "") +
+                            " · 데이터 " + Day(DupFinder.DataDate(gm)) +
+                            (dt == null ? " · 크기 계산 중…" : " · " + Size(dt.Size) + (dt.Size == maxSize && n > 1 ? "(가장 큼)" : "") + " · 파일 " + dt.Files.ToString("#,0") + "개" +
+                                (dt.Newest > DateTime.MinValue ? " · 마지막 수정 " + Day(dt.Newest) : ""));
+                Draw.Text(g, l3, Draw.Small, new Rectangle(tx, ly, tw, lh), Theme.SubText, One);
+                ly += lh;
+                // 세이브·플레이 기록
+                string l4 = dt == null ? "세이브 확인 중…" : dt.Saves == 0 ? "세이브 없음" :
+                            "세이브 " + dt.Saves + "개 (마지막 " + Day(dt.LastSave) + (dt.LastSave == maxSave && n > 1 ? ", 가장 최근" : "") + ")";
+                l4 += " · 플레이 " + GameData.PlayTimeText(st.TotalSeconds) + (st.LastPlayed > 0 ? " · 마지막 플레이 " + Day(new DateTime(st.LastPlayed)) : " · 안 해봄") +
+                      (st.Cleared ? " · 다 깸" : "") + (st.Favorite ? " · ★" : "");
+                Draw.Text(g, l4, Draw.Small, new Rectangle(tx, ly, tw, lh), dt != null && dt.Saves > 0 ? Color.FromArgb(235, 205, 120) : Theme.SubText, One);
+                ly += lh;
+                // 언어·꼬리표·패치 파일·원래 이름
+                var bits = new List<string> { LibraryScreen.IsKorean(gm) ? "한글" : "일본어" };
+                bits.AddRange(gm.Tags.Where(t => t != "한글"));
+                if (dt != null && dt.Extras.Count > 0) bits.Add("패치 파일: " + string.Join(", ", dt.Extras));
+                if (!string.IsNullOrEmpty(gm.RawTitle) && gm.RawTitle != gm.Title) bits.Add("원래 이름: " + gm.RawTitle);
+                Draw.Text(g, string.Join(" · ", bits), Draw.Small, new Rectangle(tx, ly, tw, lh), Theme.SubText, One);
+
                 if (i == row && Shell.ShowFocus) Draw.FocusGlow(g, r, S(8));
                 y += rh;
-                if (y > Area.Bottom - S(80)) break;
             }
+            if (n > fit)
+                Draw.Text(g, (top + 1) + "~" + Math.Min(n, top + fit) + " / " + n + "개 (위아래로 넘기기)", Draw.Small,
+                    new Rectangle(Area.X + pad, listBottom - S(4), Area.Width - pad * 2, S(22)), Theme.SubText, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
             // 아래 단추
             int by = Area.Bottom - S(66);
             prevR = new Rectangle(Area.X + pad, by, S(150), S(52));
@@ -117,7 +157,7 @@ namespace TkoolLauncher
             }, "폴더를 삭제합니다: " + gm.Folder);
         }
 
-        void Go(int d) { if (G.Count == 0) return; gi = (gi + d + G.Count) % G.Count; row = 0; }
+        void Go(int d) { if (G.Count == 0) return; gi = (gi + d + G.Count) % G.Count; row = 0; top = 0; }
 
         public override void OnPad(Pad b)
         {
