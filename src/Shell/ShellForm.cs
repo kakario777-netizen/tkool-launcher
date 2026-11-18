@@ -87,6 +87,7 @@ namespace TkoolLauncher
             CoverArt.Init(this);
             CoverArt.Changed = () => { UpdateBg(); Invalidate(); };
             GameDesc.Changed = () => { try { BeginInvoke(new Action(Invalidate)); } catch { } };
+            Translate.Changed = () => { try { BeginInvoke(new Action(Invalidate)); } catch { } };
 
             var home = new HomeScreen { Shell = this };
             stack.Add(home);

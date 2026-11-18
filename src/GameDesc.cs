@@ -20,6 +20,9 @@ namespace TkoolLauncher
         static readonly HashSet<string> loading = new HashSet<string>();
         public static Action Changed;
 
+        /// <summary>읽어보기 글 원문 그대로 (번역 방식 알아보기용, 없으면 "")</summary>
+        public static string Raw(GameInfo g) { try { return Readme(g); } catch { return ""; } }
+
         static string CachePath(GameInfo g) => Path.Combine(Settings.Dir, "cache", GameData.IdOf(g) + "_d.txt");
 
         /// <summary>있으면 글, 아직이면 null(뒤에서 읽는 중), 없으면 ""</summary>
@@ -93,9 +96,9 @@ namespace TkoolLauncher
             var lines = t.Replace("\r", "").Split('\n')
                 .Select(l => l.Trim())
                 .Where(l => l.Length > 0 && !Regex.IsMatch(l, @"^[\-=_*#~■□◆◇●○★☆─━＝－・…\s]+$"))
-                .Take(14);
+                .Take(150);
             string r = string.Join("\n", lines);
-            return r.Length > 600 ? r.Substring(0, 600) + "…" : r;
+            return r.Length > 5000 ? r.Substring(0, 5000) + "…" : r;
         }
     }
 }

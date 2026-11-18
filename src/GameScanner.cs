@@ -25,6 +25,7 @@ namespace TkoolLauncher
         public string Exe;
         public TkoolVersion Version;
         public bool Japanese;
+        public string Engine;                         // 쯔꾸르가 아닌 게임의 엔진 (EngineDetect)
         public string RawTitle;                       // 정리 전 이름 (폴더·게임 데이터 그대로)
         public List<string> Tags = new List<string>(); // 이름에서 떼어 낸 꼬리표 (한글·체험판)
         public bool NeedsRtp;
@@ -180,6 +181,7 @@ namespace TkoolLauncher
                 Exe = pick,
                 Title = PrettyName(folder),
                 Japanese = TextDecode.LangOf(folder) == TextLang.Japanese,
+                Engine = EngineDetect.Detect(dir, pick),
             };
         }
 

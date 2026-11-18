@@ -267,6 +267,22 @@ namespace TkoolLauncher
             return "";
         }
 
+        /// <summary>카드에 넣을 짧은 엔진 이름</summary>
+        public static string ShortEngine(string e)
+        {
+            if (string.IsNullOrEmpty(e)) return "기타";
+            var map = new Dictionary<string, string>
+            {
+                { "픽셀 게임 메이커 MV", "픽겜MV" }, { "스마일 게임 빌더 / 바킨", "SGB/바킨" }, { "RPG 개발자 바킨", "바킨" },
+                { "울프 RPG 에디터", "울프RPG" }, { "티라노 스크립트/빌더", "티라노" }, { "쯔꾸르 유나이트(Unity)", "유나이트" },
+                { "직접 만든 엔진 (SDL/DirectX)", "자체엔진" }, { "키리키리(吉里吉里)", "키리키리" }, { "AGS (어드벤처 게임 스튜디오)", "AGS" },
+                { "비주얼 노벨 메이커", "VN메이커" }, { "일렉트론 (HTML5)", "HTML5" }, { "NW.js (HTML5)", "HTML5" }, { "DX 라이브러리", "DX라이브러리" },
+            };
+            if (map.TryGetValue(e, out string v)) return v;
+            e = e.Split('(')[0].Trim();
+            return e.Length > 9 ? e.Substring(0, 9) : e;
+        }
+
         public static Color EngineColor(GameInfo g)
         {
             if (!g.IsTkool) return Color.FromArgb(110, 120, 135);
@@ -313,6 +329,17 @@ namespace TkoolLauncher
                     chips.Add(new Chip { Name = EngineShort(new GameInfo { Kind = GameKind.Tkool, Version = vv }), Filter = x => x.IsTkool && x.Version == vv });
             }
             if (pool.Any(x => x.Tags.Contains("체험판"))) chips.Add(new Chip { Name = "체험판", Filter = x => x.Tags.Contains("체험판") });
+            // 쯔꾸르가 아닌 엔진들 · 내 태그들도 칸으로 (설정에 없는 건 뒤에 붙음)
+            foreach (var en in pool.Where(x => !x.IsTkool && x.Engine != null).Select(x => ShortEngine(x.Engine)).Distinct().OrderBy(x => x))
+            {
+                string e2 = en;
+                chips.Add(new Chip { Name = e2, Filter = x => !x.IsTkool && ShortEngine(x.Engine) == e2 });
+            }
+            foreach (var tg in pool.SelectMany(x => GameData.TagsOf(x)).Distinct().OrderBy(x => x))
+            {
+                string t2 = tg;
+                chips.Add(new Chip { Name = "#" + t2, Filter = x => GameData.TagsOf(x).Contains(t2) });
+            }
             if (Shell.Games != null && Shell.Games.Any(x => x.FromFolder && GameData.Get(x).Hidden))
                 chips.Add(new Chip { Name = "숨긴 게임", Filter = x => false });   // 목록은 따로 (숨긴 게임만)
             // 설정한 순서·숨김 적용
@@ -662,7 +689,7 @@ namespace TkoolLauncher
             // 엔진 색 점 + 이름
             using (var b = new SolidBrush(ec)) g.FillEllipse(b, dx, ly + lh / 2 - S(4), S(8), S(8));
             dx += S(13);
-            string eng = gm.IsTkool ? EngineShort(gm) : "기타";
+            string eng = gm.IsTkool ? EngineShort(gm) : ShortEngine(gm.Engine);
             var small = Theme.Px(12, true);
             Draw.Text(g, eng, small, new Rectangle(dx, ly, S(60), lh), Theme.SubText, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
             dx += Draw.Measure(g, eng, small) + S(10);
@@ -1141,35 +1168,179 @@ namespace TkoolLauncher
             int descW = full.Width - pad * 2 - infoW - S(40);
             int ix0 = pad + descW + S(40);
 
-            Draw.Text(g, "소개", Draw.H2, new Rectangle(pad, y0, S(300), S(30)), Theme.Text);
-            string desc = GameDesc.Get(game);
-            string dtext = desc == null ? "불러오는 중..." :
-                desc.Length > 0 ? desc : "소개 글이 없어요. 게임 폴더에 readme.txt 같은 설명 파일이 있으면 여기에 보여줘요.";
-            var dr = new Rectangle(pad, y0 + S(40), descW, bottom - y0 - S(40));
-            Draw.Fill(g, Rectangle.Inflate(dr, S(10), S(8)), S(6), Color.FromArgb(110, 23, 29, 37));
-            Draw.Text(g, dtext, Draw.Body, dr, desc != null && desc.Length > 0 ? Theme.Text : Theme.SubText,
-                TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+            PaintDesc(g, new Rectangle(pad, y0, descW, bottom - y0));
 
             Draw.Text(g, "정보", Draw.H2, new Rectangle(ix0, y0, S(300), S(30)), Theme.Text);
             int y = y0 + S(42);
             int bx = ix0;
-            Draw.Badge(g, ref bx, y, game.IsTkool ? "RPG MAKER " + game.VersionLabel.ToUpperInvariant() : game.VersionLabel + " 게임", Theme.GameColor(game));
+            // 엔진
+            string eng = game.IsTkool ? "RPG MAKER " + game.VersionLabel.ToUpperInvariant() : (EngineName() ?? "엔진 모름") + (game.Kind == GameKind.Pc ? "" : " · " + game.VersionLabel);
+            Draw.Badge(g, ref bx, y, eng, Theme.GameColor(game));
             if (game.Manual) Draw.Badge(g, ref bx, y, "직접 추가", Color.FromArgb(70, 80, 96));
             y += S(30); bx = ix0;
-            if (game.IsTkool || game.Japanese)
+            // 언어
+            bool ko = LibraryScreen.IsKorean(game);
+            Draw.Badge(g, ref bx, y, ko ? "한국어" : "일본어", ko ? Color.FromArgb(52, 110, 180) : Color.FromArgb(186, 62, 62));
+            if (GameData.Get(game).Lang != 0) Draw.Badge(g, ref bx, y, "직접 고침", Color.FromArgb(70, 80, 96));
+            y += S(30); bx = ix0;
+            // 번역 방식
+            var tr = TransKinds();
+            if (tr.Count > 0)
             {
-                Draw.Badge(g, ref bx, y, game.Japanese ? "일본어 원어" : "한국어/기타", game.Japanese ? Color.FromArgb(186, 62, 62) : Color.FromArgb(70, 80, 96));
+                foreach (var t in tr)
+                {
+                    int w = Draw.Measure(g, t, Draw.Small) + S(20);
+                    if (bx + w > ix0 + infoW) { y += S(30); bx = ix0; }
+                    Draw.Badge(g, ref bx, y, t, Color.FromArgb(120, 90, 160));
+                }
                 y += S(30); bx = ix0;
             }
             if (game.NeedsRtp)
             {
                 Draw.Badge(g, ref bx, y, "RTP 필요" + (string.IsNullOrEmpty(game.RtpName) ? "" : " (" + game.RtpName + ")"), Color.FromArgb(70, 80, 96));
+                y += S(30); bx = ix0;
+            }
+            // 내 태그 + 추가
+            tagRects.Clear();
+            foreach (var t in GameData.TagsOf(game))
+            {
+                int w = Draw.Measure(g, "# " + t, Draw.Small) + S(20);
+                if (bx + w > ix0 + infoW) { y += S(30); bx = ix0; }
+                int x0 = bx;
+                Draw.Badge(g, ref bx, y, "# " + t, Color.FromArgb(40, 120, 110));
+                tagRects.Add(new Rectangle(x0, y, bx - x0, S(26)));
+            }
+            {
+                int w = Draw.Measure(g, "+ 태그", Draw.Small) + S(20);
+                if (bx + w > ix0 + infoW) { y += S(30); bx = ix0; }
+                int x0 = bx;
+                Draw.Badge(g, ref bx, y, "+ 태그", Color.FromArgb(60, 70, 86));
+                addTagRect = new Rectangle(x0, y - S(4), bx - x0, S(34));
                 y += S(30);
             }
             y += S(8);
             Draw.Text(g, game.Folder, Draw.Small, new Rectangle(ix0, y, infoW, S(40)), Theme.SubText,
                 TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
-            y += S(48);
+        }
+
+        // ── 소개: 구글 번역 + 원문, 스크롤 ──
+        Rectangle descRect, addTagRect;
+        readonly List<Rectangle> tagRects = new List<Rectangle>();
+        int descScroll, descContentH, descDragStart;
+        bool descDrag;
+        List<string> transKinds;
+        string engineName; bool engineDone;
+
+        string EngineName()
+        {
+            if (!engineDone) { engineDone = true; engineName = game.Engine ?? EngineDetect.Detect(game.InstallDir ?? game.Folder, game.Exe); game.Engine = engineName; }
+            return engineName;
+        }
+
+        List<string> TransKinds()
+        {
+            if (transKinds == null)
+            {
+                transKinds = new List<string>();
+                if (game.FromFolder || game.IsTkool)
+                    try { transKinds = TransDetect.Detect(game, GameDesc.Raw(game)).Select(x => "번역: " + x).ToList(); } catch { }
+            }
+            return transKinds;
+        }
+
+        void PaintDesc(Graphics g, Rectangle area)
+        {
+            string desc = GameDesc.Get(game);
+            bool needTr = desc != null && Translate.Needs(desc);
+            string tr = needTr ? Translate.Get(GameData.IdOf(game), desc) : null;
+            Draw.Text(g, "소개", Draw.H2, new Rectangle(area.X, area.Y, S(80), S(30)), Theme.Text);
+            if (needTr)
+                Draw.Text(g, tr == null ? "(구글 번역 중…)" : tr.Length > 0 ? "(구글 번역)" : "(번역 실패 — 원문)", Draw.Body,
+                    new Rectangle(area.X + S(78), area.Y, S(300), S(30)), Color.FromArgb(90, 170, 255), TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+            var dr = new Rectangle(area.X, area.Y + S(40), area.Width, area.Height - S(40));
+            descRect = dr;
+            Draw.Fill(g, Rectangle.Inflate(dr, S(10), S(8)), S(6), Color.FromArgb(110, 23, 29, 37));
+            var flags = TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix | TextFormatFlags.TextBoxControl;
+            var blocks = new List<Tuple<string, Font, Color>>();
+            if (desc == null) blocks.Add(Tuple.Create("불러오는 중...", Draw.Body, Theme.SubText));
+            else if (desc.Length == 0) blocks.Add(Tuple.Create("소개 글이 없어요. 게임 폴더에 readme.txt 같은 설명 파일이 있으면 여기에 보여줘요.", Draw.Body, Theme.SubText));
+            else if (needTr && !string.IsNullOrEmpty(tr))
+            {
+                blocks.Add(Tuple.Create(tr, Draw.Body, Color.FromArgb(170, 210, 255)));
+                blocks.Add(Tuple.Create("—", Draw.Small, Color.Empty));   // 구분선
+                blocks.Add(Tuple.Create("원문", Draw.Small, Theme.SubText));
+                blocks.Add(Tuple.Create(desc, Draw.Body, Theme.SubText));
+            }
+            else blocks.Add(Tuple.Create(desc, Draw.Body, Theme.Text));
+
+            var oc = g.Clip;
+            g.SetClip(dr, System.Drawing.Drawing2D.CombineMode.Intersect);
+            int w = dr.Width - S(18), yy = dr.Y - descScroll, total = 0;
+            foreach (var b in blocks)
+            {
+                if (b.Item3 == Color.Empty)
+                {
+                    using (var pen = new Pen(Color.FromArgb(90, 255, 255, 255), Math.Max(1, S(1)))) g.DrawLine(pen, dr.X, yy + S(10), dr.X + w, yy + S(10));
+                    yy += S(20); total += S(20);
+                    continue;
+                }
+                int h = TextRenderer.MeasureText(g, b.Item1, b.Item2, new Size(w, int.MaxValue), flags).Height;
+                if (yy + h > dr.Y && yy < dr.Bottom) Draw.Text(g, b.Item1, b.Item2, new Rectangle(dr.X, yy, w, h), b.Item3, flags);
+                yy += h + S(8); total += h + S(8);
+            }
+            g.Clip = oc;
+            descContentH = total;
+            int max = Math.Max(0, descContentH - dr.Height);
+            if (descScroll > max) descScroll = max;
+            if (max > 0)
+            {
+                int th = Math.Max(S(30), dr.Height * dr.Height / (descContentH));
+                int ty = dr.Y + (int)((dr.Height - th) * (descScroll / (float)max));
+                Draw.Fill(g, new Rectangle(dr.Right - S(6), ty, S(5), th), S(2), Color.FromArgb(140, 255, 255, 255));
+            }
+        }
+
+        void ScrollDesc(int d)
+        {
+            int max = Math.Max(0, descContentH - descRect.Height);
+            descScroll = Math.Max(0, Math.Min(max, descScroll + d));
+            Shell.Invalidate();
+        }
+
+        public override void OnDrag(int dx, int dy, bool start)
+        {
+            if (start) { descDrag = descRect.Contains(DownAt); descDragStart = descScroll; }
+            if (dx == int.MinValue) { descDrag = false; return; }
+            if (descDrag) { descScroll = descDragStart; ScrollDesc(-dy); }
+        }
+
+        // 태그 고르기: 목록 + 새 태그 만들기
+        void EditTags()
+        {
+            var all = (Settings.TagList ?? "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct().ToList();
+            var mine = GameData.TagsOf(game);
+            foreach (var t in mine) if (!all.Contains(t)) all.Add(t);
+            var opts = all.Select(t => (mine.Contains(t) ? "● " : "○ ") + t).ToList();
+            opts.Add("+ 새 태그 만들기");
+            PickerScreen.Show(Shell, "태그 (누르면 붙이기/떼기)", opts.ToArray(), -1, i =>
+            {
+                if (i == all.Count)
+                {
+                    string nt = InputDialog.Ask(Shell, "새 태그 이름", "");
+                    if (string.IsNullOrWhiteSpace(nt)) return;
+                    nt = nt.Replace(",", " ").Replace("|", " ").Trim();
+                    if (!all.Contains(nt)) { all.Add(nt); Settings.TagList = string.Join(",", all); Settings.Save(); }
+                    if (!mine.Contains(nt)) mine.Add(nt);
+                }
+                else
+                {
+                    string t = all[i];
+                    if (mine.Contains(t)) mine.Remove(t); else mine.Add(t);
+                }
+                GameData.Get(game).UserTags = string.Join(",", mine);
+                GameData.Save();
+                EditTags();   // 여러 개 고르기 편하게 다시 열기
+            });
         }
 
         void InfoBlock(Graphics g, ref int x, int y, string label, string value)
@@ -1203,7 +1374,10 @@ namespace TkoolLauncher
             {
                 case Pad.Left: focus = Math.Max(0, focus - 1); break;
                 case Pad.Right: focus = Math.Min(4, focus + 1); break;
+                case Pad.Up: ScrollDesc(-S(90)); return;
+                case Pad.Down: ScrollDesc(S(90)); return;
                 case Pad.A: if (focus == 0) Shell.Launch(game); else if (focus == 1) ToggleFav(); else if (focus == 2) More(); else if (focus == 3) NextRes(); else ToggleCleared(); break;
+                case Pad.X: EditTags(); return;
                 case Pad.Y: ToggleFav(); break;
                 case Pad.B: Shell.Pop(); break;
             }
@@ -1217,6 +1391,7 @@ namespace TkoolLauncher
             else if (hideBtn.Contains(p)) { focus = 2; More(); }
             else if (resBtn.Contains(p)) { focus = 3; NextRes(); }
             else if (clearBtn.Contains(p)) { focus = 4; ToggleCleared(); }
+            else if (addTagRect.Contains(p) || tagRects.Any(r => r.Contains(p))) EditTags();
         }
 
         void ToggleCleared()
@@ -1301,6 +1476,7 @@ namespace TkoolLauncher
         {
             new Hint(Pad.A, focus == 0 ? "플레이" : focus == 1 ? "즐겨찾기" : focus == 2 ? "더보기" : focus == 3 ? "해상도 고르기" : "다 깸 표시", () => OnPad(Pad.A)),
             new Hint(Pad.Y, "즐겨찾기", ToggleFav),
+            new Hint(Pad.X, "태그", EditTags),
             new Hint(Pad.B, "뒤로", Shell.Pop),
         };
     }
