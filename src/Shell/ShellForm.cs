@@ -572,6 +572,10 @@ namespace TkoolLauncher
         Timer bgDelay;
         void UpdateBg()
         {
+            // 게임마다 뒷배경 바꾸기는 끔 — 기본 배경(또는 내 배경 사진) 고정 (렉 줄이기)
+            if (bgCur != null || bgPrev != null) { bgPrev?.Dispose(); bgPrev = null; bgCur?.Dispose(); bgCur = null; bgFade = 1f; Invalidate(); }
+            return;
+#pragma warning disable CS0162
             if (bgDelay == null)
             {
                 bgDelay = new Timer { Interval = 260 };

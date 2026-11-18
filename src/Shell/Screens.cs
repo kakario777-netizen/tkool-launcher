@@ -244,7 +244,8 @@ namespace TkoolLauncher
         public override void OnGamesChanged()
         {
             var cur = FocusedGame;
-            string keep = tabs.Count > 0 ? tabs[tab].Name : "전체";   // 라이브러리를 새로 열면 항상 전체부터
+            // 라이브러리를 새로 열면 설정한 첫 탭부터 (그 탭에 게임이 없으면 전체)
+            string keep = tabs.Count > 0 ? tabs[tab].Name : StartTab();
             BuildTabs();
             int ti = tabs.FindIndex(t => t.Name == keep);
             if (ti >= 0) tab = ti;
@@ -253,6 +254,15 @@ namespace TkoolLauncher
             int i = cur != null ? items.FindIndex(x => x.Exe == cur.Exe) : -1;
             focus = i >= 0 ? i : 0;
             Follow();
+        }
+
+        string StartTab()
+        {
+            string want = Settings.LibStartTab ?? "전체";
+            var all = Shell.VisibleGames.ToList();
+            bool any = want == "즐겨찾기" ? all.Any(x => GameData.Get(x).Favorite)
+                     : want == "최근 플레이" ? all.Any(x => GameData.Get(x).LastPlayed > 0) : true;
+            return any ? want : "전체";
         }
 
         void SetTab(int t)
@@ -740,6 +750,14 @@ namespace TkoolLauncher
                           Act = () => { Settings.AccentIndex = (Settings.AccentIndex + 1) % Theme.AccentNames.Length; Settings.Save(); Theme.ApplyAccent(); } },
                 new Row { Title = "배경 사진", Toggle = Settings.UseBgImage, Sub = "내 문서\\쯔꾸르 런처 에 background.jpg 를 넣으면 배경이 돼요",
                           Act = () => { Settings.UseBgImage = !Settings.UseBgImage; Settings.Save(); Shell.LoadBackground(); } },
+                new Row { Title = "라이브러리 첫 탭", Sub = "라이브러리를 열면 처음 보일 탭 (비어 있으면 전체)", Value = Settings.LibStartTab,
+                          Act = () =>
+                          {
+                              var opts = new[] { "즐겨찾기", "전체", "쯔꾸르", "PC 게임", "최근 플레이" };
+                              int i = Array.IndexOf(opts, Settings.LibStartTab);
+                              Settings.LibStartTab = opts[(i + 1) % opts.Length];
+                              Settings.Save();
+                          } },
                 new Row { Title = "배경음악", Toggle = Settings.Bgm, Sub = Bgm.FilePath != null ? "런처 화면에서만 반복 재생" : "내 문서\\쯔꾸르 런처 에 bgm.mp3 를 넣어 주세요",
                           Act = () => { Settings.Bgm = !Settings.Bgm; Settings.Save(); } },
                 new Row { Title = "최소화 반복 감시", Toggle = Settings.LoopGuard,
