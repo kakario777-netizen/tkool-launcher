@@ -161,27 +161,46 @@ namespace TkoolLauncher
             return null;
         }
 
+        /// <summary>RJ37082 → RJ037082 (DLsite 번호는 6자리나 8자리로 0을 채움)</summary>
+        static List<string> CodeVariants(string code)
+        {
+            var m = Regex.Match(code, @"(?i)^([A-Z]+)(\d+)$");
+            var l = new List<string>();
+            if (!m.Success) { l.Add(code); return l; }
+            string pre = m.Groups[1].Value.ToUpperInvariant(), num = m.Groups[2].Value;
+            if (num.Length <= 6) l.Add(pre + num.PadLeft(6, '0'));
+            if (num.Length <= 8) l.Add(pre + num.PadLeft(8, '0'));
+            if (!l.Contains(pre + num)) l.Add(pre + num);
+            return l;
+        }
+
         static Found FromDlsite(string code)
         {
-            try
-            {
-                string json;
-                using (var wc = new WebClient { Encoding = Encoding.UTF8 })
+            foreach (var id in CodeVariants(code))
+                foreach (var site in new[] { "maniax" })   // 어느 사이트 주소로 물어도 같은 답
                 {
-                    wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0";
-                    json = wc.DownloadString("https://www.dlsite.com/maniax/product/info/ajax?product_id=" + code + "&cdn_cache_min=1");
+                    try
+                    {
+                        string json;
+                        using (var wc = new WebClient { Encoding = Encoding.UTF8 })
+                        {
+                            wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0";
+                            json = wc.DownloadString("https://www.dlsite.com/" + site + "/product/info/ajax?product_id=" + id + "&cdn_cache_min=1");
+                        }
+                        if (json == null || json.IndexOf("\"" + id + "\"", StringComparison.OrdinalIgnoreCase) < 0) continue;   // 없는 번호면 []
+                        string name = TextDecode.JsonString(json, "work_name");
+                        if (string.IsNullOrWhiteSpace(name)) continue;
+                        name = WebUtility.HtmlDecode(name).Trim();
+                        string ko = null;
+                        try { ko = Translate.Run(name); } catch { }
+                        ko = Tidy(ko);
+                        if (ko != null && Hangul.IsMatch(ko))
+                            return new Found { Name = ko, From = "DLsite " + id + " · 원제 " + name + " (구글 번역)" };
+                        return new Found { Name = name, From = "DLsite " + id };
+                    }
+                    catch (Exception ex) { Log.Info("DLsite 이름 찾기 " + id + " " + site + ": " + ex.Message); }
                 }
-                string name = TextDecode.JsonString(json, "work_name");
-                if (string.IsNullOrWhiteSpace(name)) return null;
-                name = name.Trim();
-                string ko = null;
-                try { ko = Translate.Run(name); } catch { }
-                ko = Tidy(ko);
-                if (ko != null && Hangul.IsMatch(ko))
-                    return new Found { Name = ko, From = "DLsite " + code + " · 원제 " + name + " (구글 번역)" };
-                return new Found { Name = name, From = "DLsite " + code };
-            }
-            catch (Exception ex) { Log.Info("DLsite 이름 찾기 실패 " + code + ": " + ex.Message); return null; }
+            return null;
         }
 
         // ───────── 한꺼번에 ─────────
