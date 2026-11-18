@@ -1477,7 +1477,19 @@ namespace TkoolLauncher
                     BeginInvoke(new Action(() =>
                     {
                         if (n > 0) { RefreshLists(); ShowToast("게임 " + n + "개의 이름을 찾거나 한글로 바꿨어요 (상세 화면에 원래 이름)", 5000); }
-                        DlsiteInfo.RunAll(Games, m => { if (m > 0) try { BeginInvoke(new Action(() => { RefreshLists(); ShowToast("DLsite에서 게임 " + m + "개의 정보·그림을 채웠어요", 4000); })); } catch { } });
+                        DlsiteInfo.RunAll(Games, m =>
+                        {
+                            try
+                            {
+                                BeginInvoke(new Action(() =>
+                                {
+                                    if (m > 0) { RefreshLists(); ShowToast("DLsite에서 게임 " + m + "개의 정보·그림을 채웠어요", 4000); }
+                                    // DLsite에 없는 게임은 스팀·ふりーむ에서
+                                    WebInfo.RunAll(Games, w => { if (w > 0) try { BeginInvoke(new Action(() => { RefreshLists(); ShowToast("스팀·ふりーむ에서 게임 " + w + "개의 정보를 채웠어요", 4000); })); } catch { } });
+                                }));
+                            }
+                            catch { }
+                        });
                     }));
                 }
                 catch { }

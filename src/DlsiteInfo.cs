@@ -101,7 +101,13 @@ namespace TkoolLauncher
         public static Info Get(GameInfo g)
         {
             string code = NameFinder.FindCode(g);
-            if (code == null) return null;
+            if (code == null) return WebInfo.Get(g);   // DLsite 번호가 없으면 스팀·ふりーむ에서 찾은 정보
+            var dl = GetDl(code);
+            return dl ?? WebInfo.Get(g);
+        }
+
+        static Info GetDl(string code)
+        {
             lock (mem)
             {
                 Info i;
@@ -214,7 +220,7 @@ namespace TkoolLauncher
         }
 
         /// <summary>표지가 없으면 DLsite 대표 그림을 표지로 (covers\폴더.auto.png)</summary>
-        static bool SaveCover(GameInfo g, Info i)
+        public static bool SaveCover(GameInfo g, Info i)
         {
             if (string.IsNullOrEmpty(i.Image) || g.Folder == null) return false;
             // 이미 표지(직접·찍은 것)가 있으면 그대로
@@ -276,11 +282,12 @@ namespace TkoolLauncher
         }
 
         static bool again;
+        static Action<int> againDone;   // 도는 중에 다시 불렀을 때 끝나고 부를 것 (스팀·ふりーむ로 이어짐)
 
         /// <summary>RJ 번호가 있는(또는 검색으로 찾은) 쯔꾸르 폴더 게임 중 아직 안 받은 것만 뒤에서 받음. 도는 중에 또 부르면 끝난 뒤 한 번 더</summary>
         public static void RunAll(List<GameInfo> games, Action<int> done)
         {
-            if (Busy) { again = true; return; }
+            if (Busy) { again = true; againDone = done; return; }
             var list = games.Where(g => g.FromFolder && NameFinder.FindCode(g) != null)
                             .Where(g => { string c = NameFinder.FindCode(g); return !Tried(c) || (!ImgChecked(c) && File.Exists(Path.Combine(Dir, c + ".txt"))); }).ToList();
             // 받아 둔 정보 중 장르가 아직 일본어인 것 모으기
@@ -310,7 +317,7 @@ namespace TkoolLauncher
                     Activity.Done("dlsite", "DLsite 정보 끝 · " + list.Count + "개 확인, " + n + "개 채움");
                     Busy = false;
                     done?.Invoke(n);
-                    if (again) RunAll(games, done);
+                    if (again) { var d2 = againDone ?? done; againDone = null; RunAll(games, d2); }
                 }
             }) { IsBackground = true };
             th.Start();
