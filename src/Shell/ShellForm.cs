@@ -248,14 +248,22 @@ namespace TkoolLauncher
         public void AyaLongAction()
         {
             if (PopupOpen) ClosePopup(false);
-            if (LauncherFront) { quick.Open = false; menu.Open = false; GoHome(); return; }
+            if (LauncherFront) { quick.Open = false; menu.Open = false; OpenLibrary(); return; }
             if (GameWatch.Running || TrackedExternal) { gameHwnd = GetForegroundWindow(); CameFromGame = true; }
             scaleWas = Scaler.Mode;
             if (scaleWas != 0) Scaler.Stop();
             Bring();
             ForceForeground(Handle);
             quick.Open = false; menu.Open = false;
+            OpenLibrary();
+        }
+
+        /// <summary>라이브러리(탭 있는 게임 목록) 화면으로</summary>
+        public void OpenLibrary()
+        {
+            if (stack.Count > 0 && stack[stack.Count - 1] is LibraryScreen) return;
             GoHome();
+            Push(new LibraryScreen());
         }
 
         // ───────── 홈 버튼·빠른 설정 ─────────
@@ -308,7 +316,7 @@ namespace TkoolLauncher
                 Show(); Activate(); SetForegroundWindow(Handle);
             }
             quick.Open = false; menu.Open = false;
-            GoHome();
+            OpenLibrary();
         }
 
         /// <summary>빠른 버튼: 게임에서 불려 나왔으면 게임으로 돌아간 뒤 실행</summary>
@@ -680,7 +688,7 @@ namespace TkoolLauncher
             tray = new NotifyIcon { Text = "쯔꾸르 런처", Visible = true };
             try { tray.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { tray.Icon = SystemIcons.Application; }
             var menu = new ContextMenuStrip { Font = Theme.F(11f) };
-            menu.Items.Add("런처 열기", null, (s, e) => Bring());
+            menu.Items.Add("런처 열기", null, (s, e) => { Bring(); OpenLibrary(); });
             menu.Items.Add("빠른 설정", null, (s, e) => { try { ShowPopup(); } catch (Exception ex) { Log.Error("트레이 빠른 설정", ex); } });
             var ov = new ToolStripMenuItem("성능 표시");
             ov.Click += (s, e) => OverlayForm.Toggle(!OverlayForm.IsOn);
@@ -690,7 +698,7 @@ namespace TkoolLauncher
             menu.Opening += (s, e) => ov.Checked = OverlayForm.IsOn;
             foreach (ToolStripItem it in menu.Items) it.Padding = new Padding(Theme.S(6), Theme.S(8), Theme.S(6), Theme.S(8));
             tray.ContextMenuStrip = menu;
-            tray.MouseClick += (s, e) => { if (e.Button == MouseButtons.Left) Bring(); };
+            tray.MouseClick += (s, e) => { if (e.Button == MouseButtons.Left) { Bring(); OpenLibrary(); } };
         }
 
         /// <summary>런처 화면 띄우기 (알림 영역에 숨어 있어도)</summary>
