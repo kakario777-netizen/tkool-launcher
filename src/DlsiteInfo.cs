@@ -67,12 +67,14 @@ namespace TkoolLauncher
                 var batch = todo.Skip(i).Take(40).ToList();
                 Activity.Set("genre", "장르 한글로 번역 중", i, todo.Count);
                 List<string> kos = null;
+                bool blocked = false;
                 try
                 {
                     kos = (Translate.Run(string.Join("\n", batch)) ?? "").Replace("\r", "").Split('\n').Select(x => x.Trim()).ToList();
                     if (kos.Count != batch.Count) kos = null;
                 }
-                catch { }
+                catch { blocked = true; }
+                if (blocked) { lock (genreKo) foreach (var b in todo.Skip(i)) genrePending.Add(b); Activity.Note("구글 번역이 응답 없어 장르 번역을 다음으로 미룸"); break; }
                 if (kos == null)
                 {
                     kos = new List<string>();
@@ -154,7 +156,7 @@ namespace TkoolLauncher
 
         static string Http(string url)
         {
-            using (var wc = new WebClient { Encoding = Encoding.UTF8 })
+            using (var wc = new QuickWeb { Encoding = Encoding.UTF8 })
             {
                 wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0";
                 wc.Headers[HttpRequestHeader.Cookie] = "adultchecked=1; locale=ja_JP";
@@ -236,7 +238,7 @@ namespace TkoolLauncher
             try
             {
                 byte[] b;
-                using (var wc = new WebClient()) { wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0"; b = wc.DownloadData(i.Image); }
+                using (var wc = new QuickWeb()) { wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0"; b = wc.DownloadData(i.Image); }
                 using (var ms = new MemoryStream(b))
                 using (var bmp = new Bitmap(ms))
                 {

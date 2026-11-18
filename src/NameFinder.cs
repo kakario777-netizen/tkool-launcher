@@ -134,7 +134,7 @@ namespace TkoolLauncher
                     try
                     {
                         string json;
-                        using (var wc = new WebClient { Encoding = Encoding.UTF8 })
+                        using (var wc = new QuickWeb { Encoding = Encoding.UTF8 })
                         {
                             wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0";
                             json = wc.DownloadString("https://www.dlsite.com/" + site + "/fsr/ajax/=/language/jp/keyword/" + Uri.EscapeDataString(name) + "/per_page/30/");
@@ -310,7 +310,7 @@ namespace TkoolLauncher
                     try
                     {
                         string json;
-                        using (var wc = new WebClient { Encoding = Encoding.UTF8 })
+                        using (var wc = new QuickWeb { Encoding = Encoding.UTF8 })
                         {
                             wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0";
                             json = wc.DownloadString("https://www.dlsite.com/" + site + "/product/info/ajax?product_id=" + id + "&cdn_cache_min=1");
@@ -378,6 +378,7 @@ namespace TkoolLauncher
                     }
                     // 2) 번역은 몰아서: 이름 여러 개를 줄바꿈으로 이어 한 번에 보내고, 묶음 사이에 쉬기
                     int done2 = 0;
+                    bool trFailed = false;
                     for (int i = 0; i < pend.Count; )
                     {
                         var batch = new List<KeyValuePair<GameInfo, Found>>();
@@ -385,7 +386,7 @@ namespace TkoolLauncher
                         while (i < pend.Count && batch.Count < 40 && len + pend[i].Value.Name.Length < 1100)
                         { len += pend[i].Value.Name.Length + 1; batch.Add(pend[i]); i++; }
                         if (batch.Count == 0) { batch.Add(pend[i]); i++; }
-                        Activity.Set("name", "이름 한글로 번역 중", done2, pend.Count);
+                        Activity.Set("name", "이름 한글로 번역 중 (" + batch.Count + "개 한 번에 보내는 중)", done2, pend.Count);
                         List<string> kos = null;
                         try
                         {
@@ -393,11 +394,23 @@ namespace TkoolLauncher
                             kos = (Translate.Run(joined) ?? "").Replace("\r", "").Split('\n').Select(x => x.Trim()).ToList();
                             if (kos.Count != batch.Count) { Log.Info("이름 몰아 번역: 줄 수가 달라 하나씩 다시 (" + kos.Count + "/" + batch.Count + ")"); kos = null; }
                         }
-                        catch (Exception ex) { Log.Info("이름 몰아 번역 실패: " + ex.Message); }
-                        if (kos == null)   // 줄이 섞였거나 실패 → 이 묶음만 하나씩
+                        catch (Exception ex) { Log.Info("이름 몰아 번역 실패: " + ex.Message); trFailed = true; }
+                        if (kos == null && !trFailed)   // 줄 수가 달라 섞였을 때만 하나씩 (막혀서 실패면 하지 않음)
                         {
                             kos = new List<string>();
-                            foreach (var x in batch) { string t = null; try { t = Translate.Run(x.Value.Name); } catch { } kos.Add((t ?? "").Trim()); }
+                            foreach (var x in batch)
+                            {
+                                Activity.Set("name", "이름 한글로 번역 중 (하나씩) · " + x.Value.Name, done2 + kos.Count, pend.Count);
+                                string t = null; try { t = Translate.Run(x.Value.Name); } catch { trFailed = true; break; }
+                                kos.Add((t ?? "").Trim());
+                            }
+                            while (kos.Count < batch.Count) kos.Add("");
+                        }
+                        if (kos == null)
+                        {
+                            // 구글 번역이 막힘 → 이번엔 그만 (번역 못 한 게임은 표시 안 남겨 다음에 다시)
+                            Activity.Note("구글 번역이 응답 없어 이름 번역을 다음으로 미룸 (" + (pend.Count - done2) + "개)");
+                            break;
                         }
                         for (int j = 0; j < batch.Count; j++)
                         {

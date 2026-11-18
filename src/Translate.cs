@@ -88,7 +88,7 @@ namespace TkoolLauncher
                 string part = null;
                 Exception last = null;
                 // 너무 자주 물으면 막혀서 한 번에 하나씩, 실패하면 조금 쉬었다 다시 (최대 3번)
-                for (int attempt = 0; attempt < 3 && part == null; attempt++)
+                for (int attempt = 0; attempt < 2 && part == null; attempt++)
                 {
                     lock (gate)
                     {
@@ -96,7 +96,7 @@ namespace TkoolLauncher
                         if (wait > 0) System.Threading.Thread.Sleep(wait);
                         try
                         {
-                            using (var wc = new WebClient { Encoding = Encoding.UTF8 })
+                            using (var wc = new QuickWeb { Encoding = Encoding.UTF8 })
                             {
                                 wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0";
                                 string json;
@@ -113,7 +113,7 @@ namespace TkoolLauncher
                         catch (Exception ex) { last = ex; }
                         finally { lastCall = Environment.TickCount; }
                     }
-                    if (part == null) System.Threading.Thread.Sleep(1500 * (attempt + 1));
+                    if (part == null) System.Threading.Thread.Sleep(1000);
                 }
                 if (part == null) throw last ?? new Exception("번역 응답 없음");
                 outSb.Append(part);

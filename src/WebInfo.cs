@@ -68,7 +68,7 @@ namespace TkoolLauncher
 
         static string Http(string url)
         {
-            using (var wc = new WebClient { Encoding = Encoding.UTF8 })
+            using (var wc = new QuickWeb { Encoding = Encoding.UTF8 })
             {
                 wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0";
                 wc.Headers[HttpRequestHeader.AcceptLanguage] = "ko-KR,ko;q=0.9,ja;q=0.8";

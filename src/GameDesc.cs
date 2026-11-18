@@ -67,7 +67,7 @@ namespace TkoolLauncher
             try
             {
                 ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
-                using (var wc = new WebClient { Encoding = Encoding.UTF8 })
+                using (var wc = new QuickWeb { Encoding = Encoding.UTF8 })
                 {
                     wc.Headers[HttpRequestHeader.UserAgent] = "TkoolLauncher";
                     string json = wc.DownloadString("https://store.steampowered.com/api/appdetails?filters=basic&l=korean&appids=" + id);
