@@ -985,6 +985,7 @@ namespace TkoolLauncher
             var c = new List<string>();
             Action<string> add = t => { if (!string.IsNullOrWhiteSpace(t) && !c.Contains(t.Trim())) c.Add(t.Trim()); };
             add(g.Title);
+            add(NameFinder.ReadmeName(g));
             add(TitleTidy.Clean(g.RawTitle ?? g.Title, new List<string>()));
             add(g.RawTitle);
             string folder = g.Folder != null ? System.IO.Path.GetFileName(g.Folder.TrimEnd('\\')) : null;
@@ -1263,6 +1264,13 @@ namespace TkoolLauncher
                 y += S(30);
             }
             y += S(8);
+            string nf = GameData.Get(game).NameFrom;
+            if (nf != null && nf != "-")
+            {
+                Draw.Text(g, "원래 이름: " + nf, Draw.Small, new Rectangle(ix0, y, infoW, S(40)), Color.FromArgb(150, 190, 235),
+                    TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+                y += S(42);
+            }
             Draw.Text(g, game.Folder, Draw.Small, new Rectangle(ix0, y, infoW, S(40)), Theme.SubText,
                 TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
         }
@@ -1677,6 +1685,8 @@ namespace TkoolLauncher
                           Act = () => ErrorPopup.Show2("최근 오류 기록", Log.Tail(900) is string t && t.Length > 0 ? t : "오류 기록이 없어요") },
                 new Row { Title = "표지·이름 한 번에 찾기", Sub = "표지나 이름이 빠진 게임을 하나씩 켜서 타이틀 화면을 알아서 찾아 찍어요 (글만 있는 화면은 넘김, 홈 버튼으로 멈춤)",
                           Value = GameCapture.Missing(Shell.Games).Count + "개", Act = () => Shell.FindCovers() },
+                new Row { Title = "이름 다시 찾기", Sub = "RJ 번호·Game·짧은 영어 같은 이름이나 한글판 영어 이름을 읽어보기·DLsite에서 다시 찾아요",
+                          Value = Shell.Games.Count(NameFinder.Wants) + "개", Act = () => { NameFinder.ResetTried(Shell.Games); NameFinder.RunAll(Shell.Games, true, n => { try { Shell.BeginInvoke(new Action(() => { Shell.RefreshLists(); Shell.ShowToast(n + "개의 이름을 찾았어요", 4000); })); } catch { } }); Shell.ShowToast("이름 찾는 중…", 2000); } },
                 new Row { Title = "찍은 표지 확인", Sub = "한 번에 찾기로 찍은 표지를 늘어놓고, 아닌 것만 취소한 뒤 적용해요",
                           Value = GameCapture.Pending(Shell.Games).Count + "개", Act = () => Shell.Push(new CoverReviewScreen()) },
                 new Row { Title = "표지 없는 게임 자동 표지", Toggle = Settings.AutoCover, Sub = "처음 켤 때 타이틀 화면을 찍어 표지로, 이름이 'Game'이면 창 제목으로 바꿔요",

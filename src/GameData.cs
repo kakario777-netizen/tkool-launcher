@@ -19,6 +19,7 @@ namespace TkoolLauncher
         public string FolderName;// 마지막으로 본 게임 폴더 이름 (표지 파일 이름 옮기기용)
         public int Lang;         // 언어 직접 지정: 0 자동 1 한글 2 일본어
         public string UserTags; // 직접 붙인 태그 (쉼표)
+        public string NameFrom;  // 이름을 찾아 바꿨으면 "원래 이름 · 어디서", 찾아봤는데 없으면 "-"
         public int WinMode;      // 창 모양: 0 그대로 1 꽉 찬 창(작업 표시줄 보임)
     }
 
@@ -140,6 +141,7 @@ namespace TkoolLauncher
                         Lang = p.Length > 10 && int.TryParse(p[10], out int lg) ? lg : 0,
                         WinMode = p.Length > 11 && int.TryParse(p[11], out int wm) ? wm : 0,
                         UserTags = p.Length > 12 && p[12].Length > 0 ? p[12] : null,
+                        NameFrom = p.Length > 13 && p[13].Length > 0 ? p[13].Replace("\u2502", "|") : null,
                     };
                     stats[p[0]] = s;
                 }
@@ -156,11 +158,11 @@ namespace TkoolLauncher
                 foreach (var kv in stats)
                 {
                     var s = kv.Value;
-                    if (!s.Favorite && s.LastPlayed == 0 && s.TotalSeconds == 0 && !s.Hidden && s.Title == null && s.Res == null && !s.Cleared && s.Lang == 0 && s.WinMode == 0 && string.IsNullOrEmpty(s.UserTags)) continue;
+                    if (!s.Favorite && s.LastPlayed == 0 && s.TotalSeconds == 0 && !s.Hidden && s.Title == null && s.Res == null && !s.Cleared && s.Lang == 0 && s.WinMode == 0 && string.IsNullOrEmpty(s.UserTags) && s.NameFrom == null) continue;
                     sb.Append(kv.Key).Append('|').Append(s.Favorite ? "1" : "0").Append('|')
                       .Append(s.LastPlayed).Append('|').Append(s.TotalSeconds).Append('|').Append(s.Hidden ? "1" : "0")
                       .Append('|').Append((s.Title ?? "").Replace("|", "\u2502").Replace("\n", " ")).Append('|').Append(s.Res ?? "").Append('|').Append(s.Cleared ? "1" : "0")
-                      .Append('|').Append((s.Sig ?? "").Replace("|", "\u2502")).Append('|').Append(s.FolderName ?? "").Append('|').Append(s.Lang).Append('|').Append(s.WinMode).Append('|').Append((s.UserTags ?? "").Replace("|", "")).AppendLine();
+                      .Append('|').Append((s.Sig ?? "").Replace("|", "\u2502")).Append('|').Append(s.FolderName ?? "").Append('|').Append(s.Lang).Append('|').Append(s.WinMode).Append('|').Append((s.UserTags ?? "").Replace("|", "")).Append('|').Append((s.NameFrom ?? "").Replace("|", "\u2502").Replace("\n", " ")).AppendLine();
                 }
                 File.WriteAllText(FilePath, sb.ToString(), new UTF8Encoding(false));
             }
