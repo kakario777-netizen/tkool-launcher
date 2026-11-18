@@ -339,7 +339,7 @@ namespace TkoolLauncher
             // 첫 탭은 '전체' (라이브러리를 열면 여기서 시작)
             tabs = new List<Tab> { new Tab { Name = "전체", Filter = x => true } };
             // 쯔꾸르 폴더에서 찾은 건 '쯔꾸르'에만, 스팀·배틀넷·에픽·GOG·설치된 게임은 'PC 게임'에
-            Func<GameInfo, bool> isT = x => x.FromFolder || x.IsTkool;
+            Func<GameInfo, bool> isT = x => x.FromFolder;   // 쯔꾸르 탭 = 설정에서 고른 게임 폴더의 게임만
             if (all.Any(isT)) tabs.Add(new Tab { Name = "쯔꾸르", Filter = isT });
             if (all.Any(x => !isT(x))) tabs.Add(new Tab { Name = "PC 게임", Filter = x => !isT(x) });
             tabs.Add(new Tab { Name = "즐겨찾기", Filter = x => GameData.Get(x).Favorite });
@@ -591,7 +591,7 @@ namespace TkoolLauncher
             // 엔진 색 점 + 이름
             using (var b = new SolidBrush(ec)) g.FillEllipse(b, dx, ly + lh / 2 - S(4), S(8), S(8));
             dx += S(13);
-            string eng = gm.IsTkool ? EngineShort(gm) : "PC";
+            string eng = gm.IsTkool ? EngineShort(gm) : "기타";
             var small = Theme.Px(12, true);
             Draw.Text(g, eng, small, new Rectangle(dx, ly, S(60), lh), Theme.SubText, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
             dx += Draw.Measure(g, eng, small) + S(10);
@@ -710,7 +710,7 @@ namespace TkoolLauncher
         public override void OnGamesChanged()
         {
             var cur = FocusedGame;
-            list = Shell.VisibleGames.Where(x => x.FromFolder || x.IsTkool)
+            list = Shell.VisibleGames.Where(x => x.FromFolder)
                 .OrderByDescending(Problems).ThenBy(x => x.Title, StringComparer.CurrentCulture).ToList();
             int i = cur != null ? list.FindIndex(x => x.Exe == cur.Exe) : -1;
             idx = i >= 0 ? i : 0;
@@ -816,7 +816,7 @@ namespace TkoolLauncher
                     TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
                 y += S(28);
             }
-            string info = (gm.IsTkool ? LibraryScreen.EngineShort(gm) : "PC") + " · " + (LibraryScreen.IsKorean(gm) ? "한글" : "일본어") +
+            string info = (gm.IsTkool ? LibraryScreen.EngineShort(gm) : "기타") + " · " + (LibraryScreen.IsKorean(gm) ? "한글" : "일본어") +
                           (gm.Tags.Contains("체험판") ? " · 체험판" : "") + " · 플레이 " + (st.TotalSeconds / 3600 > 0 ? st.TotalSeconds / 3600 + "시간 " : "") + (st.TotalSeconds / 60 % 60) + "분";
             Draw.Text(g, info, Draw.Body, new Rectangle(rx, y, rw, S(26)), Theme.SubText,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);

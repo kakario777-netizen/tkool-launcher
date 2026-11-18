@@ -1197,7 +1197,7 @@ namespace TkoolLauncher
                 if (!string.IsNullOrEmpty(t)) g.Title = t;
                 // 쯔꾸르: 버전·날짜·[꼬리표]·_kr 같은 걸 떼고 깔끔한 이름으로 (떼어 낸 건 꼬리표로)
                 g.Tags.Clear();
-                if (g.IsTkool || g.FromFolder)
+                if (g.FromFolder)
                 {
                     string cleaned = TitleTidy.Clean(g.Title, g.Tags);
                     if (!fixedByUser) g.Title = cleaned;
