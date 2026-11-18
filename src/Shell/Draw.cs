@@ -31,14 +31,14 @@ namespace TkoolLauncher
 
         public static void Text(Graphics g, string s, Font f, Rectangle r, Color c, TextFormatFlags fl = Left)
         {
-            TextRenderer.DrawText(g, s ?? "", f, r, c, fl);
+            TextRenderer.DrawText(g, s ?? "", f, r, c, fl | TextFormatFlags.PreserveGraphicsClipping);   // 잘라내기 영역 지키기 (안 하면 목록 글자가 위 탭까지 튀어나옴)
         }
 
         public static void TextShadow(Graphics g, string s, Font f, Rectangle r, Color c, TextFormatFlags fl = Left)
         {
             var sr = r; sr.Offset(S(2), S(2));
-            TextRenderer.DrawText(g, s ?? "", f, sr, Color.FromArgb(10, 10, 10), fl);
-            TextRenderer.DrawText(g, s ?? "", f, r, c, fl);
+            TextRenderer.DrawText(g, s ?? "", f, sr, Color.FromArgb(10, 10, 10), fl | TextFormatFlags.PreserveGraphicsClipping);
+            TextRenderer.DrawText(g, s ?? "", f, r, c, fl | TextFormatFlags.PreserveGraphicsClipping);   // 잘라내기 영역 지키기 (안 하면 목록 글자가 위 탭까지 튀어나옴)
         }
 
         public static int Measure(Graphics g, string s, Font f) =>

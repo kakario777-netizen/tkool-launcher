@@ -575,7 +575,7 @@ namespace TkoolLauncher
                 using (var path = TopRound(imgR, rad))
                 using (var lg = new System.Drawing.Drawing2D.LinearGradientBrush(imgR, Color.FromArgb(255, ec.R * 2 / 3, ec.G * 2 / 3, ec.B * 2 / 3), Color.FromArgb(255, ec.R / 4, ec.G / 4, ec.B / 4), 60f))
                     g.FillPath(lg, path);
-                string ch = string.IsNullOrEmpty(gm.Title) ? "?" : gm.Title.Substring(0, char.IsSurrogate(gm.Title[0]) && gm.Title.Length > 1 ? 2 : 1);
+                string ch = string.IsNullOrEmpty(gm.Title) ? "?" : gm.Title.Substring(0, char.IsSurrogate(gm.Title[0]) && gm.Title.Length > 1 ? 2 : 1).ToUpperInvariant();
                 Draw.Text(g, ch, Theme.Px(Math.Max(20, imgR.Height / 3f / Theme.Scale), true), imgR, Color.FromArgb(200, 255, 255, 255), Draw.Center);
             }
             // 즐겨찾기 별
