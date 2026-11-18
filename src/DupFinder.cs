@@ -55,29 +55,76 @@ namespace TkoolLauncher
                 w.Add(reason);
             };
 
-            // 1) 이름
-            var byName = new Dictionary<string, int>();
-            for (int i = 0; i < n; i++)
+            // 후보 짝 모으기 (이름·데이터·타이틀 그림·DLsite 번호 중 하나라도 같은 것) → 짝마다 점수로 진짜 중복인지 판단
+            var cand = new Dictionary<long, HashSet<string>>();
+            Action<int, int, string> hint = (a, b, r) =>
             {
-                if (GameCapture.IsGenericTitle(games[i], games[i].Title)) continue;
+                if (a == b) return;
+                long key = a < b ? ((long)a << 32) | (uint)b : ((long)b << 32) | (uint)a;
+                if (!cand.TryGetValue(key, out var set)) cand[key] = set = new HashSet<string>();
+                set.Add(r);
+            };
+            Action<Func<int, string>, string> bucket = (keyOf, r) =>
+            {
+                var d = new Dictionary<string, List<int>>();
+                for (int i = 0; i < n; i++)
+                {
+                    string k = null;
+                    try { k = keyOf(i); } catch { }
+                    if (string.IsNullOrEmpty(k)) continue;
+                    if (!d.TryGetValue(k, out var l)) d[k] = l = new List<int>();
+                    l.Add(i);
+                }
+                foreach (var l in d.Values)
+                    if (l.Count > 1 && l.Count <= 30)    // 너무 흔한 값(기본 이름 등)은 무시
+                        for (int x = 0; x < l.Count; x++) for (int y = x + 1; y < l.Count; y++) hint(l[x], l[y], r);
+            };
+            bucket(i =>
+            {
+                if (GameCapture.IsGenericTitle(games[i], games[i].Title)) return null;
                 string k = NameKey(TitleTidy.Clean(games[i].RawTitle ?? games[i].Title, new List<string>()));
-                if (k.Length < 2) continue;
-                if (byName.TryGetValue(k, out int j)) join(j, i, "이름이 같아요"); else byName[k] = i;
-            }
-            // 2) 게임 데이터
-            var byData = new Dictionary<string, int>();
-            for (int i = 0; i < n; i++)
-            {
-                string k = DataKey(games[i]);
-                if (k == null) continue;
-                if (byData.TryGetValue(k, out int j)) join(j, i, "게임 데이터가 같아요"); else byData[k] = i;
-            }
-            // 3) 타이틀 그림
+                return k.Length < 2 ? null : k;
+            }, "name");
+            bucket(i => NameKey(games[i].Title).Length >= 2 && !GameCapture.IsGenericTitle(games[i], games[i].Title) ? NameKey(games[i].Title) : null, "name");
+            bucket(i => DataKey(games[i]), "data");
+            bucket(i => NameFinder.FindCode(games[i]), "code");
             var hashes = new List<KeyValuePair<int, ulong>>();
             for (int i = 0; i < n; i++) { var h = CoverArt.ThumbHash(games[i]); if (h != 0) hashes.Add(new KeyValuePair<int, ulong>(i, h)); }
             for (int a = 0; a < hashes.Count; a++)
                 for (int b = a + 1; b < hashes.Count; b++)
-                    if (Bits(hashes[a].Value ^ hashes[b].Value) <= 4) join(hashes[a].Key, hashes[b].Key, "타이틀 그림이 비슷해요");
+                    if (Bits(hashes[a].Value ^ hashes[b].Value) <= 4) hint(hashes[a].Key, hashes[b].Key, "thumb");
+
+            var prints = new Dictionary<int, HashSet<string>>();
+            Func<int, HashSet<string>> print = i => { if (!prints.TryGetValue(i, out var f)) prints[i] = f = Fingerprint(games[i]); return f; };
+            foreach (var kv in cand)
+            {
+                int a = (int)(kv.Key >> 32), b = (int)(kv.Key & 0xffffffff);
+                var ga = games[a]; var gb = games[b];
+                var sig = kv.Value;
+                int score = 0;
+                var reasons = new List<string>();
+                if (sig.Contains("data")) { score += 5; reasons.Add("게임 데이터가 똑같아요"); }
+                if (sig.Contains("code")) { score += 5; reasons.Add("DLsite 번호가 같아요"); }
+                if (sig.Contains("name")) { score += 2; reasons.Add("이름이 같아요"); }
+                if (sig.Contains("thumb")) { score += 2; reasons.Add("타이틀 그림이 비슷해요"); }
+                // 엔진 버전이 다르면 다른 게임(리메이크·속편)일 때가 많음
+                bool sameEngine = ga.IsTkool == gb.IsTkool && (!ga.IsTkool || ga.Version == gb.Version) && (ga.IsTkool || ga.Engine == gb.Engine);
+                if (!sameEngine) { score -= 3; reasons.Add("엔진이 달라요"); }
+                // 파일 구성 (맵·그림·소리 파일 이름) 비교
+                if (score < 5 || !sig.Contains("data"))
+                {
+                    var fa = print(a); var fb = print(b);
+                    if (fa.Count >= 5 && fb.Count >= 5)
+                    {
+                        int inter = fa.Count(fb.Contains);
+                        double j = inter / (double)(fa.Count + fb.Count - inter);
+                        if (j >= 0.8) { score += 3; reasons.Add("파일 구성 " + (int)(j * 100) + "% 같아요"); }
+                        else if (j >= 0.5) { score += 1; reasons.Add("파일 구성 " + (int)(j * 100) + "% 비슷"); }
+                        else { score -= 3; reasons.Add("파일 구성이 많이 달라요(" + (int)(j * 100) + "%)"); }
+                    }
+                }
+                if (score >= 4) join(a, b, string.Join(" · ", reasons));
+            }
 
             var groups = new Dictionary<int, Group>();
             for (int i = 0; i < n; i++)
@@ -112,6 +159,26 @@ namespace TkoolLauncher
             Settings.DupIgnore = string.Join(",", set);
             Settings.Save();
             Groups.Remove(g);
+        }
+
+        /// <summary>게임 파일 구성 지문: 맵·그림·소리·데이터 파일 이름(상대 경로, 세이브 빼고) 최대 4000개</summary>
+        static HashSet<string> Fingerprint(GameInfo g)
+        {
+            var set = new HashSet<string>();
+            try
+            {
+                string root = g.Folder.TrimEnd('\\', '/');
+                foreach (var f in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+                {
+                    string rel = f.Substring(root.Length).TrimStart('\\', '/').ToLowerInvariant().Replace('\\', '/');
+                    string name = Path.GetFileName(rel);
+                    if (name.StartsWith("save") || name.EndsWith(".rpgsave") || name.EndsWith(".rmmzsave") || name.EndsWith(".lsd") || name.EndsWith(".log") || name.EndsWith(".txt")) continue;
+                    set.Add(rel);
+                    if (set.Count >= 4000) break;
+                }
+            }
+            catch { }
+            return set;
         }
 
         static string NameKey(string s) => new string((s ?? "").ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
