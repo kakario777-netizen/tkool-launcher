@@ -278,7 +278,7 @@ namespace TkoolLauncher
                 Log.Info("표지 찍기: 후보 " + all.Count + "개 중 " + list.Count + "개 (이름만 " + nameOnly.Count + "개)");
                 int okCount = 0, skipped = 0, nameCount = 0;
                 var fixedKinds = new HashSet<string>();   // 같은 부품은 한 번만 설치
-                bool retry = false;
+                bool retry = false; int retries = 0;
                 for (int i = 0; i < list.Count && !Cancel; i++)
                 {
                     var g = list[i];
@@ -354,13 +354,13 @@ namespace TkoolLauncher
                     // 오류 창이 떴으면: 고칠 수 있는 부품(DirectX·Visual C++)은 설치하고 이 게임을 한 번 더
                     if (err.Length > 0 && !Cancel)
                     {
-                        if (!retry && Fixer.CanFix(g, err))
+                        if (retries < 3 && Fixer.CanFix(g, err))   // 같은 게임에 다른 오류가 이어 나오면 그것도 (부품마다 한 번)
                         {
                             Activity.Set("cover", "오류 먼저 고치는 중 · " + g.Title, i + 1, list.Count);
                             progress("표지 찍기 잠깐 멈춤 · 오류 고치는 중 — " + g.Title + " (끝나면 이 게임부터 이어서)");
                             string r = Fixer.FixNow(g, err);
                             progress("고쳤어요 — 다시 켜 봐요: " + r);
-                            retry = true; i--;                    // 같은 게임 다시
+                            retry = true; retries++; i--;          // 같은 게임 다시
                             System.Threading.Thread.Sleep(1500);
                             continue;
                         }
@@ -368,7 +368,7 @@ namespace TkoolLauncher
                         skipped++;
                         Log.Info("표지 찍기 오류 창: " + g.Title + " — " + err.Replace("\n", " / "));
                     }
-                    retry = false;
+                    retry = false; retries = 0;
                     System.Threading.Thread.Sleep(1500);
                 }
                 Finding = false;
