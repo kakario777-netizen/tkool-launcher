@@ -256,6 +256,13 @@ namespace TkoolLauncher
             }
 
             // ── 컨트롤러 (가상 패드) ──
+            if (!VirtualPad.HasHidHide)
+                rows.Add(new Row
+                {
+                    FixCat = 3, Kind = Kind.Action, Title = "팝업 중 게임 입력 막기 도구 설치", Keep = true,
+                    Sub = "HidHide · 한 번만 · 끝나면 재부팅",
+                    Act = () => { VirtualPad.InstallDrivers(); Shell.ShowToast("설치 창이 뜨면 허락해 주세요 — 끝나면 재부팅하면 돼요", 6000); }
+                });
             rows.Add(new Row
             {
                 Kind = Kind.Toggle, Title = "가상 패드 (감도·연사·자이로·진동)", On = VirtualPad.Running,

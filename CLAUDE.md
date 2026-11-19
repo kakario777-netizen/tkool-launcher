@@ -121,3 +121,4 @@
 - 키보드 게임식 패드 변환(사용자 요청 — 키보드만 받는 유니티 게임 "LIFE OF BITCH" 등): PadMap 값 "kb"·자동(유니티 + 패드용 dll 없음 = InputNeeds 패드≠o, PadMap.AutoKeyboard) → Gamepad.Profile=1: 방향키(스틱도)·A=Enter·B=Esc·X=Space·Y=Z·LB=Q·RB=E·Start=Esc·Back=Tab. 읽어보기에 적힌 키 중 배치에 없는 것은 남는 버튼(LT·RT·LB·RB / 쯔꾸르식은 LT·RT·Back)에 차례로(PadMap.Extra → Gamepad.Extra). 상세 더보기 "패드 → 키보드 바꾸기": 자동/쯔꾸르식/키보드 게임식/끔. 두 번 눌리면 끔.
 - 마우스 모드 미세 조정: RB나 RT를 누르고 있는 동안 커서 속도 1/4 (Gamepad.HandleMouse).
 - 마우스 게임 자동 마우스 모드: 런처로 켤 때 InputNeeds가 마우스 꼭 필요(n)·패드 지원 아님이고 키 변환도 없으면 Gamepad.MouseMode 자동 켬(끝나면 끔, autoMouse). 예: 돈없는 언니(Tyrano Electron, 읽어보기 "マウスでの操作").
+- HidHide 없으면 빠른 설정 컨트롤러 탭 맨 위 "팝업 중 게임 입력 막기 도구 설치"(VirtualPad.InstallDrivers — winget, 허락 창 한 번, 끝나면 재부팅).
