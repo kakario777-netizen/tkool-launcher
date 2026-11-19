@@ -139,7 +139,13 @@ namespace TkoolLauncher
                     else ShowToast("게임을 끄면 새 버전으로 바뀌어요", 5000);
                 });
                 if (Settings.GameFolders.Count == 0 && !Settings.StoreScan) OpenFolders(true);
-                else Rescan();
+                else
+                {
+                    // 지난 목록을 먼저 바로 보여 줌 (업데이트·재시작 때 목록이 비었다가 다시 채워지지 않게) → 폴더 검사는 뒤에서 조용히
+                    var cached = GameScanner.LoadCache();
+                    if (cached != null) { SetGames(cached, false); knownCount = cached.Count; }
+                    Rescan();
+                }
                 WatchFolders();
             };
         }
@@ -1289,6 +1295,7 @@ namespace TkoolLauncher
                     int before = knownCount;
                     SetGames(found);
                     knownCount = found.Count;
+                    Task.Run(() => GameScanner.SaveCache(found));
                     if (before < 0) ShowToast("게임 " + found.Count + "개를 찾았어요");
                     else if (found.Count > before) ShowToast("새 게임 " + (found.Count - before) + "개를 목록에 넣었어요", 4000);
                     else if (found.Count < before) ShowToast("없어진 게임 " + (before - found.Count) + "개를 목록에서 뺐어요", 4000);
@@ -1649,7 +1656,7 @@ namespace TkoolLauncher
             dupTimer.Start();
         }
 
-        public void SetGames(List<GameInfo> found)
+        public void SetGames(List<GameInfo> found, bool background = true)
         {
             GameDoctor.Library = found;
             GameData.Reconcile(found);   // 폴더를 옮기거나 이름을 바꿔도 예전 기록 그대로
@@ -1671,6 +1678,7 @@ namespace TkoolLauncher
             }
             Games = found;
             CoverArt.Preload(found);   // 목록 썸네일을 미리 메모리에
+            if (!background) { RefreshLists(); return; }   // 지난 목록으로 먼저 보여 줄 때는 화면만
             ScheduleDupScan();
             // 뜻 없는 이름(RJ번호·Game·my…)이나 한글판인데 영어 이름인 게임: 읽어보기·DLsite에서 진짜 이름 찾기 (한 번만)
             // RJ 번호가 이미 있는 게임은 DLsite 정보부터 바로 (이름 확인과 같이 돎)

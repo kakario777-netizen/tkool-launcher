@@ -58,6 +58,59 @@ namespace TkoolLauncher
 
     static class GameScanner
     {
+        // ── 지난 목록 저장 (켤 때 바로 보여 주고, 폴더 검사는 뒤에서) cache\library.txt ──
+        static string CachePath => Path.Combine(Settings.Dir, "cache", "library.txt");
+        static string E(string v) => (v ?? "\u0001").Replace("\\", "\\\\").Replace("\t", "\\t").Replace("\n", "\\n").Replace("\r", "");
+        static string U(string v)
+        {
+            if (v == "\u0001") return null;
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < v.Length; i++)
+            {
+                if (v[i] == '\\' && i + 1 < v.Length) { char c = v[++i]; sb.Append(c == 't' ? '\t' : c == 'n' ? '\n' : c); }
+                else sb.Append(v[i]);
+            }
+            return sb.ToString();
+        }
+
+        public static void SaveCache(List<GameInfo> list)
+        {
+            try
+            {
+                var lines = list.Select(g => string.Join("\t", new[] {
+                    ((int)g.Kind).ToString(), E(g.LaunchUri), E(g.InstallDir), E(g.CoverHint), E(g.HeroHint), g.Manual ? "1" : "0", g.FromFolder ? "1" : "0",
+                    E(g.Launcher), E(g.Args), E(g.RawTitle ?? g.Title), E(g.Folder), E(g.Exe), ((int)g.Version).ToString(), g.Japanese ? "1" : "0", E(g.Engine), g.NeedsRtp ? "1" : "0", E(g.RtpName) }));
+                Directory.CreateDirectory(Path.GetDirectoryName(CachePath));
+                File.WriteAllLines(CachePath + ".tmp", lines.ToArray(), new System.Text.UTF8Encoding(false));
+                if (File.Exists(CachePath)) File.Delete(CachePath);
+                File.Move(CachePath + ".tmp", CachePath);
+            }
+            catch (Exception ex) { Log.Info("목록 저장 실패: " + ex.Message); }
+        }
+
+        public static List<GameInfo> LoadCache()
+        {
+            var list = new List<GameInfo>();
+            try
+            {
+                if (!File.Exists(CachePath)) return null;
+                foreach (var l in File.ReadAllLines(CachePath, System.Text.Encoding.UTF8))
+                {
+                    var c = l.Split('\t');
+                    if (c.Length < 17) continue;
+                    var g = new GameInfo
+                    {
+                        Kind = (GameKind)int.Parse(c[0]), LaunchUri = U(c[1]), InstallDir = U(c[2]), CoverHint = U(c[3]), HeroHint = U(c[4]), Manual = c[5] == "1", FromFolder = c[6] == "1",
+                        Launcher = U(c[7]), Args = U(c[8]), Title = U(c[9]), Folder = U(c[10]), Exe = U(c[11]), Version = (TkoolVersion)int.Parse(c[12]), Japanese = c[13] == "1",
+                        Engine = U(c[14]), NeedsRtp = c[15] == "1", RtpName = U(c[16]),
+                    };
+                    list.Add(g);
+                }
+            }
+            catch (Exception ex) { Log.Info("목록 읽기 실패: " + ex.Message); return null; }
+            return list.Count > 0 ? list : null;
+        }
+
         const int MaxDepth = 5;
 
         static readonly string[] SkipDirs =
