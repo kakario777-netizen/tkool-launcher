@@ -150,6 +150,28 @@ namespace TkoolLauncher
             timer = new Timer { Interval = 33 };
             timer.Tick += Tick;
             timer.Start();
+            // 패드는 따로 빠르게(8ms) 읽어 눌림을 모아 둠 → 화면이 바빠 타이머가 늦어도 짧게 누른 버튼이 씹히지 않음
+            new System.Threading.Thread(PollLoop) { IsBackground = true, Name = "pad" }.Start();
+        }
+
+        static int liveBits, edgeBits;
+        static volatile bool idle;
+        static void PollLoop()
+        {
+            int last = 0;
+            while (true)
+            {
+                try
+                {
+                    int p = (int)ReadPad();
+                    int add = p & ~last;
+                    if (add != 0) { int o; do { o = edgeBits; } while (System.Threading.Interlocked.CompareExchange(ref edgeBits, o | add, o) != o); }
+                    last = p;
+                    System.Threading.Volatile.Write(ref liveBits, p);
+                }
+                catch { }
+                System.Threading.Thread.Sleep(idle ? 60 : 8);
+            }
         }
 
         /// <summary>포커스를 뺏지 않는 게임 위 팝업 (열려 있는 동안 패드는 여기로, 게임엔 안 감)</summary>
@@ -170,14 +192,18 @@ namespace TkoolLauncher
 
             if (target == null && !game && !MouseMode)
             {
-                // 런처가 뒤에 있고 변환할 게임도 없음 → 쉬기
+                // 런처가 뒤에 있고 변환할 게임도 없음 → 쉬기 (읽기 스레드도 천천히)
                 ReleaseGameKeys();
-                timer.Interval = 500;
+                timer.Interval = 150;
+                idle = true;
                 prev = Pad.None;
+                System.Threading.Interlocked.Exchange(ref edgeBits, 0);
                 return;
             }
+            idle = false;
 
-            Pad cur = ReadPad();
+            // 지금 누르고 있는 것 + 지난번 이후 잠깐 눌렀다 뗀 것까지 (짧은 탭도 한 번은 눌린 걸로)
+            Pad cur = (Pad)(System.Threading.Volatile.Read(ref liveBits) | System.Threading.Interlocked.Exchange(ref edgeBits, 0));
             // 화면 처리 중 새 창(대화상자)이 떠서 타이머가 다시 불려도 같은 버튼을 두 번 받지 않게 먼저 기록
             Pad old = prev;
             prev = cur;

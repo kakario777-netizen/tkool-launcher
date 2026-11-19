@@ -462,6 +462,57 @@ namespace TkoolLauncher
             return list;
         }
 
+        /// <summary>"RPGVXAce RTP is required" 같은 오류 → RTP를 받아 조용히 설치 (공식 배포 주소, 실패면 받는 페이지)</summary>
+        public static Issue RtpAuto(GameInfo g, string low)
+        {
+            if (!low.Contains("rtp")) return null;
+            string kind = low.Contains("vxace") || low.Contains("vx ace") || low.Contains("rgss3") ? "VXAce"
+                        : System.Text.RegularExpressions.Regex.IsMatch(low, @"rpgvx\b|rpg ?vx rtp|rgss2") ? "VX"
+                        : low.Contains("xp") || low.Contains("rgss1") || low.Contains("standard") ? "XP"
+                        : g != null && g.Version == TkoolVersion.VXAce ? "VXAce" : g != null && g.Version == TkoolVersion.VX ? "VX" : g != null && g.Version == TkoolVersion.XP ? "XP" : null;
+            if (kind == null) return null;
+            string url = kind == "VXAce" ? "https://s3.amazonaws.com/degica-downloads/RPGVXAce_RTP.zip"
+                       : kind == "VX" ? "https://s3.amazonaws.com/degica-downloads/RPGVX_RTP.zip"
+                       : "https://s3.amazonaws.com/degica-downloads/xp_rtp104e.exe";
+            string label = kind == "VXAce" ? "VX Ace" : kind;
+            return new Issue
+            {
+                Title = "RPG 쯔꾸르 " + label + " RTP 없음",
+                Explain = "이 게임은 기본 자료(RTP)가 있어야 돌아가요. 공식 RTP를 받아 설치할게요.",
+                FixLabel = "RTP 설치",
+                Fix = () =>
+                {
+                    string dir = Path.Combine(Settings.Dir, "tools", "rtp_" + kind);
+                    try
+                    {
+                        Directory.CreateDirectory(dir);
+                        System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12;
+                        string file = Path.Combine(dir, Path.GetFileName(url));
+                        if (!File.Exists(file) || new FileInfo(file).Length < 1000000)
+                            using (var wc = new System.Net.WebClient()) { wc.Headers[System.Net.HttpRequestHeader.UserAgent] = "Mozilla/5.0"; wc.DownloadFile(url, file); }
+                        string setup = file;
+                        if (file.EndsWith(".zip"))
+                        {
+                            var ps = new ProcessStartInfo("powershell.exe", "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"Expand-Archive -LiteralPath '" + file.Replace("'", "''") + "' -DestinationPath '" + dir.Replace("'", "''") + "' -Force\"") { UseShellExecute = false, CreateNoWindow = true };
+                            using (var p = Process.Start(ps)) p.WaitForExit(300000);
+                            setup = Directory.GetFiles(dir, "Setup.exe", SearchOption.AllDirectories).FirstOrDefault();
+                            if (setup == null) throw new Exception("압축 안에 Setup.exe가 없음");
+                        }
+                        var pr = Process.Start(new ProcessStartInfo(setup, "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-") { WorkingDirectory = Path.GetDirectoryName(setup), UseShellExecute = true });
+                        pr.WaitForExit(600000);
+                        Log.Info("RTP " + kind + " 설치 끝 (코드 " + (pr.HasExited ? pr.ExitCode.ToString() : "?") + ")");
+                        return "RTP " + label + " 설치를 마쳤어요";
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error("RTP 설치", ex);
+                        Open(RtpPage);
+                        return "RTP를 자동으로 못 받아서 받는 페이지를 열었어요 (" + ex.Message + ")";
+                    }
+                },
+            };
+        }
+
         public static string SafeRunDir(GameInfo g)
         {
             try
@@ -581,7 +632,7 @@ namespace TkoolLauncher
                             // "Game.exe - 시스템 오류"(dll 없음)는 윈도우가 따로 띄워서 게임 프로그램 창이 아님 → 제목으로 알아봄
                             bool sysErr = wp != pid && cls == "#32770" && ((exeName.Length > 0 && title.ToLowerInvariant().StartsWith(exeName)) || Fixer.IsGameSysErr(title, g.InstallDir ?? g.Folder));
                             if (wp != pid && !sysErr) return true;
-                            if (cls == "#32770")   // 메시지 상자
+                            if (cls == "#32770" && !GameCapture.IsConfigDialog(h))   // 메시지 상자 (시작 전 설정 창은 빼고)
                             {
                                 box = true;
                                 var sb = new StringBuilder(title + "\n");

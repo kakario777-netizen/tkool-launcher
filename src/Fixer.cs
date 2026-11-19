@@ -65,6 +65,7 @@ namespace TkoolLauncher
             if (low.Length == 0) return list;
             try { var d = GameDoctor.DxIssue(low); if (d != null) list.Add(d); } catch { }
             try { var v = GameDoctor.VcIssue(g, low); if (v != null) list.Add(v); } catch { }
+            try { var r = GameDoctor.RtpAuto(g, low); if (r != null) list.Add(r); } catch { }
             if (low.Contains("폴더 목록 화면") && g != null) { try { list.AddRange(GameDoctor.FolderListIssues(g)); } catch { } }
             // 일본어가 한국어로 깨진 오류 창(긁갉긁…) → 일본어 환경으로 켜기
             string jp = JpLocale.Unmangle(text);

@@ -370,7 +370,50 @@ namespace TkoolLauncher
 
         // ── 왼쪽 주황 단추: 태그·엔진 (고르기 창) ──
         static string tagSel, engSel;
-        Rectangle tagBtn, engBtn;
+        Rectangle tagBtn, engBtn, inpBtn;
+        // 조작 필터: 패드·키보드·마우스·터치마다 '-' 상관없음 / 'o' 됨 / 'n' 꼭 필요 / 'x' 안 됨 / '?' 모름
+        static char[] inpSel = { '-', '-', '-', '-' };
+        static bool InpOn => inpSel.Any(c => c != '-');
+        static string InpWord(char c) => c == 'o' ? "됨" : c == 'n' ? "꼭 필요" : c == 'x' ? "안 됨" : c == '?' ? "모름" : "상관없음";
+        static bool InpMatch(GameInfo x)
+        {
+            if (!InpOn) return true;
+            var s = InputNeeds.Get(x).S;
+            for (int k = 0; k < 4; k++)
+            {
+                char w = inpSel[k], c = s[k];
+                if (w == '-') continue;
+                if (w == 'o' ? !(c == 'o' || c == 'n') : c != w) return false;
+            }
+            return true;
+        }
+        string InpLabel()
+        {
+            if (!InpOn) return "조작 ▾";
+            var parts = new List<string>();
+            for (int k = 0; k < 4; k++) if (inpSel[k] != '-') parts.Add(InputNeeds.Names[k] + " " + InpWord(inpSel[k]));
+            string t = string.Join("·", parts);
+            return (t.Length > 14 ? "조작 " + parts.Count + "개" : t) + "  ×";
+        }
+        void OpenInputFilter()
+        {
+            var cur = (char[])inpSel.Clone();
+            Action show = null;
+            show = () =>
+            {
+                var opts = new List<string>();
+                for (int k = 0; k < 4; k++) opts.Add(InputNeeds.Names[k] + ": " + InpWord(cur[k]));
+                opts.Add("✓ 이대로 보기");
+                opts.Add("모두 풀기");
+                PickerScreen.Show(Shell, "조작 방식으로 보기 (누를 때마다 바뀜)", opts.ToArray(), -1, i =>
+                {
+                    if (i < 4) { cur[i] = cur[i] == '-' ? 'o' : cur[i] == 'o' ? 'n' : cur[i] == 'n' ? 'x' : cur[i] == 'x' ? '?' : '-'; show(); return; }
+                    inpSel = i == 4 ? cur : new[] { '-', '-', '-', '-' };
+                    focus = 0; scroll = target = 0; OnGamesChanged();
+                }, "상관없음 → 됨 → 꼭 필요 → 안 됨 → 모름");
+            };
+            show();
+        }
 
         /// <summary>내 태그 + DLsite 장르(한글)</summary>
         static List<string> TagsAll(GameInfo g)
@@ -466,6 +509,7 @@ namespace TkoolLauncher
                     : items.Where(cf);
                 if (tagSel != null) src = src.Where(x => TagsAll(x).Contains(tagSel));
                 if (engSel != null) src = src.Where(x => EngineOf(x) == engSel);
+                if (InpOn) src = src.Where(InpMatch);
                 items = SortWide(src);
             }
             else chipFocus = false;
@@ -669,16 +713,19 @@ namespace TkoolLauncher
             string engText = engSel == null ? "엔진 ▾" : engSel + "  ×";
             tagBtn = new Rectangle(lx, y, Math.Min(S(200), Draw.Measure(g, tagText, font) + S(32)), h);
             engBtn = new Rectangle(tagBtn.Right + S(10), y, Math.Min(S(200), Draw.Measure(g, engText, font) + S(32)), h);
-            foreach (var bt in new[] { tagBtn, engBtn })
+            string inpText = InpLabel();
+            inpBtn = new Rectangle(engBtn.Right + S(10), y, Math.Min(S(220), Draw.Measure(g, inpText, font) + S(32)), h);
+            foreach (var bt in new[] { tagBtn, engBtn, inpBtn })
             {
-                bool set = bt == tagBtn ? tagSel != null : engSel != null;
+                bool set = bt == tagBtn ? tagSel != null : bt == engBtn ? engSel != null : InpOn;
                 if (set) Draw.Fill(g, bt, h / 2, orange);
                 else using (var pen = new Pen(orange, Math.Max(1, S(2)))) g.DrawPath(pen, Theme.Round(bt, h / 2));
-                Draw.Text(g, bt == tagBtn ? tagText : engText, font, bt, set ? Color.White : orange, Draw.Center);
+                Draw.Text(g, bt == tagBtn ? tagText : bt == engBtn ? engText : inpText, font, bt, set ? Color.White : orange, Draw.Center | TextFormatFlags.EndEllipsis);
             }
-            if (chipFocus && extraSel == -2 && Shell.ShowFocus) Draw.FocusGlow(g, tagBtn, h / 2);
-            if (chipFocus && extraSel == -1 && Shell.ShowFocus) Draw.FocusGlow(g, engBtn, h / 2);
-            lx = engBtn.Right + S(14);
+            if (chipFocus && extraSel == -3 && Shell.ShowFocus) Draw.FocusGlow(g, tagBtn, h / 2);
+            if (chipFocus && extraSel == -2 && Shell.ShowFocus) Draw.FocusGlow(g, engBtn, h / 2);
+            if (chipFocus && extraSel == -1 && Shell.ShowFocus) Draw.FocusGlow(g, inpBtn, h / 2);
+            lx = inpBtn.Right + S(14);
             // 3) 칩 칸
             chipArea = new Rectangle(lx, y - S(4), rx - S(14) - lx, h + S(8));
             if (chipRects.Length != chips.Count) chipRects = new Rectangle[chips.Count];
@@ -826,7 +873,7 @@ namespace TkoolLauncher
                     if (chipFocus)
                     {
                         if (extraSel > 0) extraSel--;
-                        else if (extraSel < 0) extraSel = -2;
+                        else if (extraSel < 0) extraSel = Math.Max(-3, extraSel - 1);
                         else if (chipIdx > 0) PickChip(chipIdx - 1);
                         else extraSel = -1;    // 칸 맨 앞에서 왼쪽 → 엔진·태그 단추
                         Shell.Invalidate();
@@ -850,8 +897,9 @@ namespace TkoolLauncher
                 case Pad.LB: SetTab(tab - 1); break;
                 case Pad.RB: SetTab(tab + 1); break;
                 case Pad.A:
-                    if (chipFocus && extraSel == -2) { OpenTagPicker(); break; }
-                    if (chipFocus && extraSel == -1) { OpenEnginePicker(); break; }
+                    if (chipFocus && extraSel == -3) { OpenTagPicker(); break; }
+                    if (chipFocus && extraSel == -2) { OpenEnginePicker(); break; }
+                    if (chipFocus && extraSel == -1) { OpenInputFilter(); break; }
                     if (chipFocus && extraSel > 0) { var ex = Extras(); if (extraSel <= ex.Count) ex[extraSel - 1].Value(); break; }
                     if (chipFocus) { chipFocus = false; Shell.FocusChanged(); } else if (FocusedGame != null) OpenDetail(FocusedGame); break;
                 case Pad.B: Shell.Pop(); break;
@@ -866,6 +914,7 @@ namespace TkoolLauncher
             {
                 if (tagBtn.Contains(p)) { if (tagSel != null && p.X > tagBtn.Right - S(40)) { tagSel = null; OnGamesChanged(); } else OpenTagPicker(); return; }
                 if (engBtn.Contains(p)) { if (engSel != null && p.X > engBtn.Right - S(40)) { engSel = null; OnGamesChanged(); } else OpenEnginePicker(); return; }
+                if (inpBtn.Contains(p)) { if (InpOn && p.X > inpBtn.Right - S(40)) { inpSel = new[] { '-', '-', '-', '-' }; OnGamesChanged(); } else OpenInputFilter(); return; }
                 if (chipLeftR.Contains(p)) { chipScroll -= chipArea.Width * 2 / 3; Shell.Invalidate(); return; }
                 if (chipRightR.Contains(p)) { chipScroll += chipArea.Width * 2 / 3; Shell.Invalidate(); return; }
                 for (int i = 0; i < chipRects.Length; i++) if (chipRects[i].Contains(p) && chipArea.Contains(p)) { chipFocus = false; PickChip(i); return; }
@@ -1324,7 +1373,12 @@ namespace TkoolLauncher
             }
 
             Draw.Text(g, "정보", Draw.H2, new Rectangle(ix0, y0, S(300), S(30)), Theme.Text);
-            int y = y0 + S(42);
+            // 정보가 길어 밑으로 넘치면 위아래로 밀어 봄 (정보 칸만 잘라서 그림)
+            infoRect = new Rectangle(ix0 - S(6), y0 + S(38), infoW + S(12), bottom - (y0 + S(38)));
+            var oldClip = g.Clip;
+            g.SetClip(infoRect);
+            int y = y0 + S(42) - infoScroll;
+            int yStart = y;
             int bx = ix0;
             // 조작 방식 (맨 위): 패드·키보드·마우스·터치 — 누르면 직접 고치기
             {
@@ -1343,6 +1397,12 @@ namespace TkoolLauncher
                 if (inp.User) Draw.Badge(g, ref bx, y, "직접 고침", Color.FromArgb(70, 80, 96));
                 inputRect = new Rectangle(x0, y - S(4), ix0 + infoW - x0, S(34));
                 y += S(30); bx = ix0;
+                if (inp.Keys.Count > 0)
+                {
+                    string kt = "필요한 키: " + string.Join(" · ", inp.Keys) + (inp.Unmapped.Count > 0 ? "   (패드에 없음: " + string.Join(" · ", inp.Unmapped) + ")" : "");
+                    Draw.Text(g, kt, Draw.Small, new Rectangle(ix0, y - S(2), infoW, S(24)), inp.Unmapped.Count > 0 ? Color.FromArgb(230, 170, 90) : Theme.SubText, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+                    y += S(26);
+                }
                 if (inp.Note.Length > 0 && !inp.User)
                 {
                     Draw.Text(g, inp.Note, Draw.Small, new Rectangle(ix0, y - S(2), infoW, S(24)), Theme.SubText, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
@@ -1420,7 +1480,22 @@ namespace TkoolLauncher
             }
             Draw.Text(g, game.Folder, Draw.Small, new Rectangle(ix0, y, infoW, S(40)), Theme.SubText,
                 TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+            y += S(46);
+            g.Clip = oldClip;
+            int contentH = y - yStart, maxS = Math.Max(0, contentH - infoRect.Height);
+            if (infoScroll > maxS) infoScroll = maxS;
+            if (maxS > 0)
+            {
+                // 오른쪽 가는 막대로 남은 양 표시
+                int th = Math.Max(S(30), infoRect.Height * infoRect.Height / Math.Max(1, contentH));
+                int ty = infoRect.Y + (int)((infoRect.Height - th) * (infoScroll / (float)maxS));
+                Draw.Fill(g, new Rectangle(infoRect.Right - S(4), ty, S(4), th), S(2), Color.FromArgb(120, 255, 255, 255));
+            }
+            infoMax = maxS;
         }
+        Rectangle infoRect;
+        int infoScroll, infoMax, infoDragStart;
+        bool infoDrag;
 
         // ── 소개: 구글 번역 + 원문, 스크롤 ──
         Rectangle descRect, addTagRect, inputRect;
@@ -1532,12 +1607,13 @@ namespace TkoolLauncher
         int swipeDx, swipeDy;
         public override void OnDrag(int dx, int dy, bool start)
         {
-            if (start) { descDrag = descRect.Contains(DownAt); descDragStart = descScroll; swipeDx = swipeDy = 0; }
+            if (start) { descDrag = descRect.Contains(DownAt); infoDrag = !descDrag && infoRect.Contains(DownAt); infoDragStart = infoScroll; descDragStart = descScroll; swipeDx = swipeDy = 0; }
+            if (dx != int.MinValue && infoDrag && Math.Abs(dy) >= Math.Abs(dx)) { infoScroll = Math.Max(0, Math.Min(infoMax, infoDragStart - dy)); swipeDx = dx; swipeDy = dy; Shell.Invalidate(); return; }
             if (dx == int.MinValue)
             {
                 // 옆으로 크게 밀면 앞뒤 게임
                 if (!descDrag && Math.Abs(swipeDx) > S(140) && Math.Abs(swipeDx) > Math.Abs(swipeDy) * 2) Go(swipeDx < 0 ? 1 : -1);
-                descDrag = false; return;
+                descDrag = false; infoDrag = false; return;
             }
             swipeDx = dx; swipeDy = dy;
             if (descDrag && Math.Abs(dy) >= Math.Abs(dx)) { descScroll = descDragStart; ScrollDesc(-dy); }
@@ -1580,6 +1656,7 @@ namespace TkoolLauncher
             var dl = DlsiteInfo.Get(game);
             if (dl != null) add(dl.Name);
             foreach (var o in Ocr.Get(game)) add(o);   // 타이틀 화면에서 읽은 글자
+            foreach (var fn in GameScanner.FolderNames(game.Folder)) add(TitleTidy.Clean(fn, new List<string>()));   // 폴더 이름 (2중 폴더면 위 폴더도)
             var opts = new List<string>(c) { "✎ 직접 입력하기" };
             PickerScreen.Show(Shell, "이름 고치기", opts.ToArray(), c.IndexOf(game.Title), k =>
             {

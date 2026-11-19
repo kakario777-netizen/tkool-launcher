@@ -1272,6 +1272,29 @@ namespace TkoolLauncher
             }) { IsBackground = true }.Start();
         }
         volatile string lastBoxText = "";
+        readonly HashSet<IntPtr> minimizedConsoles = new HashSet<IntPtr>();
+        IntPtr fittedWin;
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int i);
+
+        /// <summary>창 모드인데 화면보다 큰 게임 창 → 비율 그대로 작업 영역에 맞춰 줄이고 가운데로 (한 창에 한 번)</summary>
+        void FitIfTooBig(IntPtr h)
+        {
+            try
+            {
+                WRECT r; if (!GetWindowRect(h, out r)) return;
+                int st = GetWindowLong(h, -16);
+                if ((st & 0x00C00000) != 0x00C00000) { fittedWin = h; return; }   // 제목 막대 없는 창(전체 화면)은 그대로
+                var wa = System.Windows.Forms.Screen.FromHandle(h).WorkingArea;
+                int w = r.R - r.L, hh = r.B - r.T;
+                if (w <= wa.Width + 4 && hh <= wa.Height + 4) { fittedWin = h; return; }
+                double k = Math.Min(wa.Width / (double)w, wa.Height / (double)hh);
+                int nw = (int)(w * k), nh = (int)(hh * k);
+                SetWindowPos(h, IntPtr.Zero, wa.X + (wa.Width - nw) / 2, wa.Y + (wa.Height - nh) / 2, nw, nh, 0x0004 | 0x0010);   // NOZORDER | NOACTIVATE
+                fittedWin = h;
+                Log.Info("화면보다 큰 게임 창을 맞춤: " + w + "x" + hh + " → " + nw + "x" + nh);
+            }
+            catch { }
+        }
 
         /// <summary>메시지 상자 제목 + 안 글</summary>
         static string BoxText(IntPtr h, string title)
@@ -1358,7 +1381,7 @@ namespace TkoolLauncher
                 if (lib == null) { healthBusy = false; return; }
                 Task.Run(() =>
                 {
-                    GameInfo attach = null; string problem = null, boxText = ""; bool hung = false, anyWin = false;
+                    GameInfo attach = null; string problem = null, boxText = ""; bool hung = false, anyWin = false; var consoles = new List<IntPtr>();
                     IntPtr bigWin = IntPtr.Zero; int bigArea = 0;
                     try
                     {
@@ -1384,13 +1407,15 @@ namespace TkoolLauncher
                                 if (!pids.TryGetValue(wp, out mine)) { mine = GameWatch.InDir((int)wp, dir); pids[wp] = mine; }
                                 var cls = new System.Text.StringBuilder(64); GetClassName(h, cls, 64);
                                 var tt = new System.Text.StringBuilder(256); GetWindowText(h, tt, 256);
+                                if (mine && cls.ToString() == "ConsoleWindowClass") { consoles.Add(h); return true; }   // 모드 로더(BepInEx 등) 글자 창 — 게임 창 아님
                                 if (mine)
                                 {
                                     anyWin = true;
                                     WRECT wr;
-                                    if (GetWindowRect(h, out wr)) { int ar = (wr.R - wr.L) * (wr.B - wr.T); if (ar > bigArea) { bigArea = ar; bigWin = h; } }
+                                    if (cls.ToString() != "#32770" && GetWindowRect(h, out wr)) { int ar = (wr.R - wr.L) * (wr.B - wr.T); if (ar > bigArea) { bigArea = ar; bigWin = h; } }
                                     if (IsHungAppWindow(h)) hung = true;
-                                    if (cls.ToString() == "#32770" && tt.Length > 0)
+                                    if (cls.ToString() == "#32770" && tt.Length > 0 && GameCapture.IsConfigDialog(h)) { }   // 시작 전 설정(해상도) 창은 오류 아님
+                                    else if (cls.ToString() == "#32770" && tt.Length > 0)
                                     {
                                         string bt = BoxText(h, tt.ToString());
                                         if (!tk || Fixer.CanFix(g, bt)) { problem = "게임에 오류 창이 떴어요: " + tt; boxText = bt; }
@@ -1418,6 +1443,12 @@ namespace TkoolLauncher
                             if (PlayingGame == null) return;
                             // 런처로 켠 게임인데 게임 창이 15초 넘게 하나도 없으면(뒤에 남은 프로그램 때문에 안 끝나는 경우) 끝난 걸로
                             noWinCount = anyWin ? 0 : noWinCount + 1;
+                            // 게임 본 창이 떴으면: 뒤에 남은 글자 창(콘솔)은 내리고, 화면보다 큰 창은 화면에 맞춤
+                            if (bigWin != IntPtr.Zero && IsWindowVisible(bigWin))
+                            {
+                                foreach (var c in consoles) if (!minimizedConsoles.Contains(c)) { minimizedConsoles.Add(c); ShowWindow(c, 6); Log.Info("게임 뒤 글자 창 내림"); }
+                                if (bigWin != fittedWin) FitIfTooBig(bigWin);
+                            }
                             if (anyWin && curtain)
                             {
                                 if (!curtainSeen) { curtainSeen = true; Invalidate(); CenterGameWin(bigWin); if (!Settings.TaskbarInGame) TaskbarHide.Hide(); }

@@ -12,7 +12,7 @@ namespace TkoolLauncher
     static class InputNeeds
     {
         public static readonly string[] Names = { "패드", "키보드", "마우스", "터치" };
-        public class Result { public char[] S = { '?', '?', '?', '?' }; public bool User; public string Note = ""; public bool PadByLauncher; }
+        public class Result { public char[] S = { '?', '?', '?', '?' }; public bool User; public string Note = ""; public bool PadByLauncher; public List<string> Keys = new List<string>(), Unmapped = new List<string>(); }
 
         static Dictionary<string, string> user;
         static readonly Dictionary<string, Result> mem = new Dictionary<string, Result>();
@@ -94,6 +94,23 @@ namespace TkoolLauncher
                 else if (Has(@"マウス\s*(にも|も)?\s*対応|마우스\s*(도\s*)?지원|mouse\s*support")) Set(r, 2, 'o');
                 if (Has(@"キーボード\s*(必須|のみ|専用|が必要)|키보드\s*(필수|전용|만)|keyboard\s*(only|required)")) r.S[1] = 'n';
                 if (Has(@"タッチ\s*(操作)?\s*(対応|可能)|터치\s*(지원|가능)|touch\s*(support|screen)")) Set(r, 3, 'o');
+            }
+            // 읽어보기에 적힌 키 (A키·Sキー·F5·Shift 등) — 런처 패드 변환에 없는 키는 따로
+            if (t.Length > 0)
+            {
+                var found = new List<string>();
+                foreach (Match m in Regex.Matches(t, @"(?<![a-z0-9])([a-z])\s*(?:キー|key|키)|\b(f\d{1,2})\b|(shift|ctrl|alt|space|スペース|スペースキー|enter|esc|escape|tab|page ?up|page ?down|pgup|pgdn|home|end|delete|insert|backspace|テンキー|数字キー|숫자 ?키|ins|del)(?:\s*(?:キー|key|키))?"))
+                {
+                    string k = (m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Success ? m.Groups[2].Value : m.Groups[3].Value).Trim();
+                    k = k.Replace("スペースキー", "space").Replace("スペース", "space").Replace("escape", "esc").Replace("pgup", "page up").Replace("pgdn", "page down");
+                    k = k.Length == 1 || k.StartsWith("f") && k.Length <= 3 ? k.ToUpperInvariant() : char.ToUpperInvariant(k[0]) + k.Substring(1);
+                    if (!found.Contains(k) && found.Count < 14) found.Add(k);
+                }
+                r.Keys = found;
+                // 런처가 패드로 보내는 키: Z X Shift Esc Q W Enter 방향키 (2000~VX Ace만)
+                var mapped = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Z", "X", "Shift", "Esc", "Q", "W", "Enter", "Space", "C" };
+                r.Unmapped = r.PadByLauncher ? found.Where(k => !mapped.Contains(k)).ToList() : new List<string>();
+                if (r.Unmapped.Count > 0 && r.S[1] != 'n') r.Note = "읽어보기에 패드로 안 바뀌는 키가 있어요: " + string.Join(" · ", r.Unmapped);
             }
             return r;
         }

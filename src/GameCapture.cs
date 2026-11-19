@@ -20,6 +20,7 @@ namespace TkoolLauncher
     static class GameCapture
     {
         [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
         delegate bool EnumProc(IntPtr h, IntPtr l);
         [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr l);
         [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr p, EnumProc f, IntPtr l);
@@ -38,6 +39,79 @@ namespace TkoolLauncher
             errNow.Clear();
         }
 
+        // ───────── 시작 전 설정 창 (해상도·창 모드 고르기: Unity·울프·쯔꾸르 설정기 등) ─────────
+        [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
+        [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+        static readonly System.Text.RegularExpressions.Regex CfgWords = new System.Text.RegularExpressions.Regex(@"(?i)config|setting|resolution|screen|full ?screen|windowed|graphics|quality|display|play!|launcher|設定|コンフィグ|解像度|画面|フルスクリーン|ウィンドウ|起動|ゲーム開始|해상도|설정|화면|창 모드|전체 화면");
+        static readonly System.Text.RegularExpressions.Regex ErrWords = new System.Text.RegularExpressions.Regex(@"(?i)error|exception|failed|not found|missing|required|cannot|can't|unable|エラー|見つかりません|失敗|必要です|できません|오류|실패|없습니다|필요|예외");
+        static readonly System.Text.RegularExpressions.Regex OkBtn = new System.Text.RegularExpressions.Regex(@"(?i)^&?(play!?|ok|start|launch|起動|開始|ゲーム開始|ゲームスタート|スタート|決定|確定|実行|はい|게임 ?시작|시작|확인)");
+
+        static string AllText(IntPtr h)
+        {
+            var sb = new StringBuilder();
+            var tt = new StringBuilder(256); GetWindowText(h, tt, 256); sb.Append(tt).Append('\n');
+            EnumChildWindows(h, (c, l2) => { var t = new StringBuilder(256); GetWindowText(c, t, 256); if (t.Length > 0) sb.Append(t).Append('\n'); return true; }, IntPtr.Zero);
+            return sb.ToString();
+        }
+
+        /// <summary>게임 본 창 전에 뜨는 설정(해상도 고르기) 창인지 — 오류 글이 없고 설정 낱말이 있는 대화상자·작은 창</summary>
+        public static bool IsConfigDialog(IntPtr h)
+        {
+            try
+            {
+                var cls = new StringBuilder(64); GetClassName(h, cls, 64);
+                string t = AllText(h);
+                if (ErrWords.IsMatch(t)) return false;
+                if (!CfgWords.IsMatch(t)) return false;
+                GetWindowRect(h, out RECT r);
+                bool small = (r.R - r.L) < 900 && (r.B - r.T) < 700;
+                return cls.ToString() == "#32770" || small;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>설정 창 넘기기: "Play!/OK/起動/시작" 단추를 누르고, 없으면 Enter</summary>
+        public static void AcceptConfig(IntPtr h)
+        {
+            IntPtr btn = IntPtr.Zero;
+            EnumChildWindows(h, (c, l2) =>
+            {
+                var cls = new StringBuilder(32); GetClassName(c, cls, 32);
+                if (!cls.ToString().StartsWith("Button") && !cls.ToString().Contains("BUTTON")) return true;
+                var t = new StringBuilder(64); GetWindowText(c, t, 64);
+                if (IsWindowVisible(c) && OkBtn.IsMatch(t.ToString().Trim())) { btn = c; return false; }
+                return true;
+            }, IntPtr.Zero);
+            if (btn != IntPtr.Zero) { SendMessage(btn, 0x00F5, IntPtr.Zero, IntPtr.Zero); Log.Info("설정 창 넘김(단추): " + AllText(h).Split('\n')[0]); return; }   // BM_CLICK
+            PostMessage(h, 0x0100, (IntPtr)0x0D, IntPtr.Zero); PostMessage(h, 0x0101, (IntPtr)0x0D, IntPtr.Zero);   // Enter
+            Log.Info("설정 창 넘김(Enter): " + AllText(h).Split('\n')[0]);
+        }
+
+        /// <summary>게임 폴더 프로그램의 본 창 찾기 (앞 창이 아니어도) — 설정 창이면 넘기고 다음 창을 기다림</summary>
+        public static IntPtr FindGameWin(string dir, bool acceptConfig = true)
+        {
+            IntPtr fg = GetForegroundWindow(), best = IntPtr.Zero, cfg = IntPtr.Zero;
+            long bestArea = 0;
+            EnumWindows((h, l) =>
+            {
+                if (!IsWindowVisible(h)) return true;
+                GetWindowThreadProcessId(h, out uint pid);
+                if (!GameWatch.InDir((int)pid, dir)) return true;
+                var cls = new StringBuilder(64); GetClassName(h, cls, 64);
+                if (cls.ToString() == "ConsoleWindowClass") return true;
+                if (IsConfigDialog(h)) { cfg = h; return true; }
+                if (cls.ToString() == "#32770") return true;   // 메시지 상자
+                GetWindowRect(h, out RECT r);
+                long area = (long)(r.R - r.L) * (r.B - r.T);
+                if (r.R - r.L < 240 || r.B - r.T < 180) return true;
+                if (h == fg) area *= 4;   // 앞 창이면 먼저
+                if (area > bestArea) { bestArea = area; best = h; }
+                return true;
+            }, IntPtr.Zero);
+            if (best == IntPtr.Zero && cfg != IntPtr.Zero && acceptConfig) AcceptConfig(cfg);
+            return best;
+        }
+
         static string ErrorText(string dir, string exe)
         {
             var sb = new StringBuilder();
@@ -52,6 +126,7 @@ namespace TkoolLauncher
                 GetWindowThreadProcessId(h, out uint pid);
                 bool mine = GameWatch.InDir((int)pid, dir) || (exeName.Length > 0 && tt.ToString().ToLowerInvariant().StartsWith(exeName)) || Fixer.IsGameSysErr(tt.ToString(), dir);
                 if (!mine || errSeen.Contains(h)) return true;
+                if (IsConfigDialog(h)) return true;   // 해상도·설정 고르는 창은 오류가 아님 (FindGameWin이 넘겨 줌)
                 errNow.Add(h);
                 sb.Append(tt).Append('\n');
                 EnumChildWindows(h, (c, l2) => { var t = new StringBuilder(512); GetWindowText(c, t, 512); if (t.Length > 2) sb.Append(t).Append('\n'); return true; }, IntPtr.Zero);
@@ -81,7 +156,8 @@ namespace TkoolLauncher
         {
             IntPtr fg = GetForegroundWindow();
             GetWindowThreadProcessId(fg, out uint pid);
-            return GameWatch.InDir((int)pid, GameWatch.Dir) ? fg : IntPtr.Zero;
+            if (GameWatch.InDir((int)pid, GameWatch.Dir)) return fg;
+            return GameWatch.Dir != null ? FindGameWin(GameWatch.Dir, false) : IntPtr.Zero;   // 앞 창이 아니어도 (VX Ace 등)
         }
 
         /// <summary>게임 켠 뒤 불러줌: 필요할 때만 몇 번 시도</summary>
@@ -321,10 +397,9 @@ namespace TkoolLauncher
                             System.Threading.Thread.Sleep(1000);
                             err = ErrorText(dir, g.Exe);
                             if (err.Length > 0) break;          // 오류 창 → 아래에서 고침
-                            IntPtr fg = GetForegroundWindow();
-                            GetWindowThreadProcessId(fg, out uint pid);
-                            if (GameWatch.InDir((int)pid, dir)) w = fg;
+                            w = FindGameWin(dir);   // 설정(해상도) 창이 먼저 뜨면 넘기고 본 창까지 기다림
                         }
+                        if (w != IntPtr.Zero && GetForegroundWindow() != w) { try { SetForegroundWindow(w); } catch { } System.Threading.Thread.Sleep(400); }
                         if (err.Length == 0 && w != IntPtr.Zero)
                         {
                             System.Threading.Thread.Sleep(1500);

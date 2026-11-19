@@ -86,3 +86,11 @@
 - 검색 내역: WebInfo가 끝날 때 사이트별 검색 횟수·접속 오류 수와 마지막 오류 글을 "런처가 한 일"에 남김(너무 빨리 끝나는지 확인용). itch.io는 영문 글자가 있는 이름만 검색.
 - 런처가 한 일 자세히: Activity.Detail(key, 줄)로 일마다 자세한 줄을 모아 Done 때 기록에 붙임(web 게임별 찾은 곳·찾아본 이름, name 바뀐 이름·출처, dlsite 채운 게임, cover 찍음/건너뛴 이유, 검색 내역 설명). 기록은 logs\activity.txt에 최근 300개 남김(게임 계속 늘어남), 목록 줄 끝 "›"면 자세히 있음 → 누르면 Shell/TextScreen(줄바꿈·위아래 밀기·LB/RB 쪽 넘김·B 닫으면 목록으로).
 - 다른 사이트 다시 찾기: 못 찾음 표시 판 v3(자세한 기록 생겨서 한 번 더). 설정 "빈 정보 지금 찾기"는 WebInfo.ResetNotFound(.none 전부 지움)로 전에 못 찾은 게임까지 처음부터 다시. "새로 찾을 게임 없음" = 전부 이미 찾아봤다는 뜻.
+- 패드 반응: Gamepad.PollLoop 별도 스레드가 8ms마다 XInput 읽고 눌림(edge)을 모아 둠 → UI 타이머(33ms, 쉴 땐 150ms)가 live|edges로 처리(화면이 바빠도·짧게 눌러도 안 씹힘). ReadPad는 이 스레드에서만.
+- 시작 전 설정 창(해상도·창 모드 고르기): GameCapture.IsConfigDialog(오류 낱말 없고 설정 낱말 있는 #32770·작은 창)·AcceptConfig(Play!/OK/起動/시작 단추 BM_CLICK, 없으면 Enter)·FindGameWin(게임 폴더 프로그램의 가장 큰 보이는 창, 앞 창이 아니어도 — VX Ace 못 알아보던 것, 설정 창이면 넘기고 다음 창 기다림). ErrorText·Track·GameDoctor.Watch는 설정 창을 오류로 안 봄. 표지 찍기는 FindGameWin으로 창 찾고 앞으로 가져옴.
+- 플레이 중: 게임 폴더의 콘솔 창(ConsoleWindowClass — BepInEx 등 영어 글 주루룩)은 게임 본 창이 뜨면 내림(최소화), bigWin에서 콘솔·메시지 상자 뺌. 제목 막대 있는 창이 작업 영역보다 크면 비율 그대로 줄여 가운데(FitIfTooBig, 창마다 한 번).
+- 2중 폴더 이름: GameScanner.FolderName — system·game·bin·data·www·x64·한글·ver… 같은 하위 폴더면 위 폴더 이름(2단계까지), 이름 바꾸기 후보에 FolderNames(위 두 단계). NameFinder·WebInfo 폴더 이름도 이걸로.
+- RTP 자동 설치: GameDoctor.RtpAuto(오류 글에 rtp — VX Ace/VX/XP 판단) → s3.amazonaws.com/degica-downloads/RPGVXAce_RTP.zip(공식 rpgmakerweb 배포, VX·XP 주소는 추정) 받아 Expand-Archive → Setup.exe /VERYSILENT, 실패면 RTP 페이지. Fixer.Fixable에 포함(표지 찍기·플레이 중 자동).
+- 조작 필터: 쯔꾸르 탭 주황 단추 "조작 ▾"(태그·엔진 옆, 패드 extraSel -1, 엔진 -2, 태그 -3) → 패드·키보드·마우스·터치마다 상관없음/됨/꼭 필요/안 됨/모름 차례로 고르고 "이대로 보기"(LibraryScreen.inpSel, InpMatch).
+- 필요한 키: InputNeeds가 읽어보기의 "A키·Sキー·F5·Shift·Space…"를 모아 Keys, 2000~Ace인데 런처 패드 변환(Z X Shift Esc Q W Enter)에 없는 키는 Unmapped → 상세 정보 조작 줄 아래 "필요한 키: … (패드에 없음: …)" 주황.
+- 상세 정보 칸 스크롤: DetailScreen 정보 칸을 잘라 그리고(infoRect) 넘치면 위아래 밀기(infoScroll), 오른쪽 가는 막대.

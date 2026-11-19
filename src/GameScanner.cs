@@ -58,6 +58,38 @@ namespace TkoolLauncher
 
     static class GameScanner
     {
+        // 게임 폴더 안 "system"·"game"·"bin" 같은 이름의 하위 폴더에 실행 파일이 있으면 위 폴더 이름을 씀 (2단계까지)
+        static readonly System.Text.RegularExpressions.Regex GenericDir = new System.Text.RegularExpressions.Regex(@"(?i)^(system|game|games|bin|data|www|win|windows|win32|win64|x64|x86|release|app|program|files|exe|play|start|launcher|main|content|resources?|kr|jp|ja|en|eng|english|korean|japanese|日本語|한글|한글판|patch|game_?data|ゲーム|본편|실행|실행파일|新しいフォルダー?|새 폴더|desktop|ver[\d.]*|v[\d.]+|\d+)$");
+        public static string FolderName(string dir)
+        {
+            try
+            {
+                string d = (dir ?? "").TrimEnd('\\', '/');
+                string name = Path.GetFileName(d);
+                for (int i = 0; i < 2 && name != null && GenericDir.IsMatch(name.Trim()); i++)
+                {
+                    string up = Path.GetDirectoryName(d);
+                    if (string.IsNullOrEmpty(up) || Path.GetPathRoot(up) == up) break;
+                    d = up; name = Path.GetFileName(d);
+                }
+                return name;
+            }
+            catch { return Path.GetFileName(dir); }
+        }
+
+        /// <summary>이름 고르기 후보: 게임 폴더와 그 위 두 단계 폴더 이름</summary>
+        public static List<string> FolderNames(string dir)
+        {
+            var l = new List<string>();
+            try
+            {
+                string d = (dir ?? "").TrimEnd('\\', '/');
+                for (int i = 0; i < 3 && !string.IsNullOrEmpty(d) && Path.GetPathRoot(d) != d; i++) { string n = Path.GetFileName(d); if (!string.IsNullOrEmpty(n) && !l.Contains(n)) l.Add(n); d = Path.GetDirectoryName(d); }
+            }
+            catch { }
+            return l;
+        }
+
         // ── 지난 목록 저장 (켤 때 바로 보여 주고, 폴더 검사는 뒤에서) cache\library.txt ──
         static string CachePath => Path.Combine(Settings.Dir, "cache", "library.txt");
         static string E(string v) => (v ?? "\u0001").Replace("\\", "\\\\").Replace("\t", "\\t").Replace("\n", "\\n").Replace("\r", "");
@@ -246,7 +278,7 @@ namespace TkoolLauncher
             return new GameInfo
             {
                 Kind = GameKind.Pc, Folder = dir, InstallDir = dir, Exe = exe, Manual = true,
-                Title = PrettyName(Path.GetFileName(dir) is string f && f.Length > 0 ? f : Path.GetFileNameWithoutExtension(exe)),
+                Title = PrettyName(FolderName(dir) is string f && f.Length > 0 ? f : Path.GetFileNameWithoutExtension(exe)),
             };
         }
 
@@ -296,7 +328,7 @@ namespace TkoolLauncher
             var g = new GameInfo { Folder = dir, Exe = exe, Version = TkoolVersion.RM2000 };
             string ini = TextDecode.ReadFile(Path.Combine(dir, "RPG_RT.ini"), out TextLang lang);
             string title = TextDecode.IniValue(ini, "RPG_RT", "GameTitle");
-            g.Title = Clean(title) ?? Path.GetFileName(dir);
+            g.Title = Clean(title) ?? FolderName(dir);
             g.Japanese = IsJapanese(lang, g.Title, dir);
 
             // FullPackageFlag=1 이면 RTP 없이 돌아가도록 다 들어있는 게임
@@ -326,7 +358,7 @@ namespace TkoolLauncher
             if (exe == null) return null;
 
             var g = new GameInfo { Folder = dir, Exe = exe, Version = v };
-            g.Title = Clean(TextDecode.IniValue(iniText, "Game", "Title")) ?? Path.GetFileName(dir);
+            g.Title = Clean(TextDecode.IniValue(iniText, "Game", "Title")) ?? FolderName(dir);
             g.Japanese = IsJapanese(lang, g.Title, dir);
 
             // RTP=, RTP1= 값이 비어있지 않으면 RTP 필요
@@ -359,7 +391,7 @@ namespace TkoolLauncher
                              ?? TextDecode.ReadFile(Path.Combine(baseDir, "package.json"), out _);
                 title = TextDecode.JsonString(pkg, "title");
             }
-            g.Title = Clean(title) ?? Path.GetFileName(dir);
+            g.Title = Clean(title) ?? FolderName(dir);
 
             string locale = TextDecode.JsonString(sys, "locale") ?? "";
             var tl = TextDecode.LangOf(g.Title);

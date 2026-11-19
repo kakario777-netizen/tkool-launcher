@@ -192,7 +192,7 @@ namespace TkoolLauncher
             string id = GameData.IdOf(g);
             lock (found) { LoadFound(); if (found.ContainsKey(id)) return; }
             var names = new List<string>();
-            foreach (var s in new[] { g.RawTitle, TitleTidy.Clean(g.RawTitle ?? "", new List<string>()), TitleTidy.Clean(Path.GetFileName(g.Folder ?? ""), new List<string>()) })
+            foreach (var s in new[] { g.RawTitle, TitleTidy.Clean(g.RawTitle ?? "", new List<string>()), TitleTidy.Clean(GameScanner.FolderName(g.Folder) ?? "", new List<string>()) })
                 if (!string.IsNullOrWhiteSpace(s) && Foreign(s) && !names.Contains(s.Trim()) && !Meaningless(g, s) && Norm(s).Length >= 2) names.Add(s.Trim());
             if (names.Count > 0) Interlocked.Increment(ref statSearched);
             foreach (var name in names.Take(2))
@@ -283,7 +283,7 @@ namespace TkoolLauncher
         /// <summary>폴더 이름(정리한 것)이 한글이고 뜻이 있으면 그 이름</summary>
         static string KoreanFolderName(GameInfo g)
         {
-            string folder = Path.GetFileName((g.Folder ?? "").TrimEnd('\\', '/'));
+            string folder = GameScanner.FolderName(g.Folder) ?? "";
             string c = TitleTidy.Clean(folder, new List<string>());
             if (string.IsNullOrWhiteSpace(c) || !Hangul.IsMatch(c) || Meaningless(g, c) || BadName(c)) return null;
             return c.Trim();
@@ -349,7 +349,7 @@ namespace TkoolLauncher
                 string c;
                 if (g.Exe != null && found.TryGetValue(GameData.IdOf(g), out c)) return c;
             }
-            foreach (var s in new[] { g.RawTitle, g.Title, Path.GetFileName(g.Folder ?? "") })
+            foreach (var s in new[] { g.RawTitle, g.Title, GameScanner.FolderName(g.Folder) ?? "" })
             {
                 if (string.IsNullOrEmpty(s)) continue;
                 var m = CodeAny.Match(s);

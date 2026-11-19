@@ -100,7 +100,7 @@ namespace TkoolLauncher
             var l = new List<string>();
             var src = new List<string>();
             try { src.AddRange(GameIdent.InnerNames(g)); } catch { }   // 게임 안 진짜 이름 먼저 (올린 사람이 바꾸지 않는 것)
-            src.AddRange(new[] { g.RawTitle, TitleTidy.Clean(g.RawTitle ?? "", new List<string>()), g.Title, TitleTidy.Clean(Path.GetFileName((g.Folder ?? "").TrimEnd('\\', '/')), new List<string>()) });
+            src.AddRange(new[] { g.RawTitle, TitleTidy.Clean(g.RawTitle ?? "", new List<string>()), g.Title, TitleTidy.Clean(GameScanner.FolderName(g.Folder) ?? "", new List<string>()) });
             foreach (var s in src)
             {
                 if (string.IsNullOrWhiteSpace(s)) continue;
