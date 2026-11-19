@@ -62,6 +62,22 @@ namespace TkoolLauncher
             if (low.Length == 0) return list;
             try { var d = GameDoctor.DxIssue(low); if (d != null) list.Add(d); } catch { }
             try { var v = GameDoctor.VcIssue(g, low); if (v != null) list.Add(v); } catch { }
+            // 일본어가 한국어로 깨진 오류 창(긁갉긁…) → 일본어 환경으로 켜기
+            string jp = JpLocale.Unmangle(text);
+            if (jp != null && g != null && !JpLocale.Has(g))
+                list.Add(new GameDoctor.Issue
+                {
+                    Title = "일본어 글자가 깨져서 생긴 오류 (" + g.Title + ")",
+                    Explain = "한국어 윈도우라 게임이 일본어 파일 이름을 못 읽었어요 (원래 글: " + jp.Replace("\n", " ") + "). 이 게임은 일본어 환경으로 켜게 할게요.",
+                    FixLabel = "일본어 환경으로 켜기",
+                    Fix = () =>
+                    {
+                        Log.Info("깨진 글 원문: " + jp.Replace("\n", " / "));
+                        if (!JpLocale.Ensure()) return "일본어 환경 도구(Locale Emulator)를 받지 못했어요";
+                        JpLocale.Set(g, true);
+                        return "이 게임은 이제 일본어 환경으로 켜요";
+                    },
+                });
             return list;
         }
 
@@ -100,6 +116,8 @@ namespace TkoolLauncher
         /// <summary>고칠 방법을 모르는 오류는 기록만 (런처가 한 일 + 로그) — 사용자가 보여주면 고칠 수 있게</summary>
         public static void NoteUnknown(GameInfo g, string text)
         {
+            string jp = JpLocale.Unmangle(text);
+            if (jp != null) text += "\n(원래 일본어: " + jp + ")";
             text = (text ?? "").Replace("\r", "").Replace("\n", " / ").Trim();
             if (text.Length == 0) return;
             Activity.Note("모르는 오류 · " + (g != null ? g.Title : "") + " — " + text);

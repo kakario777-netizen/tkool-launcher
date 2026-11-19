@@ -1669,6 +1669,7 @@ namespace TkoolLauncher
                 st.Hidden ? "다시 보이기 (숨김 풀기)" : "숨기기",
                 "게임 위치 열기 (탐색기)",
                 "창 모양: " + wins[Math.Max(0, Math.Min(1, st.WinMode))],
+                "일본어 환경으로 켜기: " + (JpLocale.Has(game) ? "켬" : "끔"),
             };
             PickerScreen.Show(Shell, game.Title, opts, -1, i =>
             {
@@ -1697,6 +1698,14 @@ namespace TkoolLauncher
                     case 7:
                         PickerScreen.Show(Shell, "창 모양", wins, st.WinMode, k => { st.WinMode = k; GameData.Save(); },
                             "꽉 찬 창: 테두리 없이 작업 표시줄만 남기고 화면을 채움 (다음 실행부터)");
+                        break;
+                    case 8:
+                        {
+                            var g8 = game; bool on = !JpLocale.Has(g8);
+                            JpLocale.Set(g8, on);
+                            Shell.ShowToast(on ? "다음부터 일본어 환경으로 켜요 (글자 깨짐·파일 못 찾음 오류용)" : "일본어 환경을 껐어요", 3000);
+                            if (on) new System.Threading.Thread(() => JpLocale.Ensure()) { IsBackground = true }.Start();
+                        }
                         break;
                 }
             });

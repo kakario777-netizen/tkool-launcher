@@ -542,7 +542,7 @@ namespace TkoolLauncher
                         }, IntPtr.Zero);
                         if (sec >= 9999) return;
                         // dll 없음(Visual C++ 런타임) 창이면 바로 알려 줌 (창을 닫을 때까지 안 기다림)
-                        if (box && (VcDll.IsMatch(seen) || DxDll.IsMatch(seen))) { Log.Info("런타임 없음: " + seen.Replace("\n", " / ")); onProblem(seen, true); return; }
+                        if (box && (VcDll.IsMatch(seen) || DxDll.IsMatch(seen) || JpLocale.Unmangle(seen) != null)) { Log.Info("런타임 없음: " + seen.Replace("\n", " / ")); onProblem(seen, true); return; }
                         if (sec > 15 && !box) return;   // 잘 켜졌음
                         if (sec > 600) return;
                     }
