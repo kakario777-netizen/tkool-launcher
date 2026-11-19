@@ -1513,7 +1513,7 @@ namespace TkoolLauncher
             coverFor = g;
             coverTip?.Close();
             coverTip = new OverlayTip();
-            coverTip.SetText("표지로 쓸 화면에서 Y를 빠르게 두 번 누르세요  ·  그만두기: AYA 버튼");
+            coverTip.SetText("표지로 쓸 화면에서 Y를 빠르게 두 번 누르세요 (찍히면 길게 드르륵, 실패면 짧게 세 번)  ·  그만두기: AYA 버튼");
             coverTip.Show();
             Gamepad.DoubleY = () => { try { BeginInvoke(new Action(TakeManualCover)); } catch { } };
             Log.Info("표지 직접 찍기 시작: " + g.Title);
@@ -1539,7 +1539,7 @@ namespace TkoolLauncher
             {
                 bool ok2 = false;
                 try { ok2 = GameCapture.ShotNow(g, true); } catch (Exception ex) { Log.Error("다시 찍기", ex); }
-                if (!ok2) { coverTip?.SetText("찍지 못했어요 — 게임 화면이 앞에 있을 때 다시 Y 두 번"); return; }
+                if (!ok2) { Gamepad.Buzz(70, 3); coverTip?.SetText("찍지 못했어요: " + GameCapture.LastShotProblem + "  ·  Y 두 번 다시"); return; }
                 var d = retakeDone; retakeDone = null;
                 EndManualCover("다시 찍었어요 — 확인 목록으로 돌아가요");
                 GameCapture.KillDir(g.InstallDir ?? g.Folder);   // 게임 끄고 확인 목록으로
@@ -1548,8 +1548,9 @@ namespace TkoolLauncher
             }
             bool ok = false;
             try { ok = GameCapture.ShotNow(g); } catch (Exception ex) { Log.Error("표지 찍기", ex); }
-            if (!ok) { coverTip?.SetText("찍지 못했어요: " + GameCapture.LastShotProblem + "  ·  Y 두 번 다시"); return; }
+            if (!ok) { Gamepad.Buzz(70, 3); coverTip?.SetText("찍지 못했어요: " + GameCapture.LastShotProblem + "  ·  Y 두 번 다시"); return; }
             Log.Info("표지 직접 찍음: " + g.Title);
+            Gamepad.Buzz(350);
             EndManualCover("표지로 저장했어요 — 화면 글자로 이름도 찾아볼게요");
             RefreshLists();
             // 같은 화면에서 게임 이름 글자 읽기 (이름이 뜻 없음·외국어면 넣음, 후보는 이름 바꾸기 메뉴에)

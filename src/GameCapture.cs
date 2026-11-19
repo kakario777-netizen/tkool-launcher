@@ -481,12 +481,38 @@ namespace TkoolLauncher
             IntPtr w = GameWindow();
             if (w == IntPtr.Zero)
             {
+                // 런처가 게임을 못 붙잡았어도, 지금 앞에 있는 게 런처가 아니면 그 창을 게임으로 보고 찍음
+                IntPtr fg0 = GetForegroundWindow(); uint fp0; GetWindowThreadProcessId(fg0, out fp0);
+                if (fg0 != IntPtr.Zero && fp0 != (uint)System.Diagnostics.Process.GetCurrentProcess().Id)
+                {
+                    Log.Info("표지 찍기: 게임 창을 못 붙잡아 앞 창으로 찍음 · " + (GameWatch.PathOf((int)fp0) ?? "?") + " · 게임 폴더=" + (GameWatch.Dir ?? "(없음)"));
+                    w = fg0;
+                }
+            }
+            if (w == IntPtr.Zero)
+            {
                 IntPtr fg = GetForegroundWindow(); GetWindowThreadProcessId(fg, out uint fp);
                 LastShotProblem = "게임 창을 못 찾았어요 (런처가 아는 게임 폴더와 앞 창 프로그램이 달라요)";
                 Log.Info("표지 찍기 실패: 창 없음 · 게임 폴더=" + (GameWatch.Dir ?? "(없음)") + " · 앞 창 프로그램=" + (GameWatch.PathOf((int)fp) ?? "?"));
                 return false;
             }
             bool ok = Shot(g, w, true, pending);
+            if (!ok)
+            {
+                // 진짜 전체 화면(해상도 바꾸는 방식)은 찍으면 검게 나옴 → 잠깐 창 모드로 바꿔 찍고 되돌림
+                RECT r; var sb = System.Windows.Forms.Screen.FromHandle(w).Bounds;
+                if (GetWindowRect(w, out r) && r.R - r.L >= sb.Width - 8 && r.B - r.T >= sb.Height - 8)
+                {
+                    Log.Info("표지 찍기: 전체 화면이라 창 모드로 바꿔 다시 찍음 · " + g.Title);
+                    SetForegroundWindow(w);
+                    KeySender.Combo(0x12, 0x0D);
+                    System.Threading.Thread.Sleep(1800);
+                    IntPtr w2 = GameWindow(); if (w2 == IntPtr.Zero) w2 = w;
+                    ok = Shot(g, w2, true, pending);
+                    SetForegroundWindow(w2);
+                    KeySender.Combo(0x12, 0x0D);
+                }
+            }
             if (!ok) { LastShotProblem = "찍은 화면이 비어 있어요 (검은 화면) — 게임 화면이 나온 뒤 다시"; Log.Info("표지 찍기 실패: 찍은 그림이 비었음 · " + g.Title); }
             if (ok && !pending) CoverArt.MarkCoverOk(g);   // 사용자가 직접 찍은 표지 → 다시 안 찍음
             return ok;

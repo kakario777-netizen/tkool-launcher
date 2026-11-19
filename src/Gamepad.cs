@@ -40,6 +40,28 @@ namespace TkoolLauncher
             public short LX, LY, RX, RY;
         }
 
+        [StructLayout(LayoutKind.Sequential)] struct XVib { public ushort L, R; }
+        [DllImport("xinput1_4.dll", EntryPoint = "XInputSetState")] static extern int XSetVib(int i, ref XVib v);
+        /// <summary>패드 진동으로 알리기 (게임이 전체 화면이라 안내 글이 안 보일 때도 느낄 수 있게)</summary>
+        public static void Buzz(int ms, int times = 1)
+        {
+            new System.Threading.Thread(() =>
+            {
+                try
+                {
+                    for (int t = 0; t < times; t++)
+                    {
+                        var on = new XVib { L = 40000, R = 40000 }; var off = new XVib();
+                        for (int i = 0; i < 4; i++) XSetVib(i, ref on);
+                        System.Threading.Thread.Sleep(ms);
+                        for (int i = 0; i < 4; i++) XSetVib(i, ref off);
+                        System.Threading.Thread.Sleep(120);
+                    }
+                }
+                catch { }
+            }) { IsBackground = true }.Start();
+        }
+
         [DllImport("xinput1_4.dll", EntryPoint = "XInputGetState")]
         static extern int Get14(int i, out XState s);
         [DllImport("xinput1_4.dll", EntryPoint = "#100")]
@@ -191,7 +213,7 @@ namespace TkoolLauncher
             var target = Overlay ?? Form.ActiveForm as IPadTarget;   // 게임 위 팝업은 포커스 없이 패드만 받음
             bool game = GameRunning;
 
-            if (target == null && !game && !MouseMode)
+            if (target == null && !game && !MouseMode && DoubleY == null)
             {
                 // 런처가 뒤에 있고 변환할 게임도 없음 → 쉬기 (읽기 스레드도 천천히)
                 ReleaseGameKeys();
@@ -219,6 +241,13 @@ namespace TkoolLauncher
             }
             blocked &= cur;
 
+            // 표지 찍기: Y 두 번은 게임이 앞이든 런처(가림막)가 앞이든 언제나 받음
+            if (DoubleY != null && (cur & ~old & Pad.Y) != 0)
+            {
+                int now = Environment.TickCount;
+                if (now - lastY < 450) { lastY = 0; Log.Info("Y 두 번 감지 (게임 감시 " + game + ", 런처 앞 " + (target != null) + ")"); Buzz(90); DoubleY(); return; }
+                lastY = now;
+            }
             if (!gameMode)
             {
                 timer.Interval = 33;
@@ -236,11 +265,6 @@ namespace TkoolLauncher
                     blocked = cur;
                     Home?.Invoke();
                     return;
-                }
-                if (DoubleY != null && (fresh & Pad.Y) != 0)
-                {
-                    int now = Environment.TickCount;
-                    if (now - lastY < 450) { lastY = 0; DoubleY(); } else lastY = now;
                 }
                 if (MouseMode) { ReleaseGameKeys(); HandleMouse(cur, old); timer.Interval = 16; }
                 else if (MapKeys && GameIsForeground()) HandleGame(cur & ~blocked & (DoubleY != null ? ~Pad.Y : ~Pad.None));   // 표지 찍는 동안 Y는 게임에 안 보냄

@@ -49,6 +49,17 @@ namespace TkoolLauncher
         protected override CreateParams CreateParams { get { var cp = base.CreateParams; cp.ExStyle |= 0x80 | 0x08000000 | 0x20 | 0x80000; return cp; } }
         protected override bool ShowWithoutActivation => true;
         public void SetText(string t) { text = t; Invalidate(); }
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint f);
+        Timer keepTop;
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            // 게임이 맨 위 창을 잡아도 안내 글이 다시 위로 (1초마다, 포커스는 안 가져감)
+            keepTop = new Timer { Interval = 1000 };
+            keepTop.Tick += (o, a) => { try { if (Visible) SetWindowPos(Handle, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010); } catch { } };
+            keepTop.Start();
+        }
+        protected override void OnFormClosed(FormClosedEventArgs e) { keepTop?.Dispose(); base.OnFormClosed(e); }
 
         // 화면을 찍을 때 안내 글이 같이 찍히지 않게 잠깐 숨기기 (다른 스레드에서도 부를 수 있게 창 핸들로)
         static readonly System.Collections.Generic.List<IntPtr> all = new System.Collections.Generic.List<IntPtr>();
