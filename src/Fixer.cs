@@ -75,6 +75,17 @@ namespace TkoolLauncher
                     FixLabel = "소프트웨어 그리기로",
                     Fix = () => WolfSoftMode(g),
                 });
+            // 설정·데이터 파일을 못 읽음 ("Load Error config.xml", 見つかりません 등) + 경로에 # [ ] % & 나 한글·일본어 → 영문 연결 경로로 켜기
+            if (g != null && !GameDoctor.NwAscii(g) && list.Count == 0 && JpLocale.Unmangle(text) == null &&   // 깨진 일본어가 같이 뜨면 일본어 환경이 먼저
+                System.Text.RegularExpressions.Regex.IsMatch(low, @"load error|failed to load|could not (load|open|find)|cannot (load|open|find)|not found|見つかりません|読み込(み|め)|開けません|파일을 찾을 수|열 수 없") &&
+                System.Text.RegularExpressions.Regex.IsMatch(g.Folder ?? "", @"[#\[\]%&!~^]|[^\x00-\x7F]"))
+                list.Add(new GameDoctor.Issue
+                {
+                    Title = "경로 글자 때문에 파일을 못 읽음 (" + g.Title + ")",
+                    Explain = "폴더 경로에 # [ ] 나 한글·일본어가 있어서 게임이 자기 파일을 못 찾았어요. 폴더 이름은 그대로 두고 영문 연결 경로로 켤게요.",
+                    FixLabel = "영문 경로로 켜기",
+                    Fix = () => { GameDoctor.SetNwAscii(g); return "이 게임은 이제 영문 연결 경로로 켜요"; },
+                });
             if (low.Contains("폴더 목록 화면") && g != null) { try { list.AddRange(GameDoctor.FolderListIssues(g)); } catch { } }
             // 일본어가 한국어로 깨진 오류 창(긁갉긁…) → 일본어 환경으로 켜기
             string jp = JpLocale.Unmangle(text);

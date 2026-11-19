@@ -535,7 +535,7 @@ namespace TkoolLauncher
                 // (용병의 모험: RGSS301.dll "File corrupted !") → 어떤 게임이든 영문 연결 경로로
                 bool unicodeOnly = !AnsiSafe(g.Folder);
                 bool bad = nw && g.Folder.IndexOfAny(new[] { '#', '%', '?' }) >= 0;
-                bool ascii = (nw && NwAscii(g)) || unicodeOnly;   // 폴더 목록이 떠서 영문 경로로 켜기로 한 게임 (옛 nw.js는 한글·일본어 경로를 못 읽기도 함)
+                bool ascii = NwAscii(g) || unicodeOnly;   // 영문 경로로 켜기로 한 게임(어떤 엔진이든)   // 폴더 목록이 떠서 영문 경로로 켜기로 한 게임 (옛 nw.js는 한글·일본어 경로를 못 읽기도 함)
                 if (!bad && !ascii) return null;
                 if (unicodeOnly) Log.Info("경로에 지금 윈도우 글자표로 못 쓰는 글자가 있어 영문 연결 경로로 실행: " + g.Folder);
                 string root = ascii ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "TkoolRun") : Path.Combine(Settings.Dir, "run");

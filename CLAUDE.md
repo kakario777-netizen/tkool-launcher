@@ -117,3 +117,4 @@
 - 팝업 중 게임이 같이 움직이던 것: 가상 패드를 안 쓸 때(패드를 직접 읽는 MV·MZ·Unity 등) 팝업 여는 동안 VirtualPad.HideForPopup이 HidHide로 진짜 패드를 숨김(런처만 보이게 등록, --cloak-on), 닫으면 --cloak-off. 관리자·HidHide 있을 때만.
 - 울프 RPG "A previous boot failure detected … SoftModeFlag=1" 창: Fixer.Fixable이 알아보고 Game.ini SoftModeFlag=1(바이트 그대로, .bak 남김)로 고친 뒤 다시 켬(Fixer.WolfSoftMode).
 - 게임 창 언제나 가운데: 플레이 중 3초마다(healthTimer) 런처로 켠 게임 창이 화면보다 작고 가운데가 아니면 가운데로(CenterGameWin, 이미 가운데면 그대로, 화면 크기 강제·최소화 중엔 안 함). 켠 뒤 창 크기를 바꾸며 왼쪽 위에 붙던 게임(Kalaroro 등).
+- 파일 못 읽음 오류("Load Error config.xml"·not found·見つかりません 등) + 경로에 # [ ] % & ! ~ ^·한글·일본어 → Fixer가 "영문 연결 경로로 켜기"(SetNwAscii, 이제 nw.js 아닌 게임도 SafeRunDir가 영문 정션). 단 깨진 일본어 창이 같이 뜨면 일본어 환경이 먼저(inumani "남편이 없는 사이" — Load Error 다음 깨진 일본어 창).
