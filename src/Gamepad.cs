@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
@@ -122,8 +123,30 @@ namespace TkoolLauncher
         }
 
         /// <summary>게임 안 버튼 → 쯔꾸르 키</summary>
+        public static int Profile;   // 0 쯔꾸르식, 1 키보드 게임식(유니티 등)
+        public static Dictionary<Pad, Keys> Extra = new Dictionary<Pad, Keys>();   // 읽어보기 키 → 남는 버튼
+
         static Keys MapGameKey(Pad b)
         {
+            Keys ek;
+            if (Extra != null && Extra.TryGetValue(b, out ek)) return ek;
+            if (Profile == 1)
+                switch (b)
+                {
+                    case Pad.Up: return Keys.Up;
+                    case Pad.Down: return Keys.Down;
+                    case Pad.Left: return Keys.Left;
+                    case Pad.Right: return Keys.Right;
+                    case Pad.A: return Keys.Return;     // 결정 (유니티 기본 Submit)
+                    case Pad.B: return Keys.Escape;     // 취소·메뉴 (Cancel)
+                    case Pad.X: return Keys.Space;
+                    case Pad.Y: return Keys.Z;
+                    case Pad.LB: return Keys.Q;
+                    case Pad.RB: return Keys.E;
+                    case Pad.Start: return Keys.Escape;
+                    case Pad.Back: return Keys.Tab;
+                    default: return Keys.None;
+                }
             switch (b)
             {
                 case Pad.Up: return Keys.Up;

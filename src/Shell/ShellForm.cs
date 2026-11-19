@@ -1815,7 +1815,10 @@ namespace TkoolLauncher
             ShowCurtain(g.Title);   // 게임하는 동안 런처는 빈 배경으로 게임 뒤에
 
             // 키보드 변환은 패드를 못 읽는 쯔꾸르(2000~VX Ace)만
-            Gamepad.MapKeys = PadMap.Want(g);   // 게임별로 켬/끔 고를 수 있음 (자동 = 진짜 쯔꾸르 2000~VX Ace만)
+            Gamepad.MapKeys = PadMap.Want(g);   // 게임별로 켬/끔 고를 수 있음 (자동 = 진짜 쯔꾸르 2000~VX Ace + 키보드만 받는 유니티)
+            Gamepad.Profile = PadMap.Profile(g);
+            Gamepad.Extra = PadMap.Extra(g, Gamepad.Profile);
+            if (Gamepad.MapKeys) Log.Info("패드 → 키보드: " + (Gamepad.Profile == 1 ? "키보드 게임식" : "쯔꾸르식") + (Gamepad.Extra.Count > 0 ? " · 읽어보기 키 " + string.Join(",", Gamepad.Extra.Select(kv => kv.Key + "=" + kv.Value)) : ""));
             CameFromGame = false;
             SmartTdp.Reset();
             Track(g, p, true);

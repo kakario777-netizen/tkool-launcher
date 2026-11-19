@@ -1991,9 +1991,9 @@ namespace TkoolLauncher
                         break;
                     case 9: EditInput(); break;
                     case 10:
-                        PickerScreen.Show(Shell, "패드 → 키보드 바꾸기", new[] { "자동 (쯔꾸르 2000~VX Ace만)", "켬 (A=Z·B=X·X=Shift·Y=Esc…)", "끔 (게임이 패드를 직접 읽음)" },
-                            PadMap.Get(game) == "on" ? 1 : PadMap.Get(game) == "off" ? 2 : 0,
-                            pi => { PadMap.Set(game, pi == 1 ? "on" : pi == 2 ? "off" : null); Shell.ShowToast("다음 실행부터 적용 — 지금 게임 중이면 다시 켜 주세요", 3000); },
+                        PickerScreen.Show(Shell, "패드 → 키보드 바꾸기", new[] { "자동 (쯔꾸르 2000~Ace·키보드만 받는 유니티)", "쯔꾸르식 (A=Z·B=X·X=Shift·Y=Esc…)", "키보드 게임식 (방향키·A=Enter·B=Esc·X=Space·Y=Z)", "끔 (게임이 패드를 직접 읽음)" },
+                            PadMap.Get(game) == "on" ? 1 : PadMap.Get(game) == "kb" ? 2 : PadMap.Get(game) == "off" ? 3 : 0,
+                            pi => { PadMap.Set(game, pi == 1 ? "on" : pi == 2 ? "kb" : pi == 3 ? "off" : null); Shell.ShowToast("다음 실행부터 적용 — 지금 게임 중이면 다시 켜 주세요", 3000); },
                             "버튼을 누를 때 두 번 눌리거나 화면이 깜빡이면 '끔', 패드가 아예 안 먹으면 '켬'");
                         break;
                     case 8:
