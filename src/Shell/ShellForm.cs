@@ -1763,7 +1763,7 @@ namespace TkoolLauncher
             ShowCurtain(g.Title);   // 게임하는 동안 런처는 빈 배경으로 게임 뒤에
 
             // 키보드 변환은 패드를 못 읽는 쯔꾸르(2000~VX Ace)만
-            Gamepad.MapKeys = g.IsTkool && g.Version != TkoolVersion.MV && g.Version != TkoolVersion.MZ;
+            Gamepad.MapKeys = PadMap.Want(g);   // 게임별로 켬/끔 고를 수 있음 (자동 = 진짜 쯔꾸르 2000~VX Ace만)
             CameFromGame = false;
             SmartTdp.Reset();
             Track(g, p, true);

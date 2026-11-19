@@ -1805,6 +1805,7 @@ namespace TkoolLauncher
                 "창 모양: " + wins[Math.Max(0, Math.Min(1, st.WinMode))],
                 "일본어 환경으로 켜기: " + (JpLocale.Has(game) ? "켬" : "끔"),
                 "조작 방식 고치기 (패드·키보드·마우스·터치)",
+                "패드 → 키보드 바꾸기: " + PadMap.Label(game),
             };
             PickerScreen.Show(Shell, game.Title, opts, -1, i =>
             {
@@ -1835,6 +1836,12 @@ namespace TkoolLauncher
                             "꽉 찬 창: 테두리 없이 작업 표시줄만 남기고 화면을 채움 (다음 실행부터)");
                         break;
                     case 9: EditInput(); break;
+                    case 10:
+                        PickerScreen.Show(Shell, "패드 → 키보드 바꾸기", new[] { "자동 (쯔꾸르 2000~VX Ace만)", "켬 (A=Z·B=X·X=Shift·Y=Esc…)", "끔 (게임이 패드를 직접 읽음)" },
+                            PadMap.Get(game) == "on" ? 1 : PadMap.Get(game) == "off" ? 2 : 0,
+                            pi => { PadMap.Set(game, pi == 1 ? "on" : pi == 2 ? "off" : null); Shell.ShowToast("다음 실행부터 적용 — 지금 게임 중이면 다시 켜 주세요", 3000); },
+                            "버튼을 누를 때 두 번 눌리거나 화면이 깜빡이면 '끔', 패드가 아예 안 먹으면 '켬'");
+                        break;
                     case 8:
                         {
                             var g8 = game; bool on = !JpLocale.Has(g8);

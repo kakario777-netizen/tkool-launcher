@@ -94,3 +94,4 @@
 - 조작 필터: 쯔꾸르 탭 주황 단추 "조작 ▾"(태그·엔진 옆, 패드 extraSel -1, 엔진 -2, 태그 -3) → 패드·키보드·마우스·터치마다 상관없음/됨/꼭 필요/안 됨/모름 차례로 고르고 "이대로 보기"(LibraryScreen.inpSel, InpMatch).
 - 필요한 키: InputNeeds가 읽어보기의 "A키·Sキー·F5·Shift·Space…"를 모아 Keys, 2000~Ace인데 런처 패드 변환(Z X Shift Esc Q W Enter)에 없는 키는 Unmapped → 상세 정보 조작 줄 아래 "필요한 키: … (패드에 없음: …)" 주황.
 - 상세 정보 칸 스크롤: DetailScreen 정보 칸을 잘라 그리고(infoRect) 넘치면 위아래 밀기(infoScroll), 오른쪽 가는 막대.
+- 패드 → 키보드 바꾸기(게임별): PadMap.cs(cache\padmap.txt on/off/자동). 자동 = IsTkool·MV/MZ 아님·Engine 없음·RPG_RT 또는 RGSS 파일(Game.ini Library 등) 있을 때만(예전엔 IsTkool이면 다 켜서 패드를 직접 읽는 게임에 겹쳐 보냄 — 울프 "히메가시마는 즐거운 한여름" A 누를 때 깜빡임 의심). 상세 더보기 "패드 → 키보드 바꾸기: 자동/켬/끔".
