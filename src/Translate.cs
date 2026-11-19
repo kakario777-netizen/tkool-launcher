@@ -59,19 +59,23 @@ namespace TkoolLauncher
                         if (!string.IsNullOrEmpty(r)) { Directory.CreateDirectory(Path.GetDirectoryName(cp)); File.WriteAllText(cp, r, Encoding.UTF8); }
                     }
                 }
-                catch (Exception ex) { Log.Info("구글 번역 실패: " + ex.Message); r = ""; }
+                catch (Exception ex) { if (!ex.Message.StartsWith("번역 잠시 쉬는 중")) Log.Info("구글 번역 실패: " + ex.Message); r = ""; }
                 lock (mem) { mem[key] = r ?? ""; busy.Remove(key); }
                 // 실패는 잠깐만 기억했다가 다시 시도 (인터넷이 잠깐 끊겼거나 너무 자주 물어 막혔을 때)
                 if (string.IsNullOrEmpty(r))
-                    Task.Delay(30000).ContinueWith(_ => { lock (mem) { string v; if (mem.TryGetValue(key, out v) && v == "") mem.Remove(key); } try { Changed?.Invoke(); } catch { } });
+                    Task.Delay(Blocked ? (int)Math.Max(30000, (blockedUntil - DateTime.Now).TotalMilliseconds) : 30000).ContinueWith(_ => { lock (mem) { string v; if (mem.TryGetValue(key, out v) && v == "") mem.Remove(key); } try { Changed?.Invoke(); } catch { } });
                 try { Changed?.Invoke(); } catch { }
             });
             return null;
         }
 
         /// <summary>글을 1200자 안팎 덩어리로 나눠 번역 (줄바꿈 유지)</summary>
+        static DateTime blockedUntil = DateTime.MinValue;   // 구글이 "너무 많이 물음(429)"으로 막으면 15분 쉼
+        public static bool Blocked => DateTime.Now < blockedUntil;
+
         public static string Run(string text, string sl = "auto")
         {
+            if (Blocked) throw new Exception("번역 잠시 쉬는 중 (구글이 막음, " + blockedUntil.ToString("HH:mm") + "까지)");
             var lines = text.Replace("\r", "").Split('\n');
             var chunks = new List<string>();
             var sb = new StringBuilder();
@@ -110,7 +114,16 @@ namespace TkoolLauncher
                                 part = Parse(json);
                             }
                         }
-                        catch (Exception ex) { last = ex; }
+                        catch (Exception ex)
+                        {
+                            last = ex;
+                            if (ex.Message.Contains("429"))
+                            {
+                                blockedUntil = DateTime.Now.AddMinutes(15);
+                                Log.Info("구글 번역이 막힘(429) → 15분 쉼");
+                                throw new Exception("번역 잠시 쉬는 중 (429)");
+                            }
+                        }
                         finally { lastCall = Environment.TickCount; }
                     }
                     if (part == null) System.Threading.Thread.Sleep(1000);

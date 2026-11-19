@@ -108,3 +108,4 @@
 - 성능 표시 메뉴 정리(빠른 설정 "오버레이" 탭 = 작은 메뉴, QuickPanel.ovSub): 처음(켜기·형태 ›·위치 ›·표시 정보 ›) / 형태(모양·크기·전체 글자 색·진하기·항목 이름 글자 모두/숨김) / 위치(이 게임에서만 이 위치·9곳·여백·가로/세로 위치 슬라이더·손가락으로 끌기) / 표시 정보(순서대로 항목 목록 → 항목마다 보이기·이름 글자·색(전체 색 따라감/7색)·앞으로/뒤로). B = 뒤로. Settings.OvOrder·OvLabels(비트)·OvItemColors("i=c;")·OvGame("id=pos,x,y;"). OverlayForm.GetPos/SetPos가 게임별 위치 우선(SetGame — 게임 시작·끝에서), 끝나면 평소 위치.
 - 끌어 옮기기 고침: 픽셀 투명 창은 터치를 못 받아서 옮기는 동안 위에 반투명 파란 보통 창(MoveHandle)을 덮어 받음.
 - 게임 화면 크기 강제: 빠른 설정 "화면" 탭 "게임 화면 크기"(게임 중) = ScreenFit.Apply(원래/꽉 채우기/도트 선명 정수배/2배/3배, 비율 그대로, 되돌리면 잠금·안 되면 확대 기능), 게임별 기억 cache\screenfit.txt → 다음에 창 뜨고 2초 뒤 자동(AutoScreenSize).
+- 마마쇼타RPG(VX Ace) 사건(사용자 기기 로그): "RPGVXAce RTP is required" 창 제목이 깨진 일본어라 Fixer가 일본어 환경을 켬 → LEProc가 게임을 못 켜고 튕김(코드 0xE0434352) 반복. 고침: Fixer.Fixable은 RTP·VC·DX 등 분명한 원인이 있거나 글에 rtp가 있으면 일본어 환경 안 고름. JpLocale.Start는 LEProc가 게임을 못 켜고 오류 코드로 끝나면 그 게임 일본어 환경을 끄고 그냥 켬. 구글 번역 429(너무 많이 물음)면 15분 쉼(Translate.Blocked) — 30초마다 계속 두드리던 것.

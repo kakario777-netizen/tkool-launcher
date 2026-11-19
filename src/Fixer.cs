@@ -69,7 +69,8 @@ namespace TkoolLauncher
             if (low.Contains("폴더 목록 화면") && g != null) { try { list.AddRange(GameDoctor.FolderListIssues(g)); } catch { } }
             // 일본어가 한국어로 깨진 오류 창(긁갉긁…) → 일본어 환경으로 켜기
             string jp = JpLocale.Unmangle(text);
-            if (jp != null && g != null && !JpLocale.Has(g))
+            // RTP·VC·DirectX처럼 원인이 분명하면 그걸 먼저 (제목 글자가 깨져 보인다고 일본어 환경으로 돌리지 않음)
+            if (jp != null && g != null && !JpLocale.Has(g) && list.Count == 0 && !low.Contains("rtp"))
                 list.Add(new GameDoctor.Issue
                 {
                     Title = "일본어 글자가 깨져서 생긴 오류 (" + g.Title + ")",

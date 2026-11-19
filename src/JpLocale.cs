@@ -75,6 +75,16 @@ namespace TkoolLauncher
                     try { if (p.Id != le.Id && (GameWatch.InDir(p.Id, dir) || GameWatch.InDir(p.Id, wdir))) return p; } catch { }
                 }
             }
+            // 일본어 환경 도구가 게임을 못 켜고 튕기면(예: 코드 0xE0434352) 이 게임은 일본어 환경을 끄고 그냥 켬
+            bool leDead = false; int leCode = 0;
+            try { leDead = le.HasExited; if (leDead) leCode = le.ExitCode; } catch { }
+            if (leDead && leCode != 0)
+            {
+                Log.Info("일본어 환경 도구가 게임을 못 켬 (코드 " + leCode + ") → 일본어 환경 끄고 그냥 켬: " + g.Title);
+                Activity.Note("일본어 환경으로 켜기가 안 돼서 껐어요 · " + g.Title);
+                Set(g, false);
+                return Process.Start(new ProcessStartInfo(exe) { WorkingDirectory = wd, UseShellExecute = true });
+            }
             return le;
         }
 
