@@ -1434,8 +1434,11 @@ namespace TkoolLauncher
             // 이 게임만 해상도 강제 (예: 디아블로 → 1280×720)
             resBtn = new Rectangle(hideBtn.Right + S(12), rowY, S(200), S(64));
             Draw.Fill(g, resBtn, S(4), string.IsNullOrEmpty(st.Res) ? Theme.Tile : Color.FromArgb(40, 90, 150));
-            Draw.Text(g, "해상도", Draw.Small, new Rectangle(resBtn.X, resBtn.Y + S(6), resBtn.Width, S(22)), Theme.SubText, Draw.Center);
-            Draw.Text(g, string.IsNullOrEmpty(st.Res) ? "그대로" : st.Res, Draw.BodyBold, new Rectangle(resBtn.X, resBtn.Y + S(28), resBtn.Width, S(30)), Theme.Text, Draw.Center);
+            Draw.Text(g, "화면 모드", Draw.Small, new Rectangle(resBtn.X, resBtn.Y + S(6), resBtn.Width, S(22)), Theme.SubText, Draw.Center);
+            int smode = ScreenModeOf(st);
+            string sv = smode == 0 ? (string.IsNullOrEmpty(st.Res) ? "그대로" : st.Res) : ScreenModeShort[smode] + (string.IsNullOrEmpty(st.Res) ? "" : " · " + st.Res);
+            Draw.Text(g, sv, Draw.BodyBold, new Rectangle(resBtn.X + S(6), resBtn.Y + S(28), resBtn.Width - S(12), S(30)), Theme.Text,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
             if (focus == 3 && Shell.ShowFocus) Draw.FocusGlow(g, resBtn, S(4));
 
             // 다 깸 표시
@@ -1846,7 +1849,7 @@ namespace TkoolLauncher
                 case Pad.Right: focus = Math.Min(4, focus + 1); break;
                 case Pad.Up: ScrollDesc(-S(90)); return;
                 case Pad.Down: ScrollDesc(S(90)); return;
-                case Pad.A: if (focus == 0) Shell.Launch(game); else if (focus == 1) ToggleFav(); else if (focus == 2) More(); else if (focus == 3) NextRes(); else ToggleCleared(); break;
+                case Pad.A: if (focus == 0) Shell.Launch(game); else if (focus == 1) ToggleFav(); else if (focus == 2) More(); else if (focus == 3) ScreenMenu(); else ToggleCleared(); break;
                 case Pad.X: EditTags(); return;
                 case Pad.Y: ToggleFav(); break;
                 case Pad.LB: Go(-1); return;
@@ -1863,7 +1866,7 @@ namespace TkoolLauncher
             if (playBtn.Contains(p)) { focus = 0; Shell.Launch(game); }
             else if (favBtn.Contains(p)) { focus = 1; ToggleFav(); }
             else if (hideBtn.Contains(p)) { focus = 2; More(); }
-            else if (resBtn.Contains(p)) { focus = 3; NextRes(); }
+            else if (resBtn.Contains(p)) { focus = 3; ScreenMenu(); }
             else if (clearBtn.Contains(p)) { focus = 4; ToggleCleared(); }
             else if (inputRect.Contains(p)) EditInput();
             else if (addTagRect.Contains(p) || tagRects.Any(r => r.Contains(p))) EditTags();
@@ -1876,6 +1879,49 @@ namespace TkoolLauncher
             GameData.Save();
             Shell.ShowToast(st.Cleared ? "다 깬 게임으로 표시했어요" : "다 깸 표시를 뺐어요", 1500);
             Shell.Invalidate();
+        }
+
+        // ── 화면 모드: 해상도 + 게임 화면 크기(비율 그대로 꽉 채우기 등)를 한곳에 ──
+        static readonly string[] ScreenModeNames = { "그대로 (게임 창 크기 그대로)", "원래 비율로 꽉 채우기", "도트 선명 (정수배로 최대)", "2배 (비율 그대로)", "3배 (비율 그대로)", "늘려서 꽉 채우기 (비율 무시)" };
+        static readonly string[] TaskbarNames = { "기본 (설정 따름)", "숨기기", "보이기" };
+        static readonly string[] ScreenModeShort = { "그대로", "비율 꽉", "도트 선명", "2배", "3배", "늘려서 꽉" };
+        int ScreenModeOf(GameStat st)
+        {
+            if (st.WinMode == 1) return 5;
+            int m = ScreenFit.Remembered(game);
+            return m >= 0 && m <= 4 ? m : 0;
+        }
+
+        void ScreenMenu()
+        {
+            var st = GameData.Get(game);
+            int sm = ScreenModeOf(st);
+            PickerScreen.Show(Shell, "화면 모드 · " + game.Title, new[]
+            {
+                "화면 크기: " + ScreenModeNames[sm],
+                "해상도: " + (string.IsNullOrEmpty(st.Res) ? "그대로 (바꾸지 않음)" : st.Res),
+                "작업 표시줄: " + TaskbarNames[ScreenFit.GetTaskbar(game) + 1],
+            }, 0, i =>
+            {
+                if (i == 1) { Shell.BeginInvoke(new Action(NextRes)); return; }
+                if (i == 2)
+                {
+                    Shell.BeginInvoke(new Action(() => PickerScreen.Show(Shell, "게임 중 작업 표시줄", TaskbarNames, ScreenFit.GetTaskbar(game) + 1, k =>
+                    {
+                        ScreenFit.SetTaskbar(game, k - 1);
+                        if (Shell.PlayingGame == game) Shell.ApplyTaskbar(game);
+                    }, "보이면 화면 크기는 작업 표시줄 위 칸까지만 채워요")));
+                    return;
+                }
+                Shell.BeginInvoke(new Action(() => PickerScreen.Show(Shell, "게임 화면 크기", ScreenModeNames, sm, k =>
+                {
+                    if (k == 5) { st.WinMode = 1; ScreenFit.Remember(game, 0); }
+                    else { st.WinMode = 0; ScreenFit.Remember(game, k); }
+                    GameData.Save();
+                    if (Shell.PlayingGame == game && k < 5) Shell.SetGameScreenSize(k);
+                    Shell.ShowToast(k == 0 ? "게임 창 크기 그대로 켜요" : "다음에 켤 때부터: " + ScreenModeNames[k], 2500);
+                }, "비율 그대로는 위아래·옆에 검은 띠가 생겨도 그림이 안 늘어나요")));
+            });
         }
 
         // 그대로 → 화면이 지원하는 해상도들 → 그대로 … 차례로
@@ -1911,7 +1957,7 @@ namespace TkoolLauncher
                 "이름 찾기 (인터넷 → 타이틀 그림 글자 → 게임 켜서)",
                 st.Hidden ? "다시 보이기 (숨김 풀기)" : "숨기기",
                 "게임 위치 열기 (탐색기)",
-                "창 모양: " + wins[Math.Max(0, Math.Min(1, st.WinMode))],
+                "화면 모드 (크기·해상도)",
                 "일본어 환경으로 켜기: " + (JpLocale.Has(game) ? "켬" : "끔"),
                 "조작 방식 고치기 (패드·키보드·마우스·터치)",
                 "패드 → 키보드 바꾸기: " + PadMap.Label(game),
@@ -1941,8 +1987,7 @@ namespace TkoolLauncher
                         break;
                     case 6: DupFinder.OpenFolder(game); break;
                     case 7:
-                        PickerScreen.Show(Shell, "창 모양", wins, st.WinMode, k => { st.WinMode = k; GameData.Save(); },
-                            "꽉 찬 창: 테두리 없이 작업 표시줄만 남기고 화면을 채움 (다음 실행부터)");
+                        Shell.BeginInvoke(new Action(ScreenMenu));
                         break;
                     case 9: EditInput(); break;
                     case 10:
@@ -1965,7 +2010,7 @@ namespace TkoolLauncher
 
         public override List<Hint> Hints() => new List<Hint>
         {
-            new Hint(Pad.A, focus == 0 ? "플레이" : focus == 1 ? "즐겨찾기" : focus == 2 ? "더보기" : focus == 3 ? "해상도 고르기" : "다 깸 표시", () => OnPad(Pad.A)),
+            new Hint(Pad.A, focus == 0 ? "플레이" : focus == 1 ? "즐겨찾기" : focus == 2 ? "더보기" : focus == 3 ? "화면 모드" : "다 깸 표시", () => OnPad(Pad.A)),
             new Hint(Pad.Y, "즐겨찾기", ToggleFav),
             new Hint(Pad.X, "태그", EditTags),
             new Hint(Pad.RB, "다음 게임", () => Go(1)),

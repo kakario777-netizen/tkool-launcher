@@ -37,6 +37,32 @@ namespace TkoolLauncher
             catch { }
             return 0;
         }
+        /// <summary>게임 중 작업 표시줄: -1 기본(설정), 0 숨기기, 1 보이기</summary>
+        public static int GetTaskbar(GameInfo g)
+        {
+            try
+            {
+                string k = "tb:" + GameData.IdOf(g) + "=";
+                if (System.IO.File.Exists(MemFile))
+                    foreach (var l in System.IO.File.ReadAllLines(MemFile))
+                        if (l.StartsWith(k)) { int m; if (int.TryParse(l.Substring(k.Length), out m)) return m; }
+            }
+            catch { }
+            return -1;
+        }
+        public static void SetTaskbar(GameInfo g, int v)
+        {
+            try
+            {
+                string k = "tb:" + GameData.IdOf(g) + "=";
+                var lines = System.IO.File.Exists(MemFile) ? System.IO.File.ReadAllLines(MemFile).Where(l => !l.StartsWith(k)).ToList() : new System.Collections.Generic.List<string>();
+                if (v >= 0) lines.Add(k + v);
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(MemFile));
+                System.IO.File.WriteAllLines(MemFile, lines);
+            }
+            catch { }
+        }
+
         public static void Remember(GameInfo g, int mode)
         {
             try
@@ -77,7 +103,7 @@ namespace TkoolLauncher
             GetWindowRect(h, out oldRect);
             GetClientRect(h, out R c);
             int cw = Math.Max(1, c.Rr - c.L), ch = Math.Max(1, c.B - c.T);
-            var sb = System.Windows.Forms.Screen.FromHandle(h).Bounds;
+            var sb = TaskbarHide.Hidden ? System.Windows.Forms.Screen.FromHandle(h).Bounds : System.Windows.Forms.Screen.FromHandle(h).WorkingArea;   // 작업 표시줄 보이면 그 위 칸까지만
             double fit = Math.Min(sb.Width / (double)cw, sb.Height / (double)ch);
             double k = mode == 2 ? Math.Max(1, Math.Floor(fit)) : mode == 3 ? Math.Min(2, fit) : mode == 4 ? Math.Min(3, fit) : fit;
             Mode = mode;

@@ -109,3 +109,4 @@
 - 끌어 옮기기 고침: 픽셀 투명 창은 터치를 못 받아서 옮기는 동안 위에 반투명 파란 보통 창(MoveHandle)을 덮어 받음.
 - 게임 화면 크기 강제: 빠른 설정 "화면" 탭 "게임 화면 크기"(게임 중) = ScreenFit.Apply(원래/꽉 채우기/도트 선명 정수배/2배/3배, 비율 그대로, 되돌리면 잠금·안 되면 확대 기능), 게임별 기억 cache\screenfit.txt → 다음에 창 뜨고 2초 뒤 자동(AutoScreenSize).
 - 마마쇼타RPG(VX Ace) 사건(사용자 기기 로그): "RPGVXAce RTP is required" 창 제목이 깨진 일본어라 Fixer가 일본어 환경을 켬 → LEProc가 게임을 못 켜고 튕김(코드 0xE0434352) 반복. 고침: Fixer.Fixable은 RTP·VC·DX 등 분명한 원인이 있거나 글에 rtp가 있으면 일본어 환경 안 고름. JpLocale.Start는 LEProc가 게임을 못 켜고 오류 코드로 끝나면 그 게임 일본어 환경을 끄고 그냥 켬. 구글 번역 429(너무 많이 물음)면 15분 쉼(Translate.Blocked) — 30초마다 계속 두드리던 것.
+- 상세 화면 "화면 모드" 단추(예전 "해상도" + 더보기 "창 모양" 합침, DetailScreen.ScreenMenu): 화면 크기(그대로/원래 비율로 꽉/도트 선명 정수배/2배/3배 = ScreenFit.Remember, 늘려서 꽉(비율 무시) = WinMode 1)·해상도(NextRes)·작업 표시줄(기본·숨기기·보이기 = ScreenFit.Get/SetTaskbar "tb:id=" in cache\screenfit.txt, ShellForm.ApplyTaskbar). 작업 표시줄 보이면 ScreenFit은 WorkingArea 안에서만 채움. 단추 글은 "비율 꽉 · 1280x720"처럼.

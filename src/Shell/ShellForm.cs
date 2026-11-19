@@ -227,6 +227,14 @@ namespace TkoolLauncher
         /// <summary>팝업 닫기. backToGame이면 원래 앞에 있던 게임으로 포커스를 돌려줌</summary>
         bool popupMapWas, popupPadOffWas;
 
+        /// <summary>게임 중 작업 표시줄: 게임별 값(숨기기/보이기)이 있으면 그것, 없으면 설정</summary>
+        public void ApplyTaskbar(GameInfo g)
+        {
+            int v = g != null ? ScreenFit.GetTaskbar(g) : -1;
+            bool show = v == 1 || (v < 0 && Settings.TaskbarInGame);
+            if (show) TaskbarHide.Show(); else TaskbarHide.Hide();
+        }
+
         /// <summary>이 게임에 기억해 둔 화면 크기가 있으면 창이 자리 잡은 뒤(2초) 걸기</summary>
         void AutoScreenSize(IntPtr w)
         {
@@ -1486,7 +1494,7 @@ namespace TkoolLauncher
                             }
                             if (anyWin && curtain)
                             {
-                                if (!curtainSeen) { curtainSeen = true; Invalidate(); CenterGameWin(bigWin); if (!Settings.TaskbarInGame) TaskbarHide.Hide(); AutoScreenSize(bigWin); }
+                                if (!curtainSeen) { curtainSeen = true; Invalidate(); CenterGameWin(bigWin); ApplyTaskbar(PlayingGame); AutoScreenSize(bigWin); }
                                 // 게임 창이 가림막 뒤에 숨어 있으면 앞으로 (스팀으로 켠 게임 등)
                                 if (!CameFromGame && Form.ActiveForm == this && bigWin != IntPtr.Zero && !PopupOpen) ForceForeground(bigWin);
                             }
