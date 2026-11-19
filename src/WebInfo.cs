@@ -65,7 +65,7 @@ namespace TkoolLauncher
         }
 
         // 못 찾음 표시는 찾아본 사이트 묶음 판(v2 = 스팀·FANZA·ふりーむ·itch.io + 게임 안 흔적) — 예전 판 표시는 다시 찾아봄
-        const string NoneVer = "v2";
+        const string NoneVer = "v3";   // v3: 사이트별 자세한 기록이 생겨서 한 번 더
         static bool Tried(string id)
         {
             if (File.Exists(Path.Combine(Dir, id + ".txt"))) return true;
@@ -318,6 +318,13 @@ namespace TkoolLauncher
         static int[] tries = new int[4], err = new int[4];
         static string[] lastErr = new string[4];
         static string Stat(int k) => tries[k] + "번 검색" + (err[k] > 0 ? ", 접속 오류 " + err[k] + "(" + (lastErr[k] ?? "") + ")" : "");
+
+        /// <summary>못 찾음 표시를 다 지움 → 다음 RunAll에서 전부 다시 (설정 "빈 정보 지금 찾기")</summary>
+        public static void ResetNotFound()
+        {
+            try { foreach (var f in Directory.GetFiles(Dir, "*.none")) File.Delete(f); } catch { }
+            lock (mem) mem.Clear();
+        }
 
         public static volatile bool Busy;
         static volatile bool again;
