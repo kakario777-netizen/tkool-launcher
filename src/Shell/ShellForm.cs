@@ -228,6 +228,8 @@ namespace TkoolLauncher
         /// <summary>팝업 닫기. backToGame이면 원래 앞에 있던 게임으로 포커스를 돌려줌</summary>
         bool popupMapWas, popupPadOffWas;
 
+        bool autoMouse;
+
         /// <summary>게임 중 작업 표시줄: 게임별 값(숨기기/보이기)이 있으면 그것, 없으면 설정</summary>
         public void ApplyTaskbar(GameInfo g)
         {
@@ -1383,6 +1385,7 @@ namespace TkoolLauncher
                 quick.Open = false; quick.T = 0;
                 if (PopupOpen) ClosePopup(false);
                 Gamepad.MapKeys = false;
+                if (autoMouse) { Gamepad.MouseMode = false; autoMouse = false; }   // 마우스 게임이라 켰던 마우스 모드 되돌림
                 ResForce.Restore();
                 if (Updater.RestartPending) { Updater.Restart(); return; }
                 foreach (var sc in stack) if (!(sc is DetailScreen)) sc.OnGamesChanged();
@@ -1817,6 +1820,18 @@ namespace TkoolLauncher
             // 키보드 변환은 패드를 못 읽는 쯔꾸르(2000~VX Ace)만
             Gamepad.MapKeys = PadMap.Want(g);   // 게임별로 켬/끔 고를 수 있음 (자동 = 진짜 쯔꾸르 2000~VX Ace + 키보드만 받는 유니티)
             Gamepad.Profile = PadMap.Profile(g);
+            // 마우스로만 하는 게임(읽어보기 "マウスでの操作" 등, 패드 지원 없음): 패드를 마우스로 자동 전환
+            try
+            {
+                var inn = InputNeeds.Get(g);
+                if (inn.S[2] == 'n' && inn.S[0] != 'o' && !Gamepad.MapKeys && !Gamepad.MouseMode)
+                {
+                    Gamepad.MouseMode = true; autoMouse = true;
+                    Log.Info("마우스 게임이라 마우스 모드 자동 켬: " + g.Title);
+                    ShowToast("마우스로 하는 게임이라 패드를 마우스로 바꿨어요 · A 클릭 · B 오른쪽 · RB 누르면 느리게", 5000);
+                }
+            }
+            catch { }
             Gamepad.Extra = PadMap.Extra(g, Gamepad.Profile);
             if (Gamepad.MapKeys) Log.Info("패드 → 키보드: " + (Gamepad.Profile == 1 ? "키보드 게임식" : "쯔꾸르식") + (Gamepad.Extra.Count > 0 ? " · 읽어보기 키 " + string.Join(",", Gamepad.Extra.Select(kv => kv.Key + "=" + kv.Value)) : ""));
             CameFromGame = false;
