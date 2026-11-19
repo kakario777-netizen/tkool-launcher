@@ -220,6 +220,7 @@ namespace TkoolLauncher
             popupMapWas = Gamepad.MapKeys; Gamepad.MapKeys = false;
             popupPadOffWas = VirtualPad.ControllerOff;
             if (VirtualPad.Running) VirtualPad.ControllerOff = true;
+            else if (GameWatch.Running) VirtualPad.HideForPopup(true);   // 패드를 직접 읽는 게임이 팝업 조작에 같이 움직이지 않게
             Gamepad.Overlay = popup;
             popup.Open();
         }
@@ -290,6 +291,7 @@ namespace TkoolLauncher
             Gamepad.Overlay = null;
             Gamepad.MapKeys = popupMapWas && GameWatch.Running;
             VirtualPad.ControllerOff = popupPadOffWas;
+            VirtualPad.HideForPopup(false);
             // 팝업이 포커스를 안 가져가니 보통은 게임이 그대로 앞 — 혹시 다른 창이 앞이면 게임으로
             if (backToGame && gameHwnd != IntPtr.Zero && gameHwnd != Handle && GetForegroundWindow() != gameHwnd)
             {

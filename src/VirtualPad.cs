@@ -117,6 +117,49 @@ namespace TkoolLauncher
             catch { return null; }
         }
 
+        // ───────── 팝업 여는 동안 진짜 패드를 게임에서 잠깐 숨기기 (가상 패드를 안 쓸 때) ─────────
+        // 팝업은 포커스를 안 가져가서 패드를 직접 읽는 게임(MV·MZ·Unity…)이 같이 움직였음 → HidHide로 런처만 보이게
+        static readonly object popLock = new object();
+        static bool popHidden;
+        static List<string> popDevs;
+        public static void HideForPopup(bool on)
+        {
+            if (Running || !Hardware.IsAdmin || !HasHidHide) return;   // 가상 패드 켜져 있으면 ControllerOff로 이미 막음
+            new Thread(() =>
+            {
+                lock (popLock)
+                {
+                    try
+                    {
+                        if (on && !popHidden)
+                        {
+                            if (popDevs == null)
+                            {
+                                popDevs = new List<string>();
+                                string list = Cli("--dev-gaming") ?? "";
+                                foreach (Match m in Regex.Matches(list, "\"(?:deviceInstancePath|baseContainerDeviceInstancePath)\"\\s*:\\s*\"([^\"]+)\""))
+                                {
+                                    string path = m.Groups[1].Value.Replace("\\\\", "\\");
+                                    if (path.IndexOf("ROOT\\", StringComparison.OrdinalIgnoreCase) == 0) continue;
+                                    if (!popDevs.Contains(path)) popDevs.Add(path);
+                                }
+                                Cli("--app-reg \"" + System.Windows.Forms.Application.ExecutablePath + "\"");
+                                foreach (var h in popDevs) Cli("--dev-hide \"" + h + "\"");
+                            }
+                            Cli("--cloak-on");
+                            popHidden = true;
+                        }
+                        else if (!on && popHidden)
+                        {
+                            Cli("--cloak-off");
+                            popHidden = false;
+                        }
+                    }
+                    catch { }
+                }
+            }) { IsBackground = true }.Start();
+        }
+
         // ───────── 켜기·끄기 ─────────
         public static bool Start()
         {
