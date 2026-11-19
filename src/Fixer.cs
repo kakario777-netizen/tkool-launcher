@@ -73,6 +73,7 @@ namespace TkoolLauncher
                     Fix = () =>
                     {
                         Log.Info("깨진 글 원문: " + jp.Replace("\n", " / "));
+                        try { string ko = Translate.Run(jp); if (!string.IsNullOrWhiteSpace(ko)) Activity.Note("오류 내용(번역) · " + g.Title + " — " + ko.Replace("\n", " ")); } catch { }
                         if (!JpLocale.Ensure()) return "일본어 환경 도구(Locale Emulator)를 받지 못했어요";
                         JpLocale.Set(g, true);
                         return "이 게임은 이제 일본어 환경으로 켜요";
@@ -117,7 +118,7 @@ namespace TkoolLauncher
         public static void NoteUnknown(GameInfo g, string text)
         {
             string jp = JpLocale.Unmangle(text);
-            if (jp != null) text += "\n(원래 일본어: " + jp + ")";
+            if (jp != null) { string ko = null; try { ko = Translate.Run(jp); } catch { } text += "\n(뜻: " + (string.IsNullOrWhiteSpace(ko) ? jp : ko.Trim()) + ")"; }
             text = (text ?? "").Replace("\r", "").Replace("\n", " / ").Trim();
             if (text.Length == 0) return;
             Activity.Note("모르는 오류 · " + (g != null ? g.Title : "") + " — " + text);
