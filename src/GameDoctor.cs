@@ -513,16 +513,31 @@ namespace TkoolLauncher
             };
         }
 
+        /// <summary>경로가 지금 윈도우 기본 글자표(한국어면 CP949)로 그대로 쓰이는지</summary>
+        public static bool AnsiSafe(string path)
+        {
+            try
+            {
+                var enc = Encoding.GetEncoding(Encoding.Default.CodePage, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
+                enc.GetBytes(path);
+                return true;
+            }
+            catch { return false; }
+        }
+
         public static string SafeRunDir(GameInfo g)
         {
             try
             {
                 if (g == null || g.Folder == null) return null;
                 bool nw = g.Version == TkoolVersion.MV || g.Version == TkoolVersion.MZ || File.Exists(Path.Combine(g.Folder, "package.json")) || File.Exists(Path.Combine(g.Folder, "nw.pak"));
-                if (!nw) return null;
-                bool bad = g.Folder.IndexOfAny(new[] { '#', '%', '?' }) >= 0;
-                bool ascii = NwAscii(g);   // 폴더 목록이 떠서 영문 경로로 켜기로 한 게임 (옛 nw.js는 한글·일본어 경로를 못 읽기도 함)
+                // 경로에 한국어 윈도우 글자표(CP949)로 못 쓰는 글자(険 같은 일본 한자)가 있으면 옛 게임은 "?"로 읽어 파일을 못 엶
+                // (용병의 모험: RGSS301.dll "File corrupted !") → 어떤 게임이든 영문 연결 경로로
+                bool unicodeOnly = !AnsiSafe(g.Folder);
+                bool bad = nw && g.Folder.IndexOfAny(new[] { '#', '%', '?' }) >= 0;
+                bool ascii = (nw && NwAscii(g)) || unicodeOnly;   // 폴더 목록이 떠서 영문 경로로 켜기로 한 게임 (옛 nw.js는 한글·일본어 경로를 못 읽기도 함)
                 if (!bad && !ascii) return null;
+                if (unicodeOnly) Log.Info("경로에 지금 윈도우 글자표로 못 쓰는 글자가 있어 영문 연결 경로로 실행: " + g.Folder);
                 string root = ascii ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "TkoolRun") : Path.Combine(Settings.Dir, "run");
                 Directory.CreateDirectory(root);
                 string link = Path.Combine(root, "g" + ((uint)g.Folder.ToLowerInvariant().GetHashCode()).ToString("x8"));
