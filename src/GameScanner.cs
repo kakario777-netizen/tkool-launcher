@@ -148,7 +148,7 @@ namespace TkoolLauncher
         static readonly string[] SkipDirs =
         {
             "www", "data", "js", "audio", "img", "graphics", "fonts", "movies", "system",
-            "save", "locales", "swiftshader", "$recycle.bin", "system volume information"
+            "save", "locales", "_old", "swiftshader", "$recycle.bin", "system volume information"
         };
 
         static readonly string[] HelperExe =

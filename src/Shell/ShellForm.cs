@@ -1233,10 +1233,12 @@ namespace TkoolLauncher
                     Scanning = false;
                     Activity.Done("scan", "게임 " + found.Count + "개 찾음");
                     int before = knownCount;
+                    int fresh = NewInbox.Update(found);
                     SetGames(found);
                     knownCount = found.Count;
                     Task.Run(() => GameScanner.SaveCache(found));
-                    if (before < 0) ShowToast("게임 " + found.Count + "개를 찾았어요");
+                    if (fresh > 0) ShowToast("새 게임 " + fresh + "개가 들어왔어요 — 쯔꾸르 탭 맨 위 노란 칸에서 확인", 6000);
+                    else if (before < 0) ShowToast("게임 " + found.Count + "개를 찾았어요");
                     else if (found.Count > before) ShowToast("새 게임 " + (found.Count - before) + "개를 목록에 넣었어요", 4000);
                     else if (found.Count < before) ShowToast("없어진 게임 " + (before - found.Count) + "개를 목록에서 뺐어요", 4000);
                 }));

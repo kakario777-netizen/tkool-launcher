@@ -21,6 +21,7 @@ namespace TkoolLauncher
         public class Group { public List<GameInfo> Games = new List<GameInfo>(); public List<string> Why = new List<string>(); }
         public static List<Group> Groups = new List<Group>();
         static volatile bool busy;
+        public static bool Busy => busy;
 
         public static void Scan(List<GameInfo> all, Action done)
         {
@@ -261,6 +262,8 @@ namespace TkoolLauncher
 
         static readonly Regex SaveName = new Regex(@"(?i)^(save\d*\.(rxdata|rvdata2?|lsd)|file\d+\.rpgsave|file\d+\.rmmzsave|.*\.(rpgsave|rmmzsave|sav)|save\d+\.lsd)$");
         static readonly string[] PatchHints = { "한글", "kor", "korean", "패치", "patch", "번역" };
+
+        public static bool IsSaveFile(string name) => SaveName.IsMatch(name) && !name.StartsWith("config", StringComparison.OrdinalIgnoreCase) && !name.StartsWith("global", StringComparison.OrdinalIgnoreCase);
 
         public static Detail GetDetail(GameInfo g)
         {

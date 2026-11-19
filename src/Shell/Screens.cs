@@ -239,6 +239,8 @@ namespace TkoolLauncher
         List<KeyValuePair<string, Action>> Extras()
         {
             var l = new List<KeyValuePair<string, Action>>();
+            int nn = NewInbox.Count;
+            if (nn > 0) l.Add(new KeyValuePair<string, Action>("새 게임 " + nn, NewMenu));
             int n = DupFinder.Groups.Count;
             if (n > 0) l.Add(new KeyValuePair<string, Action>("중복 확인 " + n, () => Shell.Push(new DupScreen())));
             int pc = GameCapture.PendingCount(Shell.Games);
@@ -511,8 +513,15 @@ namespace TkoolLauncher
                 if (engSel != null) src = src.Where(x => EngineOf(x) == engSel);
                 if (InpOn) src = src.Where(InpMatch);
                 items = SortWide(src);
+                newN = 0;
+                if (chips[chipIdx].Name != "숨김" && NewInbox.Count > 0)
+                {
+                    var nw = items.Where(NewInbox.IsNew).ToList();
+                    newN = nw.Count;
+                    if (newN > 0) items = nw.Concat(items.Where(x => !NewInbox.IsNew(x))).ToList();
+                }
             }
-            else chipFocus = false;
+            else { chipFocus = false; newN = 0; }
             int i = cur != null ? items.FindIndex(x => x.Exe == cur.Exe) : -1;
             focus = i >= 0 ? i : 0;
             Follow();
@@ -548,26 +557,57 @@ namespace TkoolLauncher
         int CapH => Wide ? CapW * 3 / 4 + BandH : CapW * 3 / 2;   // 쯔꾸르: 4:3 타이틀 그림 + 아래 이름 띠
         Rectangle GridArea => new Rectangle(Area.X, Area.Y + TabH + ChipH, Area.Width, Area.Height - TabH - ChipH);
 
+        // ── 새로 들어온 게임: 맨 위 노란 테두리 칸 (확인 끝 전까지) ──
+        int newN;
+        int NewHdrH => newN > 0 ? S(64) : 0;
+        int NewRows => (newN + Cols - 1) / Cols;
+        int NewBlockH => newN > 0 ? NewHdrH + NewRows * (CapH + Gap) - Gap + S(20) + S(40) : 0;   // 칸 + 아래 띄움
+        Rectangle newChkR, newEndR;
+
+        /// <summary>목록 맨 위에서부터의 카드 위치(스크롤 전)</summary>
+        int ItemTop(int i)
+        {
+            if (i < newN) return S(20) + NewHdrH + (i / Cols) * (CapH + Gap);
+            int j = i - newN;
+            return S(20) + NewBlockH + (j / Cols) * (CapH + Gap);
+        }
+        int ItemCol(int i) => i < newN ? i % Cols : (i - newN) % Cols;
+
         Rectangle CapRect(int i)
         {
-            int c = i % Cols, row = i / Cols;
-            return new Rectangle(Area.X + Pad0 + c * (CapW + Gap), (int)(GridArea.Y + S(20) + row * (CapH + Gap) - scroll), CapW, CapH);
+            return new Rectangle(Area.X + Pad0 + ItemCol(i) * (CapW + Gap), (int)(GridArea.Y + ItemTop(i) - scroll), CapW, CapH);
         }
 
         float MaxScroll
         {
             get
             {
-                int rows = (items.Count + Cols - 1) / Cols;
-                return Math.Max(0, S(20) * 2 + rows * (CapH + Gap) - GridArea.Height);
+                if (items.Count == 0) return 0;
+                return Math.Max(0, ItemTop(items.Count - 1) + CapH + S(20) - GridArea.Height);
             }
+        }
+
+        /// <summary>위아래 이웃 카드 (새 게임 칸과 아래 목록 사이도 자연스럽게)</summary>
+        int VNeighbor(int d)
+        {
+            int myTop = ItemTop(focus), myCol = ItemCol(focus), best = -1, bestRowTop = 0;
+            for (int i = 0; i < items.Count; i++)
+            {
+                int t = ItemTop(i);
+                if (d > 0 ? t <= myTop : t >= myTop) continue;
+                if (best < 0 || (d > 0 ? t < bestRowTop : t > bestRowTop)) { bestRowTop = t; best = i; }
+            }
+            if (best < 0) return -1;
+            int pick = -1, dist = int.MaxValue;
+            for (int i = 0; i < items.Count; i++)
+                if (ItemTop(i) == bestRowTop && Math.Abs(ItemCol(i) - myCol) < dist) { dist = Math.Abs(ItemCol(i) - myCol); pick = i; }
+            return pick;
         }
 
         void Follow()
         {
             if (items.Count == 0) { target = 0; return; }
-            int row = focus / Cols;
-            float top = S(20) + row * (CapH + Gap);
+            float top = ItemTop(focus) - (focus < Cols && newN > 0 ? NewHdrH : 0);
             float bottom = top + CapH;
             if (top - S(24) < target) target = top - S(24);
             if (bottom + S(24) > target + GridArea.Height) target = bottom + S(24) - GridArea.Height;
@@ -619,6 +659,8 @@ namespace TkoolLauncher
                 if (tabs.Count == 0) msg = "";
                 Draw.Text(g, msg, Draw.Menu, GridArea, Theme.SubText, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
             }
+            newChkR = newEndR = Rectangle.Empty;
+            if (newN > 0) PaintNewBox(g);
             for (int i = 0; i < items.Count; i++)
             {
                 var r = CapRect(i);
@@ -644,6 +686,63 @@ namespace TkoolLauncher
             }
             g.Clip = clip;
             PaintBar(g);
+        }
+
+        static readonly Color NewYellow = Color.FromArgb(255, 238, 196, 60);
+
+        void PaintNewBox(Graphics g)
+        {
+            int y = (int)(GridArea.Y + S(20) - scroll) - S(4);
+            var box = new Rectangle(Area.X + Pad0 - S(14), y, Area.Width - Pad0 * 2 + S(28), NewHdrH + NewRows * (CapH + Gap) - Gap + S(18));
+            using (var path = Theme.Round(box, S(12)))
+            {
+                using (var b = new SolidBrush(Color.FromArgb(28, 238, 196, 60))) g.FillPath(b, path);
+                using (var p = new Pen(NewYellow, S(3))) g.DrawPath(p, path);
+            }
+            int hy = box.Y + S(8), hh = S(48);
+            newEndR = new Rectangle(box.Right - S(16) - S(150), hy, S(150), hh);
+            newChkR = new Rectangle(newEndR.X - S(12) - S(210), hy, S(210), hh);
+            int dupN = NewDupGroups().Count;
+            string sub = DupFinder.Busy ? "중복 검사 중…" : dupN > 0 ? "중복·새 버전 " + dupN + "묶음 확인 필요" : "중복 없음";
+            Draw.Text(g, "새로 들어온 게임 " + newN + "개", Theme.Px(18, true), new Rectangle(box.X + S(18), hy, S(320), hh), NewYellow, Draw.Left);
+            Draw.Text(g, sub + " · 이름·정보는 알아서 채우는 중", Draw.Small, new Rectangle(box.X + S(18) + S(300), hy, newChkR.X - box.X - S(330), hh), Theme.SubText,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
+            Draw.Fill(g, newChkR, S(6), dupN > 0 ? Color.FromArgb(255, 150, 112, 20) : Color.FromArgb(255, 52, 62, 78));
+            Draw.Text(g, dupN > 0 ? "중복·버전 보기 " + dupN : "중복·버전 보기", Draw.BodyBold, newChkR, Color.White, Draw.Center);
+            Draw.Fill(g, newEndR, S(6), Color.FromArgb(255, 60, 120, 70));
+            Draw.Text(g, "확인 끝", Draw.BodyBold, newEndR, Color.White, Draw.Center);
+        }
+
+        public static List<DupFinder.Group> NewDupGroups() => DupFinder.Groups.Where(gr => gr.Games.Any(NewInbox.IsNew)).ToList();
+
+        void OpenNewDups()
+        {
+            if (NewDupGroups().Count == 0) { Shell.ShowToast(DupFinder.Busy ? "중복 검사 중이에요. 조금 뒤에 다시 봐 주세요" : "새 게임 중 기존 게임과 겹치는 건 없어요", 3500); return; }
+            Shell.Push(new DupScreen(true));
+        }
+
+        void EndNew()
+        {
+            int n = NewInbox.Count;
+            PickerScreen.Confirm(Shell, "새 게임 " + n + "개 확인을 끝낼까요?", "확인 끝", () =>
+            {
+                Shell.BeginInvoke(new Action(() =>
+                    PickerScreen.Confirm(Shell, "정말 끝낼까요?", "네, 끝내기", () =>
+                    {
+                        NewInbox.Clear();
+                        Shell.RefreshLists();
+                        Shell.ShowToast("노란 칸을 풀었어요 — 일반 목록에 섞였어요", 3000);
+                    }, "노란 칸에서 빠지고 일반 목록에 섞여요. 되돌릴 수 없어요")));
+            }, NewDupGroups().Count > 0 ? "아직 중복·새 버전 " + NewDupGroups().Count + "묶음을 안 봤어요" : null);
+        }
+
+        void NewMenu()
+        {
+            PickerScreen.Show(Shell, "새로 들어온 게임 " + NewInbox.Count + "개", new[] { "중복·새 버전 보기", "확인 끝 (노란 칸 풀기)", "닫기" }, 0, i =>
+            {
+                if (i == 0) Shell.BeginInvoke(new Action(OpenNewDups));
+                else if (i == 1) Shell.BeginInvoke(new Action(EndNew));
+            });
         }
 
         // ── 오른쪽 스크롤 손잡이 (터치·마우스로 끌기) ──
@@ -895,12 +994,12 @@ namespace TkoolLauncher
                     break;
                 case Pad.Up:
                     if (chipFocus) break;
-                    if (focus - Cols >= 0) Move(-Cols);
-                    else if (TkTab) { chipFocus = true; target = 0; Shell.Animate(); Shell.FocusChanged(); }   // 맨 윗줄에서 위 → 분류 줄
+                    { int up = VNeighbor(-1); if (up >= 0) { Move(up - focus); break; } }
+                    if (TkTab) { chipFocus = true; target = 0; Shell.Animate(); Shell.FocusChanged(); }   // 맨 윗줄에서 위 → 분류 줄
                     break;
                 case Pad.Down:
                     if (chipFocus) { chipFocus = false; extraSel = 0; Shell.FocusChanged(); break; }
-                    if (focus + Cols < items.Count) Move(Cols); else if (focus / Cols < (items.Count - 1) / Cols) Move(items.Count - 1 - focus); break;
+                    { int dn = VNeighbor(1); if (dn >= 0) Move(dn - focus); } break;
                 case Pad.X: if (TkTab) NextSort(); break;
                 case Pad.LB: SetTab(tab - 1); break;
                 case Pad.RB: SetTab(tab + 1); break;
@@ -931,6 +1030,8 @@ namespace TkoolLauncher
             }
             if (MaxScroll > 0 && BarZone.Contains(p)) { BarJump(p.Y); return; }
             if (!GridArea.Contains(p)) return;
+            if (newChkR.Contains(p)) { OpenNewDups(); return; }
+            if (newEndR.Contains(p)) { EndNew(); return; }
             for (int i = 0; i < items.Count; i++)
                 if (CapRect(i).Contains(p)) { focus = i; Shell.FocusChanged(); OpenDetail(items[i]); return; }
         }
