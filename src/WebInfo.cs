@@ -124,8 +124,9 @@ namespace TkoolLauncher
               foreach (var store in new[] { "cc=JP&l=japanese", "cc=US&l=english" })
               {
                 string json;
+                System.Threading.Interlocked.Increment(ref tries[0]);
                 try { json = Http("https://store.steampowered.com/api/storesearch/?term=" + Uri.EscapeDataString(name) + "&" + store); }
-                catch (Exception ex) { Log.Info("스팀 검색 " + name + ": " + ex.Message); continue; }
+                catch (Exception ex) { Log.Info("스팀 검색 " + name + ": " + ex.Message); System.Threading.Interlocked.Increment(ref err[0]); lastErr[0] = ex.Message; continue; }
                 // 항목마다 잘라서 (가격 같은 안쪽 { } 때문에 통째 정규식은 안 됨)
                 var starts = SteamType.Matches(json).Cast<Match>().Select(x => x.Index).ToList();
                 for (int si = 0; si < starts.Count; si++)
@@ -181,8 +182,9 @@ namespace TkoolLauncher
             foreach (var name in names.Where(n => n.Any(c => c < 128 && char.IsLetter(c))))
             {
                 string html;
+                System.Threading.Interlocked.Increment(ref tries[3]);
                 try { html = Http("https://itch.io/search?type=games&q=" + Uri.EscapeDataString(name)); }
-                catch (Exception ex) { Log.Info("itch.io 검색 " + name + ": " + ex.Message); continue; }
+                catch (Exception ex) { Log.Info("itch.io 검색 " + name + ": " + ex.Message); System.Threading.Interlocked.Increment(ref err[3]); lastErr[3] = ex.Message; continue; }
                 foreach (Match m in ItchCell.Matches(html))
                 {
                     string found = WebUtility.HtmlDecode(m.Groups[2].Value).Trim();
@@ -238,6 +240,7 @@ namespace TkoolLauncher
                 if (cid != null) { var i = FanzaPage(cid); if (i != null) { Log.Info("FANZA 번호로 찾음: " + cid); return i; } }
                 foreach (var name in names.Where(n => n.Any(c => (c >= 0x3040 && c <= 0x30FF) || (c >= 0x4E00 && c <= 0x9FFF) || (c < 128 && char.IsLetter(c)))).Take(2))
                 {
+                    System.Threading.Interlocked.Increment(ref tries[1]);
                     string html = HttpCookie("https://www.dmm.co.jp/dc/doujin/-/search/=/searchstr=" + Uri.EscapeDataString(name) + "/");
                     var cids = FanzaCid.Matches(html).Cast<Match>().Select(m => m.Groups[1].Value).Distinct().Take(4).ToList();
                     if (cids.Count == 0 && !html.Contains("doujin")) { fanzaOff = true; Log.Info("FANZA: 지역 제한이나 연령 확인 화면으로 보여 이번엔 그만"); return null; }
@@ -251,7 +254,7 @@ namespace TkoolLauncher
             }
             catch (Exception ex)
             {
-                Log.Info("FANZA: " + ex.Message);
+                Log.Info("FANZA: " + ex.Message); System.Threading.Interlocked.Increment(ref err[1]); lastErr[1] = ex.Message;
                 if (ex is WebException we && we.Response is HttpWebResponse hr && ((int)hr.StatusCode == 403 || (int)hr.StatusCode == 451)) fanzaOff = true;
             }
             return null;
@@ -275,8 +278,9 @@ namespace TkoolLauncher
             foreach (var name in names.Where(n => n.Any(c => (c >= 0x3040 && c <= 0x30FF) || (c >= 0x4E00 && c <= 0x9FFF) || (c < 128 && char.IsLetter(c)))))
             {
                 string html;
+                System.Threading.Interlocked.Increment(ref tries[2]);
                 try { html = Http("https://www.freem.ne.jp/search/" + Uri.EscapeDataString(name)); }
-                catch (Exception ex) { Log.Info("ふりーむ 검색 " + name + ": " + ex.Message); continue; }
+                catch (Exception ex) { Log.Info("ふりーむ 검색 " + name + ": " + ex.Message); System.Threading.Interlocked.Increment(ref err[2]); lastErr[2] = ex.Message; continue; }
                 foreach (Match m in FreemItem.Matches(html))
                 {
                     string found = WebUtility.HtmlDecode(Regex.Replace(m.Groups[2].Value, "<[^>]+>", "")).Trim();
@@ -310,6 +314,11 @@ namespace TkoolLauncher
             return null;
         }
 
+        // 사이트별 검색 횟수·접속 오류 (끝나면 "런처가 한 일"에 — 너무 빨리 끝나면 오류인지 볼 수 있게)
+        static int[] tries = new int[4], err = new int[4];
+        static string[] lastErr = new string[4];
+        static string Stat(int k) => tries[k] + "번 검색" + (err[k] > 0 ? ", 접속 오류 " + err[k] + "(" + (lastErr[k] ?? "") + ")" : "");
+
         public static volatile bool Busy;
         static volatile bool again;
 
@@ -325,7 +334,8 @@ namespace TkoolLauncher
             var th = new System.Threading.Thread(() =>
             {
                 int n = 0, k = 0;
-                var cnt = new int[5];   // 스팀·FANZA·ふりーむ·itch.io·찾을 이름 없음
+                var cnt = new int[5];
+                tries = new int[4]; err = new int[4]; lastErr = new string[4];   // 스팀·FANZA·ふりーむ·itch.io·찾을 이름 없음
                 try
                 {
                     foreach (var g in list)
@@ -362,6 +372,7 @@ namespace TkoolLauncher
                 finally
                 {
                     Activity.Done("web", "다른 사이트 끝 · " + list.Count + "개 찾아봄, " + n + "개 채움 (스팀 " + cnt[0] + " · FANZA " + cnt[1] + (fanzaOff ? "(접속 안 됨)" : "") + " · ふりーむ " + cnt[2] + " · itch.io " + cnt[3] + (cnt[4] > 0 ? " · 찾을 이름 없음 " + cnt[4] : "") + ")");
+                    Activity.Note("검색 내역 · 스팀 " + Stat(0) + " / FANZA " + Stat(1) + " / ふりーむ " + Stat(2) + " / itch.io " + Stat(3) + " — 일본어만 있는 이름은 itch.io에서 안 찾음");
                     Busy = false;
                     done?.Invoke(n);
                     if (again) RunAll(games, done);   // 도는 중에 새로 생긴 게임(DLsite에도 없던 것)

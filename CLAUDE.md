@@ -83,3 +83,4 @@
 - 오버레이 "충전 전력"(11번째 항목, 비트 10): SystemControls.ChargeWatts(WMI BatteryStatus.ChargeRate mW, 충전 중일 때만 "+N.NW"), 예전 다 보이기(0x3FF)면 0x7FF로.
 - 게임 고유 흔적: GameIdent.cs — 파일·폴더 이름(2단계)·읽어보기 글 안의 RJ/VJ/BJ 번호(NameFinder.FindCode 마지막에 씀), FANZA cid(d_숫자), steam_appid.txt·스팀 상점 주소, 게임 안 진짜 이름(Unity *_Data/app.info 2번째 줄·exe ProductName/FileDescription·Ren'Py config.name·package.json title, 엔진 이름류는 뺌). WebInfo.Names가 안 이름 먼저(최대 4개). WebInfo 순서: steam_appid → FANZA cid → 스팀 이름 → FANZA 이름(og 태그만, age_check_done 쿠키, 지역 제한·403이면 이번 실행 동안 끔 — 성인 사이트라 크롬으로 구조 확인 못 함) → ふりーむ → itch.io(검색 a.title.game_link, 게임 페이지 og:image·formatted_description·Author·Genre·Tags, 크롬으로 구조 확인함). 못 찾음 .none은 내용 "v2"일 때만 찾아본 걸로(예전 표시는 다시).
 - 다른 사이트 진행 표시: WebInfo가 게임마다 "스팀/FANZA/ふりーむ/itch.io에서 찾는 중"을 따로 띄우고, 끝나면 사이트별로 찾은 수(FANZA 접속 안 되면 표시)·찾을 이름 없는 게임 수를 "런처가 한 일"에 남김.
+- 검색 내역: WebInfo가 끝날 때 사이트별 검색 횟수·접속 오류 수와 마지막 오류 글을 "런처가 한 일"에 남김(너무 빨리 끝나는지 확인용). itch.io는 영문 글자가 있는 이름만 검색.
