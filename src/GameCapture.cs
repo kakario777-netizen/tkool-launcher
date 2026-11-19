@@ -553,7 +553,7 @@ namespace TkoolLauncher
             Bitmap bmp = null;
             try
             {
-                if (Scaler.Mode != 0)
+                if (false)   // 예전: 화면 확대 중이면 화면 전체를 찍었음 → 확대가 안 걸린 게임은 작은 창 + 검은 바탕이 표지가 됨(히메사마). 이제 언제나 게임 창 안쪽만
                 {
                     // 화면 확대 중이면 확대된 전체 화면을 찍음
                     var sc = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
