@@ -24,7 +24,7 @@ namespace TkoolLauncher
         bool busy;
 
         // 항목 (Settings.OvItems 비트 순서)
-        public static readonly string[] ItemNames = { "FPS", "CPU 사용률", "CPU 온도", "TDP", "GPU", "메모리", "소모 전력", "전압", "배터리", "시간" };
+        public static readonly string[] ItemNames = { "FPS", "CPU 사용률", "CPU 온도", "TDP", "GPU", "메모리", "소모 전력", "전압", "배터리", "시간", "충전 전력" };
         public static readonly string[] StyleNames = { "가로 한 줄", "세로 목록", "FPS만 크게" };
         public static readonly string[] PosNames = { "왼쪽 위", "가운데 위", "오른쪽 위", "왼쪽 아래", "오른쪽 아래", "왼쪽 가운데", "오른쪽 가운데", "가운데 아래", "직접 옮긴 곳" };
         public const int PosCustom = 8;
@@ -38,7 +38,7 @@ namespace TkoolLauncher
         };
 
         // 마지막 측정값: (라벨, 값) 목록 — 항목 번호와 같은 순서, 값이 없으면 null
-        string[] vals = new string[10];
+        string[] vals = new string[11];
         bool measured;
 
         public static bool IsOn => inst != null;
@@ -157,7 +157,7 @@ namespace TkoolLauncher
             busy = true;
             Task.Run(() =>
             {
-                var v = new string[10];
+                var v = new string[11];
                 try
                 {
                     float fps = Fps.Value;
@@ -176,6 +176,7 @@ namespace TkoolLauncher
                     if (Want(7)) { double volt = SystemControls.BatteryVolts(); if (volt > 0) v[7] = volt.ToString("0.00") + "V"; }
                     if (Want(8)) try { v[8] = (int)Math.Round(SystemInformation.PowerStatus.BatteryLifePercent * 100) + "%"; } catch { }
                     if (Want(9)) v[9] = DateTime.Now.ToString("HH:mm");
+                    if (Want(10)) { double cw = SystemControls.ChargeWatts(); if (cw > 0) v[10] = "+" + cw.ToString("0.0") + "W"; }   // 충전 중일 때만
                 }
                 catch { }
                 try { BeginInvoke(new Action(() => { vals = v; measured = true; busy = false; Render(); })); } catch { busy = false; }
@@ -208,7 +209,7 @@ namespace TkoolLauncher
             catch { return -1; }
         }
 
-        static readonly string[] Short = { "FPS", "CPU", "CPU", "TDP", "GPU", "RAM", "전력", "전압", "배터리", "" };
+        static readonly string[] Short = { "FPS", "CPU", "CPU", "TDP", "GPU", "RAM", "전력", "전압", "배터리", "", "충전" };
 
         /// <summary>현재 설정으로 그림을 만들어 창에 올림</summary>
         public void Render()
@@ -256,7 +257,7 @@ namespace TkoolLauncher
 
             // 보일 항목 (FPS는 측정 전이면 "-")
             var items = new List<int>();
-            for (int i = 0; i < 10; i++) if (Want(i) && (vals[i] != null || (i == 0 && measured == false))) items.Add(i);
+            for (int i = 0; i < 11; i++) if (Want(i) && (vals[i] != null || (i == 0 && measured == false))) items.Add(i);
             if (Settings.OvStyle == 2) { items = new List<int> { 0 }; }
 
             using (var fV = new Font(Theme.FontName, Theme.S(14) * k, FontStyle.Bold, GraphicsUnit.Pixel))

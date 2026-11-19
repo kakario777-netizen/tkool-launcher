@@ -331,6 +331,22 @@ namespace TkoolLauncher
             return 0;
         }
 
+        /// <summary>충전 전력(W, 배터리로 들어가는 양). 충전 중 아니면 0</summary>
+        public static double ChargeWatts()
+        {
+            try
+            {
+                using (var s = new ManagementObjectSearcher("root\\WMI", "SELECT ChargeRate, Charging FROM BatteryStatus"))
+                    foreach (ManagementObject o in s.Get())
+                    {
+                        double w = Convert.ToDouble(o["ChargeRate"]) / 1000.0;
+                        return w > 0 ? w : 0;
+                    }
+            }
+            catch { }
+            return 0;
+        }
+
         /// <summary>배터리 전압(V). 모르면 0</summary>
         public static double BatteryVolts()
         {

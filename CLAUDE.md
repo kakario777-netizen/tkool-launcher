@@ -80,3 +80,4 @@
 - 이름 번역 보강: 묶음 번역이 한글 없이 그대로 돌려준 이름은 언어를 정해(sl=en/ja, Translate.Run(text, sl)) 하나씩 다시, 그래도 그대로면 고유 이름으로 보고 Checked 흔적 + "런처가 한 일"에 "번역해도 그대로인 이름" (예전엔 흔적이 없어 매번 다시 시도만 하고 영어로 남았음).
 - 지난 목록 바로 보이기: GameScanner.SaveCache/LoadCache(cache\library.txt, 스캔 결과·원래 이름) — 켤 때(업데이트 재시작 포함) 먼저 SetGames(cached, background:false)로 화면만, 폴더 검사는 뒤에서 조용히 하고 끝나면 진짜 목록으로 바꿈(달라진 게 있을 때만 알림).
 - 바로가기 단추 글자: QuickPanel.DrawWrapped — 한 줄에 안 들어가면 띄어쓰기에서 나눠 최대 3줄(낱말 가운데서 안 끊음), 그래도 넘치면 글씨 줄임(BodyBold→Body→Small→Tiny).
+- 오버레이 "충전 전력"(11번째 항목, 비트 10): SystemControls.ChargeWatts(WMI BatteryStatus.ChargeRate mW, 충전 중일 때만 "+N.NW"), 예전 다 보이기(0x3FF)면 0x7FF로.
