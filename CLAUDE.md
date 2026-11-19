@@ -122,3 +122,4 @@
 - 마우스 모드 미세 조정: RB나 RT를 누르고 있는 동안 커서 속도 1/4 (Gamepad.HandleMouse).
 - 마우스 게임 자동 마우스 모드: 런처로 켤 때 InputNeeds가 마우스 꼭 필요(n)·패드 지원 아님이고 키 변환도 없으면 Gamepad.MouseMode 자동 켬(끝나면 끔, autoMouse). 예: 돈없는 언니(Tyrano Electron, 읽어보기 "マウスでの操作").
 - HidHide 없으면 빠른 설정 컨트롤러 탭 맨 위 "팝업 중 게임 입력 막기 도구 설치"(VirtualPad.InstallDrivers — winget, 허락 창 한 번, 끝나면 재부팅).
+- 게임 폴더 살펴보기 진단: GameScanner.Current(지금 폴더)·Timing(폴더/스토어/설치 기록 초) — 아래 줄에 지금 폴더 이름, 끝나면 log "게임 폴더 살펴보기 끝: N개 · 초", 한 곳에 1분 넘게 머물면 log. RestoreRenamed·ScanAll 예외도 기록.

@@ -157,14 +157,20 @@ namespace TkoolLauncher
             "config", "dxsetup", "vcredist", "rtp", "patch", "update", "zip", "7z"
         };
 
+        public static volatile string Current = "";   // 지금 살펴보는 폴더 (멈춘 곳 확인용)
+        public static string Timing = "";
+
         public static List<GameInfo> ScanAll(IEnumerable<string> roots)
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             var list = new List<GameInfo>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var r in roots)
             {
                 if (Directory.Exists(r)) Walk(r, 0, list, seen);
             }
+            long tWalk = sw.ElapsedMilliseconds;
+            Current = "스토어 게임 (스팀·에픽 등)";
             // 스토어 게임 + 직접 추가한 게임 합치기 (같은 폴더가 겹치면 스토어 쪽만)
             var stores = new List<GameInfo>();
             if (Settings.StoreScan) { try { stores = StoreScanner.ScanAll(); } catch { } }
@@ -176,6 +182,8 @@ namespace TkoolLauncher
                     x.Folder.StartsWith(st.InstallDir.TrimEnd('\\') , StringComparison.OrdinalIgnoreCase));
                 if (seen.Add(st.Exe ?? st.LaunchUri)) list.Add(st);
             }
+            long tStore = sw.ElapsedMilliseconds;
+            Current = "설치된 PC 게임 기록";
             // 직접 설치한 PC 게임 (설치 기록) — 이미 찾은 폴더와 겹치면 뺌
             if (Settings.StoreScan)
             {
@@ -194,11 +202,14 @@ namespace TkoolLauncher
                 if (!File.Exists(exe) || seen.Contains(exe)) continue;
                 try { var g = FromExe(exe); if (seen.Add(g.Exe)) list.Add(g); } catch { }
             }
+            Timing = "폴더 " + tWalk / 1000.0 + "초 · 스토어 " + (tStore - tWalk) / 1000.0 + "초 · 설치 기록 " + (sw.ElapsedMilliseconds - tStore) / 1000.0 + "초";
+            Current = "";
             return list.OrderBy(g => g.Title, StringComparer.CurrentCultureIgnoreCase).ToList();
         }
 
         static void Walk(string dir, int depth, List<GameInfo> list, HashSet<string> seen)
         {
+            Current = dir;
             GameInfo g = null;
             try { g = Detect(dir); } catch { }
             if (g == null && depth >= 1)

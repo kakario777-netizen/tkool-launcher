@@ -1260,11 +1260,25 @@ namespace TkoolLauncher
             Activity.Set("scan", "게임 폴더 살펴보는 중");
             Invalidate();
             var roots = Settings.GameFolders.ToList();
+            var scanStart = DateTime.Now;
+            // 살펴보는 폴더를 아래 줄에 보여 주고, 2분 넘게 한 곳에 머물면 기록 (멈춘 곳 찾기)
+            var scanTip = new Timer { Interval = 1000 };
+            string lastCur = null; DateTime curSince = DateTime.Now; bool noted = false;
+            scanTip.Tick += (o, e) =>
+            {
+                if (!Scanning) { scanTip.Stop(); scanTip.Dispose(); return; }
+                string c = GameScanner.Current ?? "";
+                if (c != lastCur) { lastCur = c; curSince = DateTime.Now; noted = false; }
+                Activity.Set("scan", "게임 폴더 살펴보는 중 · " + (c.Length > 0 ? System.IO.Path.GetFileName(c.TrimEnd('\\')) : "준비"));
+                if (!noted && (DateTime.Now - curSince).TotalSeconds > 60) { noted = true; Log.Info("게임 폴더 살펴보기가 1분 넘게 한 곳에 머묾: " + c); }
+            };
+            scanTip.Start();
             Task.Run(() =>
             {
-                GameDoctor.RestoreRenamed(roots);   // 예전 버전이 바꿔 버린 폴더 이름 되돌리기
+                try { GameDoctor.RestoreRenamed(roots); } catch (Exception ex) { Log.Error("폴더 이름 되돌리기", ex); }   // 예전 버전이 바꿔 버린 폴더 이름 되돌리기
                 List<GameInfo> found;
-                try { found = GameScanner.ScanAll(roots); } catch { found = new List<GameInfo>(); }
+                try { found = GameScanner.ScanAll(roots); } catch (Exception ex) { Log.Error("게임 폴더 살펴보기", ex); found = new List<GameInfo>(); }
+                Log.Info("게임 폴더 살펴보기 끝: " + found.Count + "개 · " + (int)(DateTime.Now - scanStart).TotalSeconds + "초 (" + GameScanner.Timing + ")");
                 BeginInvoke(new Action(() =>
                 {
                     Scanning = false;
