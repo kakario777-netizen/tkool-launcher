@@ -596,6 +596,8 @@ namespace TkoolLauncher
         static string Text(IntPtr h) { var sb = new StringBuilder(512); GetWindowText(h, sb, 512); return sb.ToString(); }
         static string Cls(IntPtr h) { var sb = new StringBuilder(128); GetClassName(h, sb, 128); return sb.ToString(); }
 
+        public static DateTime UserEndedAt = DateTime.MinValue;   // 사용자·런처가 게임을 끈 때
+
         /// <summary>게임 프로세스를 잠깐 지켜봄: 오류 창 글을 모으고, 금방 꺼지거나 폴더 목록이 뜨면 onProblem(본 글, 아직 켜져 있는지)</summary>
         public static void Watch(GameInfo g, Process p, Action<string, bool> onProblem)
         {
@@ -619,7 +621,9 @@ namespace TkoolLauncher
                         {
                             int code = 0; try { code = p.ExitCode; } catch { }
                             if (sec < 20 && !box) { Thread.Sleep(800); string cr = Fixer.CrashInfo(g.InstallDir ?? g.Folder, start); if (cr.Length > 0) { seen += cr + "\n"; box = true; } }
-                            if ((box || sec < 12) && (g.IsTkool || VcDll.IsMatch(seen) || DxDll.IsMatch(seen))) { Log.Info("게임이 금방 꺼짐 (" + (int)sec + "초, 코드 " + code + ") " + seen.Replace("\n", " / ")); onProblem(seen, false); }
+                            // 정상으로 닫음(코드 0·오류 글 없음)이나 런처가 끈 건 문제 아님 — 예전엔 Ace를 빨리 끄면 매번 오류 안내
+                            bool normal = (code == 0 && !box && seen.Trim().Length == 0) || (DateTime.Now - UserEndedAt).TotalSeconds < 15;
+                            if (!normal && (box || sec < 12) && (g.IsTkool || VcDll.IsMatch(seen) || DxDll.IsMatch(seen))) { Log.Info("게임이 금방 꺼짐 (" + (int)sec + "초, 코드 " + code + ") " + seen.Replace("\n", " / ")); onProblem(seen, false); }
                             return;
                         }
                         // 게임 창들 읽기

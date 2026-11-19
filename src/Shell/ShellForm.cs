@@ -469,6 +469,7 @@ namespace TkoolLauncher
             string dir = GameWatch.Dir ?? ForegroundAppDir();
             if (dir == null) { ShowToast("끝낼 게임을 못 찾았어요", 2500); return; }
             Log.Info("게임 끝내기: " + dir);
+            GameDoctor.UserEndedAt = DateTime.Now;
             foreach (var p in Process.GetProcesses())
             {
                 try { if (p.Id != Process.GetCurrentProcess().Id && GameWatch.InDir(p.Id, dir)) p.Kill(); }

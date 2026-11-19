@@ -333,6 +333,7 @@ namespace TkoolLauncher
 
         public static void KillDir(string dir)
         {
+            GameDoctor.UserEndedAt = DateTime.Now;
             foreach (var p in Process.GetProcesses())
             {
                 try { if (p.Id != Process.GetCurrentProcess().Id && GameWatch.InDir(p.Id, dir)) p.Kill(); }
