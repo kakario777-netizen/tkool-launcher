@@ -38,7 +38,7 @@ namespace TkoolLauncher
                 if (cls.ToString() != "#32770") return true;
                 var tt = new StringBuilder(256); GetWindowText(h, tt, 256);
                 GetWindowThreadProcessId(h, out uint pid);
-                bool mine = GameWatch.InDir((int)pid, dir) || (exeName.Length > 0 && tt.ToString().ToLowerInvariant().StartsWith(exeName));
+                bool mine = GameWatch.InDir((int)pid, dir) || (exeName.Length > 0 && tt.ToString().ToLowerInvariant().StartsWith(exeName)) || Fixer.IsGameSysErr(tt.ToString(), dir);
                 if (!mine) return true;
                 sb.Append(tt).Append('\n');
                 EnumChildWindows(h, (c, l2) => { var t = new StringBuilder(512); GetWindowText(c, t, 512); if (t.Length > 2) sb.Append(t).Append('\n'); return true; }, IntPtr.Zero);
@@ -230,7 +230,7 @@ namespace TkoolLauncher
             finally { best?.Dispose(); firstText?.Dispose(); }
         }
 
-        static void KillDir(string dir)
+        public static void KillDir(string dir)
         {
             foreach (var p in Process.GetProcesses())
             {
@@ -273,6 +273,7 @@ namespace TkoolLauncher
                     Activity.Set("cover", "표지 찍는 중 · " + g.Title, i + 1, list.Count);
                     string dir = g.InstallDir ?? g.Folder;
                     string err = "";
+                    DateTime started = DateTime.Now;
                     // 이름만 필요하면 먼저 가진 그림(표지·타이틀 그림)의 글자로 — 되면 안 켬
                     if (nameOnly.Contains(g) && !retry)
                     {
@@ -282,6 +283,7 @@ namespace TkoolLauncher
                     }
                     try
                     {
+                        started = DateTime.Now;
                         Process.Start(new ProcessStartInfo(g.Exe) { WorkingDirectory = g.Folder, UseShellExecute = true });
                         IntPtr w = IntPtr.Zero;
                         for (int k = 0; k < 25 && !Cancel && w == IntPtr.Zero; k++)
@@ -322,27 +324,29 @@ namespace TkoolLauncher
                     }
                     catch (Exception ex) { Log.Info("표지 찍기 실행 " + g.Title + ": " + ex.Message); }
                     KillDir(dir);
+                    if (err.Length == 0 && !Cancel)
+                    {
+                        // 오류 창 없이 튕겼으면 윈도우 기록에서 원인 모듈 (msvcr120.dll·xaudio2_7.dll 등)
+                        string crash = "";
+                        try { System.Threading.Thread.Sleep(800); crash = Fixer.CrashInfo(dir, started); } catch { }
+                        if (crash.Length > 0) err = crash;
+                    }
 
                     // 오류 창이 떴으면: 고칠 수 있는 부품(DirectX·Visual C++)은 설치하고 이 게임을 한 번 더
                     if (err.Length > 0 && !Cancel)
                     {
-                        string low = err.ToLowerInvariant();
-                        GameDoctor.Issue fix = null;
-                        try { fix = GameDoctor.DxIssue(low) ?? GameDoctor.VcIssue(g, low); } catch { }
-                        if (fix != null && !fixedKinds.Contains(fix.Title) && !retry)
+                        if (!retry && Fixer.CanFix(g, err))
                         {
-                            fixedKinds.Add(fix.Title);
-                            Activity.Set("cover", "부품 설치 중 · " + fix.Title, i + 1, list.Count);
-                            progress("필요한 부품 설치 중 — " + fix.Title);
-                            string r = "";
-                            try { r = fix.Fix(); } catch (Exception ex) { r = ex.Message; }
-                            Activity.Note(fix.Title + " → " + r);
+                            Activity.Set("cover", "오류 먼저 고치는 중 · " + g.Title, i + 1, list.Count);
+                            progress("오류 먼저 고치는 중 — " + g.Title);
+                            string r = Fixer.FixNow(g, err);
+                            progress("고쳤어요 — 다시 켜 봐요: " + r);
                             retry = true; i--;                    // 같은 게임 다시
                             System.Threading.Thread.Sleep(1500);
                             continue;
                         }
+                        Fixer.NoteUnknown(g, err);
                         skipped++;
-                        Activity.Note("표지 찍기 건너뜀(오류 창) · " + g.Title + " — " + err.Replace("\n", " ").Trim());
                         Log.Info("표지 찍기 오류 창: " + g.Title + " — " + err.Replace("\n", " / "));
                     }
                     retry = false;

@@ -1311,6 +1311,39 @@ namespace TkoolLauncher
         Timer playTimer, healthTimer;
         int hungCount, noWinCount; bool healthBusy;
 
+        /// <summary>게임이 끝난 뒤: 오류로 멈췄거나 튕겼으면 원인(윈도우 튕김 기록)을 보고 스스로 고침</summary>
+        void CheckAfterEnd(GameInfo g, string dir, DateTime since, string problem)
+        {
+            new System.Threading.Thread(() =>
+            {
+                string crash = "";
+                try { System.Threading.Thread.Sleep(1500); crash = Fixer.CrashInfo(dir, since); } catch { }
+                string text = ((problem ?? "") + "\n" + crash + "\n" + lastBoxText).Trim();
+                lastBoxText = "";
+                if (crash.Length == 0 && problem == null) return;
+                if (Fixer.CanFix(g, text))
+                {
+                    try { BeginInvoke(new Action(() => ShowToast("게임이 오류로 꺼져서 원인을 고치는 중이에요", 5000))); } catch { }
+                    string r = Fixer.FixNow(g, text);
+                    try { BeginInvoke(new Action(() => ShowToast("고쳤어요: " + r + " — 다시 켜 보세요", 7000))); } catch { }
+                }
+                else
+                {
+                    Fixer.NoteUnknown(g, text);
+                    if (crash.Length > 0) try { BeginInvoke(new Action(() => ShowToast("게임이 튕겼어요 (" + crash + ") — '런처가 한 일'에 적어 뒀어요", 7000))); } catch { }
+                }
+            }) { IsBackground = true }.Start();
+        }
+        volatile string lastBoxText = "";
+
+        /// <summary>메시지 상자 제목 + 안 글</summary>
+        static string BoxText(IntPtr h, string title)
+        {
+            var sb = new System.Text.StringBuilder(title + "\n");
+            try { EnumChildWindows(h, (c, l) => { var t = new System.Text.StringBuilder(512); GetWindowText(c, t, 512); if (t.Length > 2) sb.Append(t).Append('\n'); return true; }, IntPtr.Zero); } catch { }
+            return sb.ToString();
+        }
+
         public TimeSpan PlayingFor => PlayingGame != null ? DateTime.Now - sessionStart : TimeSpan.Zero;
         DateTime sessionStart;
 
@@ -1332,7 +1365,9 @@ namespace TkoolLauncher
                 FlushPlayTime();
                 playTimer?.Dispose(); playTimer = null;
                 Log.Info("게임 끝: " + g.Title + " (이번 " + (int)(DateTime.Now - sessionStart).TotalMinutes + "분, 총 " + st.TotalSeconds / 60 + "분)");
+                string hadProblem = GameProblem; var startedAt = sessionStart; var endedGame = g;
                 playStat = null; PlayingGame = null; TrackedExternal = false; GameProblem = null;
+                CheckAfterEnd(endedGame, dir, startedAt, hadProblem);
                 if (curtain && ours) { curtainLeaving = true; Invalidate(); Update(); System.Threading.Thread.Sleep(450); }
                 curtain = false; curtainLeaving = false; TaskbarHide.Show();
                 if (coverFor != null) EndManualCover();
@@ -1362,6 +1397,7 @@ namespace TkoolLauncher
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)] struct WRECT { public int L, T, R, B; }
         [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out WRECT r);
         [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool EnumWindows(EnumWinProc f, IntPtr l);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr p, EnumWinProc f, IntPtr l);
         [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
         [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool IsHungAppWindow(IntPtr h);
         [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] static extern int GetWindowText(IntPtr h, System.Text.StringBuilder s, int n);
@@ -1385,7 +1421,7 @@ namespace TkoolLauncher
                 if (lib == null) { healthBusy = false; return; }
                 Task.Run(() =>
                 {
-                    GameInfo attach = null; string problem = null; bool hung = false, anyWin = false;
+                    GameInfo attach = null; string problem = null, boxText = ""; bool hung = false, anyWin = false;
                     IntPtr bigWin = IntPtr.Zero; int bigArea = 0;
                     try
                     {
@@ -1417,11 +1453,16 @@ namespace TkoolLauncher
                                     WRECT wr;
                                     if (GetWindowRect(h, out wr)) { int ar = (wr.R - wr.L) * (wr.B - wr.T); if (ar > bigArea) { bigArea = ar; bigWin = h; } }
                                     if (IsHungAppWindow(h)) hung = true;
-                                    if (!tk && cls.ToString() == "#32770" && tt.Length > 0) problem = "게임에 오류 창이 떴어요: " + tt;
+                                    if (cls.ToString() == "#32770" && tt.Length > 0)
+                                    {
+                                        string bt = BoxText(h, tt.ToString());
+                                        if (!tk || Fixer.CanFix(g, bt)) { problem = "게임에 오류 창이 떴어요: " + tt; boxText = bt; }
+                                    }
                                 }
                                 else
                                 {
                                     // 윈도우 '프로그램이 멈췄어요' 창 (WerFault)
+                                    if (cls.ToString() == "#32770" && Fixer.IsGameSysErr(tt.ToString(), dir)) { boxText = BoxText(h, tt.ToString()); problem = "게임에 오류 창이 떴어요: " + tt; }
                                     string pp = GameWatch.PathOf((int)wp) ?? "";
                                     if (pp.EndsWith("\\WerFault.exe", StringComparison.OrdinalIgnoreCase) && tt.Length > 0)
                                         problem = "게임이 오류로 멈췄어요 (" + tt + ")";
@@ -1454,6 +1495,18 @@ namespace TkoolLauncher
                             }
                             hungCount = hung ? hungCount + 1 : 0;
                             if (problem == null && hungCount >= 4) problem = "게임이 응답하지 않아요 (12초 넘게 멈춤)";
+                            if (boxText.Length > 0) lastBoxText = boxText;
+                            // 고칠 수 있는 오류 창(dll 없음 등)이면 묻지 않고: 게임 끄고 → 고치고 → 다시 켬
+                            if (boxText.Length > 0 && !TrackedExternal && Fixer.CanFix(PlayingGame, boxText) && !Fixer.Busy)
+                            {
+                                var fgame = PlayingGame; string fdir = fgame.InstallDir ?? fgame.Folder;
+                                Log.Info("플레이 중 오류 창 → 스스로 고침: " + boxText.Replace("\n", " / "));
+                                lastBoxText = "";
+                                GameCapture.KillDir(fdir);
+                                ShowToast("오류 원인을 찾았어요 — 런처가 고치는 중이에요 (끝나면 다시 켤게요)", 6000);
+                                Fixer.FixLater(fgame, boxText, r => { try { BeginInvoke(new Action(() => { ShowToast("고쳤어요: " + r + " — 다시 켤게요", 5000); if (!GameWatch.Running) Launch(fgame); })); } catch { } });
+                                return;
+                            }
                             if (problem != null && problem != GameProblem)
                             {
                                 GameProblem = problem;
@@ -1694,6 +1747,14 @@ namespace TkoolLauncher
                 {
                     BeginInvoke(new Action(() =>
                     {
+                        if (Fixer.CanFix(g, seen))
+                        {
+                            try { if (alive && !p.HasExited) p.Kill(); } catch { }
+                            GameCapture.KillDir(g.InstallDir ?? g.Folder);
+                            ShowToast("오류 원인을 찾았어요 — 런처가 고치는 중이에요 (끝나면 다시 켤게요)", 6000);
+                            Fixer.FixLater(g, seen, r => { try { BeginInvoke(new Action(() => { ShowToast("고쳤어요: " + r + " — 다시 켤게요", 5000); if (!GameWatch.Running) Launch(g); })); } catch { } });
+                            return;
+                        }
                         var t = new Timer { Interval = alive ? 300 : 1500 };   // 런처가 다시 앞에 나온 뒤에
                         t.Tick += (o, e) =>
                         {

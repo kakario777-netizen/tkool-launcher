@@ -67,15 +67,20 @@ namespace TkoolLauncher
             string year = ver == "71" ? "2003" : ver == "80" ? "2005" : ver == "90" ? "2008" : ver == "100" ? "2010" : ver == "110" ? "2012" : ver == "120" ? "2013" : "2015~2022";
             bool x64 = Is64(g.Exe);
             string arch = x64 ? "x64" : "x86";
-            string url = null, args = "/install /quiet /norestart";
-            switch (ver)
+            string args = ver == "100" ? "/q /norestart" : ver == "90" ? "/q" : "/install /quiet /norestart";
+            Func<string, string> urlOf = a =>
             {
-                case "140": url = "https://aka.ms/vs/17/release/vc_redist." + arch + ".exe"; break;
-                case "120": url = x64 ? "https://aka.ms/highdpimfc2013x64enu" : "https://aka.ms/highdpimfc2013x86enu"; break;
-                case "110": url = "https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_" + arch + ".exe"; break;
-                case "100": url = "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_" + arch + ".exe"; args = "/q /norestart"; break;
-                case "90": url = "https://download.microsoft.com/download/5/D/8/5D8C65CB-C849-4025-8E95-C3966CAFD8AE/vcredist_" + arch + ".exe"; args = "/q"; break;
-            }
+                switch (ver)
+                {
+                    case "140": return "https://aka.ms/vs/17/release/vc_redist." + a + ".exe";
+                    case "120": return a == "x64" ? "https://aka.ms/highdpimfc2013x64enu" : "https://aka.ms/highdpimfc2013x86enu";
+                    case "110": return "https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_" + a + ".exe";
+                    case "100": return "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_" + a + ".exe";
+                    case "90": return "https://download.microsoft.com/download/5/D/8/5D8C65CB-C849-4025-8E95-C3966CAFD8AE/vcredist_" + a + ".exe";
+                }
+                return null;
+            };
+            string url = urlOf(arch);
             string dll = m.Value;
             const string page = "https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist";
             return new Issue
@@ -90,13 +95,27 @@ namespace TkoolLauncher
                     {
                         string dir = Path.Combine(Settings.Dir, "tools");
                         Directory.CreateDirectory(dir);
-                        string f = Path.Combine(dir, "vcredist_" + ver + "_" + arch + ".exe");
                         System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12;
-                        using (var wc = new System.Net.WebClient()) { wc.Headers[System.Net.HttpRequestHeader.UserAgent] = "Mozilla/5.0"; wc.DownloadFile(url, f); }
-                        var pr = Process.Start(new ProcessStartInfo(f, args) { UseShellExecute = true });
-                        pr.WaitForExit(180000);
-                        Log.Info("VC++ " + year + " " + arch + " 설치 끝 (코드 " + (pr.HasExited ? pr.ExitCode.ToString() : "?") + ")");
-                        return "Visual C++ " + year + " (" + arch + ") 설치를 마쳤어요";
+                        // 게임 비트와 다른 프로그램(설정기·동봉 실행 파일)도 있어서 32비트·64비트 둘 다 설치
+                        var archs = new List<string> { arch };
+                        if (Environment.Is64BitOperatingSystem) archs.Add(arch == "x64" ? "x86" : "x64");
+                        int okN = 0;
+                        foreach (var a in archs)
+                        {
+                            try
+                            {
+                                string f = Path.Combine(dir, "vcredist_" + ver + "_" + a + ".exe");
+                                if (!File.Exists(f) || new FileInfo(f).Length < 100000)
+                                    using (var wc = new System.Net.WebClient()) { wc.Headers[System.Net.HttpRequestHeader.UserAgent] = "Mozilla/5.0"; wc.DownloadFile(urlOf(a), f); }
+                                var pr = Process.Start(new ProcessStartInfo(f, args) { UseShellExecute = true });
+                                pr.WaitForExit(180000);
+                                int code = pr.HasExited ? pr.ExitCode : -1;
+                                Log.Info("VC++ " + year + " " + a + " 설치 끝 (코드 " + code + ")");
+                                if (code == 0 || code == 3010 || code == 1638 || code == 5100) okN++;   // 1638 = 이미 더 새 판 있음
+                            }
+                            catch (Exception ex) { Log.Error("VC++ " + a + " 설치", ex); if (a == arch) throw; }
+                        }
+                        return "Visual C++ " + year + " (" + string.Join("·", archs) + ") 설치를 마쳤어요";
                     }
                     catch (Exception ex)
                     {
@@ -487,6 +506,7 @@ namespace TkoolLauncher
                         if (exited)
                         {
                             int code = 0; try { code = p.ExitCode; } catch { }
+                            if (sec < 20 && !box) { Thread.Sleep(800); string cr = Fixer.CrashInfo(g.InstallDir ?? g.Folder, start); if (cr.Length > 0) { seen += cr + "\n"; box = true; } }
                             if ((box || sec < 12) && (g.IsTkool || VcDll.IsMatch(seen) || DxDll.IsMatch(seen))) { Log.Info("게임이 금방 꺼짐 (" + (int)sec + "초, 코드 " + code + ") " + seen.Replace("\n", " / ")); onProblem(seen, false); }
                             return;
                         }
@@ -498,7 +518,7 @@ namespace TkoolLauncher
                             if (!IsWindowVisible(h)) return true;
                             string cls = Cls(h), title = Text(h);
                             // "Game.exe - 시스템 오류"(dll 없음)는 윈도우가 따로 띄워서 게임 프로그램 창이 아님 → 제목으로 알아봄
-                            bool sysErr = wp != pid && cls == "#32770" && exeName.Length > 0 && title.ToLowerInvariant().StartsWith(exeName);
+                            bool sysErr = wp != pid && cls == "#32770" && ((exeName.Length > 0 && title.ToLowerInvariant().StartsWith(exeName)) || Fixer.IsGameSysErr(title, g.InstallDir ?? g.Folder));
                             if (wp != pid && !sysErr) return true;
                             if (cls == "#32770")   // 메시지 상자
                             {
