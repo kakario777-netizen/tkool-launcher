@@ -920,6 +920,7 @@ namespace TkoolLauncher
 
         [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
         [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool IsZoomed(IntPtr h);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
 
         /// <summary>창 모드 게임은 검은 판 한가운데로 (꽉 찬 창·전체 화면은 그대로)</summary>
         void CenterGameWin(IntPtr h, bool any = false)
@@ -933,7 +934,9 @@ namespace TkoolLauncher
                 int w = wr.R - wr.L, ht = wr.B - wr.T;
                 if (w >= sb.Width - 8 && ht >= sb.Height - 8) return;     // 전체 화면
                 if (w > sb.Width || ht > sb.Height) return;
-                SetWindowPos(h, IntPtr.Zero, sb.X + (sb.Width - w) / 2, sb.Y + (sb.Height - ht) / 2, 0, 0, 0x0001 | 0x0004 | 0x0010);
+                int nx = sb.X + (sb.Width - w) / 2, ny = sb.Y + (sb.Height - ht) / 2;
+                if (Math.Abs(wr.L - nx) <= 4 && Math.Abs(wr.T - ny) <= 4) return;   // 이미 가운데
+                SetWindowPos(h, IntPtr.Zero, nx, ny, 0, 0, 0x0001 | 0x0004 | 0x0010);
             }
             catch (Exception ex) { Log.Error("게임 창 가운데로", ex); }
         }
@@ -1493,6 +1496,8 @@ namespace TkoolLauncher
                             {
                                 foreach (var c in consoles) if (!minimizedConsoles.Contains(c)) { minimizedConsoles.Add(c); ShowWindow(c, 6); Log.Info("게임 뒤 글자 창 내림"); }
                                 if (bigWin != fittedWin) FitIfTooBig(bigWin);
+                                // 게임이 켜진 뒤 창 크기를 바꾸거나 왼쪽 위에 다시 붙어도 언제나 화면 가운데로 (런처로 켠 게임, 화면 크기 강제 중이 아닐 때)
+                                if (!TrackedExternal && !ScreenFit.On && !IsIconic(bigWin)) CenterGameWin(bigWin);
                             }
                             if (anyWin && curtain)
                             {
