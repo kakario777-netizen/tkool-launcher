@@ -355,7 +355,7 @@ namespace TkoolLauncher
                 var m = CodeAny.Match(s);
                 if (m.Success) return m.Value.ToUpperInvariant();
             }
-            return null;
+            try { return GameIdent.RjCode(g); } catch { return null; }   // 이름을 바꿔도 남는 번호 (파일 이름·읽어보기 안)
         }
 
         /// <summary>RJ37082 → RJ037082 (DLsite 번호는 6자리나 8자리로 0을 채움)</summary>
