@@ -272,6 +272,18 @@ namespace TkoolLauncher
         /// <summary>그림을 못 찾아 색깔 기본 표지로 만든 게임들 (자동 캡처 대상)</summary>
         public static readonly HashSet<string> NeedsCover = new HashSet<string>();
 
+        /// <summary>표지가 정말 없는지 (화면에 한 번도 안 나온 게임도): 직접·찍은·확인 대기 표지 파일 → 썸네일 → 게임 안 타이틀 그림 순으로 확인. 느릴 수 있어 뒤에서만</summary>
+        public static bool NoCover(GameInfo g)
+        {
+            if (g == null || g.Folder == null) return false;
+            string name = Path.GetFileName(g.Folder.TrimEnd('\\', '/'));
+            foreach (var ext in new[] { ".png", ".jpg", ".jpeg", ".auto.png", ".pending.png" })
+                if (File.Exists(Path.Combine(CoverDir, name + ext))) return false;
+            if (Needs(g) || HasNoHero(g)) return true;
+            lock (lk) if (thumbs.ContainsKey(GameData.IdOf(g))) return false;   // 목록 그림이 있음
+            try { using (var t = ArtExtract.FindTitleImage(g)) return t == null; } catch { return true; }
+        }
+
         public static bool Needs(GameInfo g)
         {
             lock (lk) return NeedsCover.Contains(GameData.IdOf(g));

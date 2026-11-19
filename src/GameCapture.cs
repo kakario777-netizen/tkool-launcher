@@ -125,6 +125,10 @@ namespace TkoolLauncher
             games.Where(g => (g.Kind == GameKind.Tkool || g.Kind == GameKind.Pc) && !GameData.Get(g).Hidden && !File.Exists(PendingPath(g)) &&
                              (CoverArt.Needs(g) || CoverArt.HasNoHero(g)) && !File.Exists(CoverArt.AutoShotPath(g))).ToList();
 
+        /// <summary>찍어 볼 후보 전부 (표지 없음 여부는 FindAll 안에서 하나씩 정확히 확인)</summary>
+        public static List<GameInfo> Candidates(IEnumerable<GameInfo> games) =>
+            games.Where(g => (g.Kind == GameKind.Tkool || g.Kind == GameKind.Pc) && g.Exe != null && !GameData.Get(g).Hidden && !File.Exists(PendingPath(g))).ToList();
+
         /// <summary>찍었지만 아직 확인 안 한 표지 (covers\폴더.pending.png) — 표지 확인 화면에서 적용/취소</summary>
         public static string PendingPath(GameInfo g) => Path.Combine(CoverArt.CoverDir, Path.GetFileName(g.Folder ?? "") + ".pending.png");
         public static List<GameInfo> Pending(IEnumerable<GameInfo> games) => games.Where(g => g.Folder != null && File.Exists(PendingPath(g))).ToList();
@@ -243,6 +247,15 @@ namespace TkoolLauncher
             Finding = true; Cancel = false;
             var th = new System.Threading.Thread(() =>
             {
+                // 화면에 안 나온 게임도 빠짐없이: 표지가 정말 없는지 하나씩 확인 (목록이 많으면 잠깐 걸림)
+                var all = list;
+                list = new List<GameInfo>();
+                for (int c = 0; c < all.Count && !Cancel; c++)
+                {
+                    if (c % 10 == 0) { Activity.Set("cover", "표지 없는 게임 고르는 중", c, all.Count); progress("표지 없는 게임 고르는 중 " + c + "/" + all.Count); }
+                    try { if (CoverArt.NoCover(all[c])) list.Add(all[c]); } catch { }
+                }
+                Log.Info("표지 찍기: 후보 " + all.Count + "개 중 표지 없음 " + list.Count + "개");
                 int okCount = 0, skipped = 0;
                 var fixedKinds = new HashSet<string>();   // 같은 부품은 한 번만 설치
                 bool retry = false;

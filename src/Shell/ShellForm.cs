@@ -1517,8 +1517,8 @@ namespace TkoolLauncher
         public void FindCovers(List<GameInfo> only = null)
         {
             if (GameWatch.Running) { ShowToast("게임을 끈 다음에 해 주세요", 3000); return; }
-            var list = only ?? GameCapture.Missing(Games);
-            if (list.Count == 0) { ShowToast("표지·이름이 빠진 게임이 없어요", 3000); return; }
+            var list = only ?? GameCapture.Candidates(Games);   // 표지 없음 확인은 찍기 시작하면서 하나씩
+            if (list.Count == 0) { ShowToast("찍어 볼 게임이 없어요", 3000); return; }
             Gamepad.MapKeys = false;
             WindowState = FormWindowState.Minimized;
             var tip = new OverlayTip();
