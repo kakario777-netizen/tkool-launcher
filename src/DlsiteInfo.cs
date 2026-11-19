@@ -310,7 +310,7 @@ namespace TkoolLauncher
                     foreach (var g in list)
                     {
                         Activity.Set("dlsite", "DLsite 정보 받는 중 · " + g.Title, ++k, list.Count);
-                        if (EnsureOne(g)) n++;
+                        if (EnsureOne(g)) { n++; var di = Get(g); Activity.Detail("dlsite", "✓ " + g.Title + (di != null ? "  →  " + di.Id + " · " + di.Name : "")); }
                     }
                     if (TranslateGenres() > 0) n++;   // 화면 다시 그리게
                 }

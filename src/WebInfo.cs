@@ -357,6 +357,7 @@ namespace TkoolLauncher
                             if (i == null) { Activity.Set("web", "itch.io에서 찾는 중 · " + g.Title, k, list.Count); try { i = Itch(names); if (i != null) cnt[3]++; } catch (Exception ex) { Log.Error("itch.io 찾기", ex); } }
                         }
                         else if (names.Count == 0 && i == null) cnt[4]++;
+                        Activity.Detail("web", (i != null ? "✓ " : "✕ ") + g.Title + (i != null ? "  →  " + i.Id + " · " + i.Name : names.Count == 0 ? "  (찾을 이름 없음 — 뜻 없는 이름뿐)" : "  못 찾음") + (names.Count > 0 ? "\n     찾아본 이름: " + string.Join(" / ", names) : ""));
                         try { Save(id, i); } catch { }
                         lock (mem) mem[id] = i;
                         if (i != null)
@@ -372,7 +373,8 @@ namespace TkoolLauncher
                 finally
                 {
                     Activity.Done("web", "다른 사이트 끝 · " + list.Count + "개 찾아봄, " + n + "개 채움 (스팀 " + cnt[0] + " · FANZA " + cnt[1] + (fanzaOff ? "(접속 안 됨)" : "") + " · ふりーむ " + cnt[2] + " · itch.io " + cnt[3] + (cnt[4] > 0 ? " · 찾을 이름 없음 " + cnt[4] : "") + ")");
-                    Activity.Note("검색 내역 · 스팀 " + Stat(0) + " / FANZA " + Stat(1) + " / ふりーむ " + Stat(2) + " / itch.io " + Stat(3) + " — 일본어만 있는 이름은 itch.io에서 안 찾음");
+                    Activity.Note("검색 내역 · 스팀 " + Stat(0) + " / FANZA " + Stat(1) + " / ふりーむ " + Stat(2) + " / itch.io " + Stat(3),
+                        "사이트별로 검색한 횟수와 접속 오류예요.\n\n스팀: " + Stat(0) + "\nFANZA: " + Stat(1) + (fanzaOff ? " — 접속이 안 돼서(지역 제한이나 연령 확인 화면) 이번엔 건너뜀" : "") + "\nふりーむ: " + Stat(2) + "\nitch.io: " + Stat(3) + "\n\n· 이름에 영문 글자가 없으면 itch.io에선 안 찾아요(영어권 사이트).\n· 이름이 같거나 거의 같을 때만 같은 게임으로 봐요(엉뚱한 정보가 붙지 않게).\n· 접속 오류가 많으면 이 화면을 보여 주세요.");
                     Busy = false;
                     done?.Invoke(n);
                     if (again) RunAll(games, done);   // 도는 중에 새로 생긴 게임(DLsite에도 없던 것)

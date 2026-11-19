@@ -994,10 +994,23 @@ namespace TkoolLauncher
         {
             float pr;
             var l = new List<string>();
-            if (Activity.Any) l.Add("▶ " + Activity.Line(out pr));
+            bool running = Activity.Any;
+            if (running) l.Add("▶ " + Activity.Line(out pr));
+            var ents = Activity.Entries();
             l.AddRange(Activity.History());
             if (l.Count == 0) l.Add("아직 기록이 없어요");
-            PickerScreen.Show(this, "런처가 한 일", l.ToArray(), -1, i => { }, "새로 넣은 게임·이름 확인·DLsite·중복 검사 등");
+            // 누르면 자세히 (자세한 내용이 없으면 글 전체라도) — 닫으면 목록으로 돌아옴
+            PickerScreen.Show(this, "런처가 한 일", l.ToArray(), -1, i =>
+            {
+                int k = i - (running ? 1 : 0);
+                if (k < 0 || k >= ents.Count) return;
+                var e = ents[k];
+                BeginInvoke(new Action(() =>
+                {
+                    ShowActivityLog();
+                    TextScreen.Show(this, e.Time.ToString("M월 d일 HH:mm") + " · 자세히", e.Text + "\n\n" + (e.Detail ?? "(자세한 기록이 없는 일이에요)"));
+                }));
+            }, "누르면 자세히 · 최근 300개까지 남겨 둠");
         }
 
         void PaintToast(Graphics g)

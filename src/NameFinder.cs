@@ -565,6 +565,7 @@ namespace TkoolLauncher
                 st.Title = "=" + f.Name;
                 g.Title = f.Name;
                 Log.Info("이름 찾음: " + st.NameFrom + " → " + f.Name);
+                Activity.Detail("name", "✓ " + (g.RawTitle ?? "?") + "  →  " + f.Name + "   (" + f.From + ")");
                 return true;
             }
             st.NameFrom = Checked;   // 확인한 흔적

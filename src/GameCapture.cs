@@ -349,6 +349,7 @@ namespace TkoolLauncher
                             if (!Cancel && FindTitle(g, w))
                             {
                                 okCount++;
+                                Activity.Detail("cover", "✓ " + g.Title + " — 타이틀 화면 찍음 (확인 목록에)");
                                 if (needName.Contains(g) && NameFinder.NeedsWinName(g) || needName.Contains(g) && GameData.Get(g).NameFrom == NameFinder.WinTried)
                                 {
                                     string n = Ocr.NameFromShot(g, PendingPath(g), true);
@@ -384,6 +385,7 @@ namespace TkoolLauncher
                         }
                         Fixer.NoteUnknown(g, err);
                         skipped++;
+                        Activity.Detail("cover", "✕ " + g.Title + " — 오류로 건너뜀: " + err.Replace("\n", " ").Trim());
                         Log.Info("표지 찍기 오류 창: " + g.Title + " — " + err.Replace("\n", " / "));
                     }
                     retry = false; retries = 0;
