@@ -383,6 +383,16 @@ namespace TkoolLauncher
                     string t = DlsiteInfo.GenreKo(d.Genres[k]);
                     if (!l.Contains(t)) l.Add(t);
                 }
+            // 조작 방식도 태그로 고를 수 있게
+            try
+            {
+                var inp = InputNeeds.Get(g).S;
+                if (inp[0] == 'o' || inp[0] == 'n') l.Add("조작: 패드 됨"); else if (inp[0] == 'x') l.Add("조작: 패드 안 됨");
+                if (inp[1] == 'n') l.Add("조작: 키보드 필요");
+                if (inp[2] == 'n') l.Add("조작: 마우스 필요");
+                if (inp[3] == 'o' || inp[3] == 'n') l.Add("조작: 터치 됨");
+            }
+            catch { }
             return l;
         }
 
@@ -1316,6 +1326,29 @@ namespace TkoolLauncher
             Draw.Text(g, "정보", Draw.H2, new Rectangle(ix0, y0, S(300), S(30)), Theme.Text);
             int y = y0 + S(42);
             int bx = ix0;
+            // 조작 방식 (맨 위): 패드·키보드·마우스·터치 — 누르면 직접 고치기
+            {
+                var inp = InputNeeds.Get(game);
+                int x0 = bx;
+                Draw.Text(g, "조작", Draw.Small, new Rectangle(bx, y, S(44), S(26)), Theme.SubText, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+                bx += S(46);
+                for (int k = 0; k < 4; k++)
+                {
+                    char c = inp.S[k];
+                    Color col = c == 'n' ? Color.FromArgb(200, 120, 40) : c == 'o' ? Color.FromArgb(46, 130, 80) : c == 'x' ? Color.FromArgb(120, 60, 60) : Color.FromArgb(70, 80, 96);
+                    string lb = InputNeeds.Label(k, c);
+                    if (bx + Draw.Measure(g, lb, Draw.Small) + S(20) > ix0 + infoW) { y += S(30); bx = ix0 + S(46); }
+                    Draw.Badge(g, ref bx, y, lb, col);
+                }
+                if (inp.User) Draw.Badge(g, ref bx, y, "직접 고침", Color.FromArgb(70, 80, 96));
+                inputRect = new Rectangle(x0, y - S(4), ix0 + infoW - x0, S(34));
+                y += S(30); bx = ix0;
+                if (inp.Note.Length > 0 && !inp.User)
+                {
+                    Draw.Text(g, inp.Note, Draw.Small, new Rectangle(ix0, y - S(2), infoW, S(24)), Theme.SubText, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+                    y += S(26);
+                }
+            }
             // 엔진
             string eng = game.IsTkool ? "RPG MAKER " + game.VersionLabel.ToUpperInvariant() : (EngineName() ?? "엔진 모름") + (game.Kind == GameKind.Pc ? "" : " · " + game.VersionLabel);
             Draw.Badge(g, ref bx, y, eng, Theme.GameColor(game));
@@ -1390,7 +1423,30 @@ namespace TkoolLauncher
         }
 
         // ── 소개: 구글 번역 + 원문, 스크롤 ──
-        Rectangle descRect, addTagRect;
+        Rectangle descRect, addTagRect, inputRect;
+
+        /// <summary>조작 방식 직접 고치기: 줄마다 누르면 됨 → 꼭 필요 → 안 됨 → 모름 차례로</summary>
+        void EditInput()
+        {
+            var r = InputNeeds.Get(game);
+            var cur = (char[])r.S.Clone();
+            Action show = null;
+            show = () =>
+            {
+                var opts = new List<string>();
+                for (int k = 0; k < 4; k++) opts.Add(InputNeeds.Names[k] + ": " + InputNeeds.StateWord(cur[k]));
+                opts.Add("✓ 저장");
+                opts.Add("자동으로 되돌리기");
+                PickerScreen.Show(Shell, "조작 방식 (누를 때마다 바뀜)", opts.ToArray(), -1, i =>
+                {
+                    if (i < 4) { cur[i] = cur[i] == 'o' ? 'n' : cur[i] == 'n' ? 'x' : cur[i] == 'x' ? '?' : 'o'; show(); return; }
+                    if (i == 4) { InputNeeds.SetUser(game, new string(cur)); Shell.ShowToast("조작 방식을 저장했어요", 2000); }
+                    else { InputNeeds.SetUser(game, null); Shell.ShowToast("자동 판단으로 되돌렸어요", 2000); }
+                    Shell.Invalidate();
+                }, "됨 → 꼭 필요 → 안 됨 → 모름");
+            };
+            show();
+        }
         readonly List<Rectangle> tagRects = new List<Rectangle>();
         int descScroll, descContentH, descDragStart;
         bool descDrag;
@@ -1623,6 +1679,7 @@ namespace TkoolLauncher
             else if (hideBtn.Contains(p)) { focus = 2; More(); }
             else if (resBtn.Contains(p)) { focus = 3; NextRes(); }
             else if (clearBtn.Contains(p)) { focus = 4; ToggleCleared(); }
+            else if (inputRect.Contains(p)) EditInput();
             else if (addTagRect.Contains(p) || tagRects.Any(r => r.Contains(p))) EditTags();
         }
 
@@ -1670,6 +1727,7 @@ namespace TkoolLauncher
                 "게임 위치 열기 (탐색기)",
                 "창 모양: " + wins[Math.Max(0, Math.Min(1, st.WinMode))],
                 "일본어 환경으로 켜기: " + (JpLocale.Has(game) ? "켬" : "끔"),
+                "조작 방식 고치기 (패드·키보드·마우스·터치)",
             };
             PickerScreen.Show(Shell, game.Title, opts, -1, i =>
             {
@@ -1699,6 +1757,7 @@ namespace TkoolLauncher
                         PickerScreen.Show(Shell, "창 모양", wins, st.WinMode, k => { st.WinMode = k; GameData.Save(); },
                             "꽉 찬 창: 테두리 없이 작업 표시줄만 남기고 화면을 채움 (다음 실행부터)");
                         break;
+                    case 9: EditInput(); break;
                     case 8:
                         {
                             var g8 = game; bool on = !JpLocale.Has(g8);
