@@ -1477,7 +1477,7 @@ namespace TkoolLauncher
                         BeginInvoke(new Action(() =>
                         {
                             healthBusy = false;
-                            if (attach != null && PlayingGame == null && !GameWatch.Running) { SmartTdp.Reset(); Track(attach, null, false); ResForce.Apply(attach); return; }
+                            if (attach != null && PlayingGame == null && !GameWatch.Running && !GameCapture.Finding) { SmartTdp.Reset(); Track(attach, null, false); ResForce.Apply(attach); return; }
                             if (PlayingGame == null) return;
                             // 런처로 켠 게임인데 게임 창이 15초 넘게 하나도 없으면(뒤에 남은 프로그램 때문에 안 끝나는 경우) 끝난 걸로
                             noWinCount = anyWin ? 0 : noWinCount + 1;
