@@ -1840,7 +1840,7 @@ namespace TkoolLauncher
                 new Row { Title = "오류 기록 보기", Sub = "내 문서\\쯔꾸르 런처\\logs — Claude에게 보여주면 고칠 수 있어요",
                           Value = System.IO.File.Exists(Log.ErrPath) ? "있음" : "없음",
                           Act = () => ErrorPopup.Show2("최근 오류 기록", Log.Tail(900) is string t && t.Length > 0 ? t : "오류 기록이 없어요") },
-                new Row { Title = "빈 표지 한 번에 찍기", Sub = "모든 게임을 확인해서 표지가 없는 것만 하나씩 켜 타이틀 화면을 찍어요 (오류 창은 부품 설치 후 다시, 홈 버튼으로 멈춤)",
+                new Row { Title = "빈 표지 한 번에 찍기", Sub = "모든 게임을 확인해서 표지가 없는 것만 하나씩 켜 타이틀 화면을 찍어요. 인터넷에서 이름을 못 찾은 게임은 창 제목도 봐요 (오류 창은 부품 설치 후 다시, 홈 버튼으로 멈춤)",
                           Value = "전체 " + GameCapture.Candidates(Shell.Games).Count + "개 확인", Act = () => Shell.FindCovers() },
                 new Row { Title = "빈 정보 지금 찾기", Sub = "그림·장르·소개가 없는 게임을 DLsite → 스팀(일본·미국) → ふりーむ에서 바로 찾아요",
                           Act = () => { DlsiteInfo.RunAll(Shell.Games, m => { try { Shell.BeginInvoke(new Action(() => { Shell.RefreshLists(); WebInfo.RunAll(Shell.Games, w => { try { Shell.BeginInvoke(new Action(Shell.RefreshLists)); } catch { } }); })); } catch { } }); Shell.ShowToast("빈 정보 찾기 시작 — 아래 왼쪽에 진행이 보여요", 2500); } },

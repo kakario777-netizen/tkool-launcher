@@ -250,13 +250,20 @@ namespace TkoolLauncher
                 // 화면에 안 나온 게임도 빠짐없이: 표지가 정말 없는지 하나씩 확인 (목록이 많으면 잠깐 걸림)
                 var all = list;
                 list = new List<GameInfo>();
+                var nameOnly = new HashSet<GameInfo>();   // 표지는 있고 이름만 (인터넷에서 못 찾은 것) → 창 제목만 보고 끔
+                var needName = new HashSet<GameInfo>();
                 for (int c = 0; c < all.Count && !Cancel; c++)
                 {
                     if (c % 10 == 0) { Activity.Set("cover", "표지 없는 게임 고르는 중", c, all.Count); progress("표지 없는 게임 고르는 중 " + c + "/" + all.Count); }
-                    try { if (CoverArt.NoCover(all[c])) list.Add(all[c]); } catch { }
+                    bool nc = false, nn = false;
+                    try { nc = CoverArt.NoCover(all[c]); } catch { }
+                    try { nn = NameFinder.NeedsWinName(all[c]); } catch { }
+                    if (nc || nn) list.Add(all[c]);
+                    if (!nc && nn) nameOnly.Add(all[c]);
+                    if (nn) needName.Add(all[c]);
                 }
-                Log.Info("표지 찍기: 후보 " + all.Count + "개 중 표지 없음 " + list.Count + "개");
-                int okCount = 0, skipped = 0;
+                Log.Info("표지 찍기: 후보 " + all.Count + "개 중 " + list.Count + "개 (이름만 " + nameOnly.Count + "개)");
+                int okCount = 0, skipped = 0, nameCount = 0;
                 var fixedKinds = new HashSet<string>();   // 같은 부품은 한 번만 설치
                 bool retry = false;
                 for (int i = 0; i < list.Count && !Cancel; i++)
@@ -279,7 +286,20 @@ namespace TkoolLauncher
                             GetWindowThreadProcessId(fg, out uint pid);
                             if (GameWatch.InDir((int)pid, dir)) w = fg;
                         }
-                        if (err.Length == 0 && w != IntPtr.Zero)
+                        if (err.Length == 0 && w != IntPtr.Zero && needName.Contains(g))
+                        {
+                            // 창 제목은 켜고 조금 뒤에 바뀌는 게임이 많아 몇 번 봄
+                            string wt = "";
+                            for (int k = 0; k < 4 && !Cancel; k++)
+                            {
+                                System.Threading.Thread.Sleep(1500);
+                                var sb = new StringBuilder(256); GetWindowText(w, sb, 256);
+                                wt = CleanTitle(sb.ToString());
+                                if (!NameFinder.Meaningless(g, wt)) break;
+                            }
+                            if (!Cancel && NameFinder.ApplyWinTitle(g, wt)) { nameCount++; Activity.Note("창 제목으로 이름 찾음 · " + g.Title); }
+                        }
+                        if (err.Length == 0 && w != IntPtr.Zero && !nameOnly.Contains(g))
                         {
                             if (!Cancel && FindTitle(g, w)) okCount++;   // 타이틀 화면까지 지켜봄 (확인 화면에서 적용)
                             if (!Cancel) err = ErrorText(dir, g.Exe);       // 지켜보는 중에 뜬 오류 창
@@ -314,7 +334,7 @@ namespace TkoolLauncher
                     System.Threading.Thread.Sleep(1500);
                 }
                 Finding = false;
-                Activity.Done("cover", "표지 찍기 끝 · " + list.Count + "개 중 " + okCount + "개" + (skipped > 0 ? ", 오류로 " + skipped + "개 건너뜀" : ""));
+                Activity.Done("cover", "표지 찍기 끝 · " + list.Count + "개 중 " + okCount + "개" + (nameCount > 0 ? ", 이름 " + nameCount + "개" : "") + (skipped > 0 ? ", 오류로 " + skipped + "개 건너뜀" : ""));
                 done(okCount);
             }) { IsBackground = true };
             th.SetApartmentState(System.Threading.ApartmentState.STA);

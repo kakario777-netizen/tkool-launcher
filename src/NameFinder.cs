@@ -45,6 +45,41 @@ namespace TkoolLauncher
         /// <summary>확인 끝 표시 (2판: 모든 게임 확인·외국어 이름 번역·DLsite 이름 검색까지)</summary>
         public const string Checked = "-3";   // 3판: 번역 실패로 "-2"가 붙어 외국어로 남은 게임까지 다시
         public const string ByUser = " · 직접 고침";
+        public const string WinTried = "-3w";   // 인터넷에서 못 찾아 게임을 켜서 창 제목까지 본 흔적
+
+        /// <summary>인터넷·읽어보기로 못 찾았고 이름이 아직 뜻 없음 → 표지 찍기 때 한 번 켜서 창 제목 보기</summary>
+        public static bool NeedsWinName(GameInfo g)
+        {
+            if (g.Kind != GameKind.Tkool || !g.FromFolder) return false;
+            var st = GameData.Get(g);
+            return st.NameFrom == Checked && Meaningless(g, g.Title);
+        }
+
+        /// <summary>창 제목으로 이름 정하기 (외국어면 번역). 못 쓰면 확인 흔적만</summary>
+        public static bool ApplyWinTitle(GameInfo g, string t)
+        {
+            var st = GameData.Get(g);
+            t = (t ?? "").Trim();
+            if (t.Length > 0 && !Meaningless(g, t) && !BadName(t) && t != g.Title)
+            {
+                string name = t, from = "게임 창 제목";
+                if (Foreign(t))
+                {
+                    string ko = null;
+                    try { ko = Translate.Run(t); } catch { }
+                    if (!string.IsNullOrWhiteSpace(ko) && ko.Trim() != t) { name = ko.Trim(); from = "게임 창 제목 · 원제 " + t + " · 구글 번역"; }
+                }
+                st.NameFrom = (g.RawTitle ?? g.Title) + " · " + from;
+                st.Title = "=" + name;
+                g.Title = name;
+                GameData.Save();
+                Log.Info("창 제목 이름: " + st.NameFrom + " → " + name);
+                return true;
+            }
+            st.NameFrom = WinTried;
+            GameData.Save();
+            return false;
+        }
 
         /// <summary>찾아볼 게임: 아직 2판으로 확인 안 한 모든 쯔꾸르 폴더 게임 (사용자가 직접 고른 이름은 빼고)</summary>
         public static bool Wants(GameInfo g)
@@ -53,7 +88,7 @@ namespace TkoolLauncher
             var st = GameData.Get(g);
             if (st.Title != null && st.Title.StartsWith("=") && st.NameFrom == null) return false;  // 사용자가 고른 이름
             if (st.NameFrom == null || st.NameFrom == "-" || st.NameFrom == "-2") return true;   // 아직 안 봤거나 예전 판
-            if (st.NameFrom == Checked || st.NameFrom.EndsWith(ByUser)) return false;
+            if (st.NameFrom == Checked || st.NameFrom == WinTried || st.NameFrom.EndsWith(ByUser)) return false;
             // 읽어보기·DLsite에서 찾았지만 아직 외국어 이름 → 번역만 다시
             return Foreign(g.Title) && !st.NameFrom.Contains("구글 번역");
         }
@@ -467,7 +502,7 @@ namespace TkoolLauncher
         /// <summary>"이름 다시 찾기": 찾아본 표시를 지움</summary>
         public static void ResetTried(List<GameInfo> games)
         {
-            foreach (var g in games) { var st = GameData.Get(g); if (st.NameFrom == "-" || st.NameFrom == "-2" || st.NameFrom == Checked) st.NameFrom = null; }
+            foreach (var g in games) { var st = GameData.Get(g); if (st.NameFrom == "-" || st.NameFrom == "-2" || st.NameFrom == Checked || st.NameFrom == WinTried) st.NameFrom = null; }
             GameData.Save();
         }
     }
