@@ -156,6 +156,7 @@ namespace TkoolLauncher
 
         public static void Accept(GameInfo g)
         {
+            CoverArt.MarkCoverOk(g);   // 확인하고 넣은 표지 → 다시 안 찍음
             try
             {
                 string auto = CoverArt.AutoShotPath(g);
@@ -400,7 +401,9 @@ namespace TkoolLauncher
         public static bool ShotNow(GameInfo g, bool pending = false)
         {
             IntPtr w = GameWindow();
-            return w != IntPtr.Zero && Shot(g, w, true, pending);
+            bool ok = w != IntPtr.Zero && Shot(g, w, true, pending);
+            if (ok && !pending) CoverArt.MarkCoverOk(g);   // 사용자가 직접 찍은 표지 → 다시 안 찍음
+            return ok;
         }
 
         /// <summary>게임 창 안쪽을 그림으로 (못 찍으면 null)</summary>

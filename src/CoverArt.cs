@@ -188,6 +188,7 @@ namespace TkoolLauncher
         /// <summary>직접·자동으로 찍은 표지 지우기 → 기본 그림으로</summary>
         public static void DeleteCover(GameInfo g)
         {
+            MarkCoverOk(g, false);
             string name = Path.GetFileName(g.Folder);
             foreach (var ext in new[] { ".png", ".jpg", ".jpeg", ".auto.png" })
                 try { File.Delete(Path.Combine(CoverDir, name + ext)); } catch { }
@@ -273,12 +274,34 @@ namespace TkoolLauncher
         public static readonly HashSet<string> NeedsCover = new HashSet<string>();
 
         /// <summary>표지가 정말 없는지 (화면에 한 번도 안 나온 게임도): 직접·찍은·확인 대기 표지 파일 → 썸네일 → 게임 안 타이틀 그림 순으로 확인. 느릴 수 있어 뒤에서만</summary>
+        // 사용자가 직접 찍었거나 확인해서 넣은 표지가 있는 게임 (다시 찍기 대상에서 영원히 뺌) — cache\cover_ok.txt
+        static HashSet<string> coverOk;
+        static string CoverOkPath => Path.Combine(Settings.Dir, "cache", "cover_ok.txt");
+        public static bool IsCoverOk(GameInfo g)
+        {
+            lock (lk)
+            {
+                if (coverOk == null) { coverOk = new HashSet<string>(); try { if (File.Exists(CoverOkPath)) foreach (var l in File.ReadAllLines(CoverOkPath, System.Text.Encoding.UTF8)) coverOk.Add(l.Trim()); } catch { } }
+                return coverOk.Contains(GameData.IdOf(g));
+            }
+        }
+        public static void MarkCoverOk(GameInfo g, bool ok = true)
+        {
+            lock (lk)
+            {
+                IsCoverOk(g);
+                if (ok) coverOk.Add(GameData.IdOf(g)); else coverOk.Remove(GameData.IdOf(g));
+                try { Directory.CreateDirectory(Path.GetDirectoryName(CoverOkPath)); File.WriteAllLines(CoverOkPath, coverOk.ToArray(), System.Text.Encoding.UTF8); } catch { }
+            }
+        }
+
         public static bool NoCover(GameInfo g)
         {
             if (g == null || g.Folder == null) return false;
             string name = Path.GetFileName(g.Folder.TrimEnd('\\', '/'));
             foreach (var ext in new[] { ".png", ".jpg", ".jpeg", ".auto.png", ".pending.png" })
                 if (File.Exists(Path.Combine(CoverDir, name + ext))) return false;
+            if (IsCoverOk(g) || CustomCover(g) != null) return false;
             if (Needs(g) || HasNoHero(g)) return true;
             lock (lk) if (thumbs.ContainsKey(GameData.IdOf(g))) return false;   // 목록 그림이 있음
             try { using (var t = ArtExtract.FindTitleImage(g)) return t == null; } catch { return true; }
