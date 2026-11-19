@@ -381,6 +381,8 @@ namespace TkoolLauncher
         static void HandleMouse(Pad cur, Pad old)
         {
             float speed = Theme.S(22);
+            // RB(오른쪽 위 버튼)이나 RT를 누르고 있으면 4분의 1 속도 — 작은 단추 맞추기용 미세 조정
+            if ((cur & (Pad.RB | Pad.RT)) != 0) speed *= 0.25f;
             mx += Curve(raw.LX) * speed;
             my -= Curve(raw.LY) * speed;
             int ix = (int)mx, iy = (int)my;
