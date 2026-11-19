@@ -20,6 +20,32 @@ namespace TkoolLauncher
     static class GameCapture
     {
         [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+        delegate bool EnumProc(IntPtr h, IntPtr l);
+        [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr l);
+        [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr p, EnumProc f, IntPtr l);
+        [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder sb, int n);
+
+        /// <summary>게임이 띄운 오류 창 글 (게임 폴더 프로그램의 메시지 상자, 또는 "Game.exe - 시스템 오류")</summary>
+        static string ErrorText(string dir, string exe)
+        {
+            var sb = new StringBuilder();
+            string exeName = Path.GetFileName(exe ?? "").ToLowerInvariant();
+            EnumWindows((h, l) =>
+            {
+                if (!IsWindowVisible(h)) return true;
+                var cls = new StringBuilder(64); GetClassName(h, cls, 64);
+                if (cls.ToString() != "#32770") return true;
+                var tt = new StringBuilder(256); GetWindowText(h, tt, 256);
+                GetWindowThreadProcessId(h, out uint pid);
+                bool mine = GameWatch.InDir((int)pid, dir) || (exeName.Length > 0 && tt.ToString().ToLowerInvariant().StartsWith(exeName));
+                if (!mine) return true;
+                sb.Append(tt).Append('\n');
+                EnumChildWindows(h, (c, l2) => { var t = new StringBuilder(512); GetWindowText(c, t, 512); if (t.Length > 2) sb.Append(t).Append('\n'); return true; }, IntPtr.Zero);
+                return true;
+            }, IntPtr.Zero);
+            return sb.ToString();
+        }
         [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder sb, int n);
         [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h, out RECT r);
@@ -95,8 +121,9 @@ namespace TkoolLauncher
         public static volatile bool Finding, Cancel;
 
         public static List<GameInfo> Missing(IEnumerable<GameInfo> games) =>
+            // 표지가 없는 게임만 (이름은 이름 찾기가 따로 함 — 이름 때문에 켰다 바로 끄던 것 없앰)
             games.Where(g => (g.Kind == GameKind.Tkool || g.Kind == GameKind.Pc) && !GameData.Get(g).Hidden && !File.Exists(PendingPath(g)) &&
-                             ((CoverArt.Needs(g) && !File.Exists(CoverArt.AutoShotPath(g))) || IsGenericTitle(g, g.Title))).ToList();
+                             (CoverArt.Needs(g) || CoverArt.HasNoHero(g)) && !File.Exists(CoverArt.AutoShotPath(g))).ToList();
 
         /// <summary>찍었지만 아직 확인 안 한 표지 (covers\폴더.pending.png) — 표지 확인 화면에서 적용/취소</summary>
         public static string PendingPath(GameInfo g) => Path.Combine(CoverArt.CoverDir, Path.GetFileName(g.Folder ?? "") + ".pending.png");
@@ -216,13 +243,16 @@ namespace TkoolLauncher
             Finding = true; Cancel = false;
             var th = new System.Threading.Thread(() =>
             {
-                int okCount = 0;
+                int okCount = 0, skipped = 0;
+                var fixedKinds = new HashSet<string>();   // 같은 부품은 한 번만 설치
+                bool retry = false;
                 for (int i = 0; i < list.Count && !Cancel; i++)
                 {
                     var g = list[i];
                     progress((i + 1) + "/" + list.Count + " · " + g.Title + " — 홈 버튼을 누르면 멈춰요");
                     Activity.Set("cover", "표지 찍는 중 · " + g.Title, i + 1, list.Count);
                     string dir = g.InstallDir ?? g.Folder;
+                    string err = "";
                     try
                     {
                         Process.Start(new ProcessStartInfo(g.Exe) { WorkingDirectory = g.Folder, UseShellExecute = true });
@@ -230,34 +260,48 @@ namespace TkoolLauncher
                         for (int k = 0; k < 25 && !Cancel && w == IntPtr.Zero; k++)
                         {
                             System.Threading.Thread.Sleep(1000);
+                            err = ErrorText(dir, g.Exe);
+                            if (err.Length > 0) break;          // 오류 창 → 아래에서 고침
                             IntPtr fg = GetForegroundWindow();
                             GetWindowThreadProcessId(fg, out uint pid);
                             if (GameWatch.InDir((int)pid, dir)) w = fg;
                         }
-                        if (w != IntPtr.Zero)
+                        if (err.Length == 0 && w != IntPtr.Zero)
                         {
-                            bool got = false;
-                            if (!Cancel && CoverArt.Needs(g) && FindTitle(g, w)) got = true;   // 타이틀 화면까지 지켜봄 (확인 화면에서 적용)
-                            if (!Cancel)
-                            {
-                                var sb = new StringBuilder(256);
-                                GetWindowText(w, sb, 256);
-                                string title = CleanTitle(sb.ToString());
-                                if (IsGenericTitle(g, g.Title) && !IsGenericTitle(g, title))
-                                {
-                                    GameData.Get(g).Title = title; GameData.Save(); g.Title = title; got = true;
-                                    CoverArt.Invalidate(g);
-                                }
-                            }
-                            if (got) okCount++;
+                            if (!Cancel && FindTitle(g, w)) okCount++;   // 타이틀 화면까지 지켜봄 (확인 화면에서 적용)
+                            if (!Cancel) err = ErrorText(dir, g.Exe);       // 지켜보는 중에 뜬 오류 창
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { Log.Info("표지 찍기 실행 " + g.Title + ": " + ex.Message); }
                     KillDir(dir);
+
+                    // 오류 창이 떴으면: 고칠 수 있는 부품(DirectX·Visual C++)은 설치하고 이 게임을 한 번 더
+                    if (err.Length > 0 && !Cancel)
+                    {
+                        string low = err.ToLowerInvariant();
+                        GameDoctor.Issue fix = null;
+                        try { fix = GameDoctor.DxIssue(low) ?? GameDoctor.VcIssue(g, low); } catch { }
+                        if (fix != null && !fixedKinds.Contains(fix.Title) && !retry)
+                        {
+                            fixedKinds.Add(fix.Title);
+                            Activity.Set("cover", "부품 설치 중 · " + fix.Title, i + 1, list.Count);
+                            progress("필요한 부품 설치 중 — " + fix.Title);
+                            string r = "";
+                            try { r = fix.Fix(); } catch (Exception ex) { r = ex.Message; }
+                            Activity.Note(fix.Title + " → " + r);
+                            retry = true; i--;                    // 같은 게임 다시
+                            System.Threading.Thread.Sleep(1500);
+                            continue;
+                        }
+                        skipped++;
+                        Activity.Note("표지 찍기 건너뜀(오류 창) · " + g.Title + " — " + err.Replace("\n", " ").Trim());
+                        Log.Info("표지 찍기 오류 창: " + g.Title + " — " + err.Replace("\n", " / "));
+                    }
+                    retry = false;
                     System.Threading.Thread.Sleep(1500);
                 }
                 Finding = false;
-                Activity.Done("cover", "표지 찍기 끝 · " + list.Count + "개 중 " + okCount + "개");
+                Activity.Done("cover", "표지 찍기 끝 · " + list.Count + "개 중 " + okCount + "개" + (skipped > 0 ? ", 오류로 " + skipped + "개 건너뜀" : ""));
                 done(okCount);
             }) { IsBackground = true };
             th.SetApartmentState(System.Threading.ApartmentState.STA);
