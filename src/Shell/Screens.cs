@@ -1488,6 +1488,34 @@ namespace TkoolLauncher
         }
 
         /// <summary>이름 고치기: 후보(원래 이름·읽어보기·DLsite 원제·번역)에서 고르거나 직접 입력</summary>
+        /// <summary>이 게임 이름 찾기: 인터넷·읽어보기 → 가진 그림 글자 → 그래도 없으면 켜서 창 제목·타이틀 화면 글자</summary>
+        void FindName()
+        {
+            var g = game;
+            Shell.ShowToast("이름 찾는 중…", 2000);
+            new System.Threading.Thread(() =>
+            {
+                Activity.Set("name1", "이름 찾는 중 · " + g.Title, 0, 0);
+                bool changed = false;
+                try { changed = NameFinder.FindOne(g); } catch (Exception ex) { Log.Info("이름 찾기 " + ex.Message); }
+                bool still = NameFinder.Meaningless(g, g.Title) || NameFinder.Foreign(g.Title);
+                Activity.Done("name1", changed ? "이름 찾음 · " + g.Title : "이름 못 찾음 · " + g.Title);
+                try
+                {
+                    Shell.BeginInvoke(new Action(() =>
+                    {
+                        Shell.RefreshLists(); CoverArt.Invalidate(g); Shell.Invalidate();
+                        if (changed && !still) { Shell.ShowToast("이름을 찾았어요: " + g.Title, 4000); return; }
+                        if (GameWatch.Running) { Shell.ShowToast(changed ? "이름: " + g.Title : "인터넷에서 못 찾았어요", 4000); return; }
+                        PickerScreen.Confirm(Shell, changed ? "'" + g.Title + "' — 게임을 켜서 더 찾아볼까요?" : "인터넷에서 못 찾았어요. 게임을 켜서 찾아볼까요?", "켜서 찾기",
+                            () => Shell.FindCovers(new List<GameInfo> { g }),
+                            "잠깐 켜서 창 제목과 타이틀 화면 글자를 읽고 꺼요 (표지가 없으면 표지도 찍어요)");
+                    }));
+                }
+                catch { }
+            }) { IsBackground = true }.Start();
+        }
+
         void RenameMenu(GameStat st)
         {
             var c = TidyScreen.Candidates(game);
@@ -1495,6 +1523,7 @@ namespace TkoolLauncher
             if (st.NameFrom != null && st.NameFrom.Length > 2) add(st.NameFrom.Split(new[] { " · " }, StringSplitOptions.None)[0]);
             var dl = DlsiteInfo.Get(game);
             if (dl != null) add(dl.Name);
+            foreach (var o in Ocr.Get(game)) add(o);   // 타이틀 화면에서 읽은 글자
             var opts = new List<string>(c) { "✎ 직접 입력하기" };
             PickerScreen.Show(Shell, "이름 고치기", opts.ToArray(), c.IndexOf(game.Title), k =>
             {
@@ -1636,6 +1665,7 @@ namespace TkoolLauncher
                 "표지 지우기",
                 "언어: " + langs[Math.Max(0, Math.Min(2, st.Lang))] + (st.Lang == 0 ? " (" + (LibraryScreen.IsKorean(game) ? "한글" : "일본어") + "로 보임)" : ""),
                 "이름 바꾸기",
+                "이름 찾기 (인터넷 → 타이틀 그림 글자 → 게임 켜서)",
                 st.Hidden ? "다시 보이기 (숨김 풀기)" : "숨기기",
                 "게임 위치 열기 (탐색기)",
                 "창 모양: " + wins[Math.Max(0, Math.Min(1, st.WinMode))],
@@ -1658,12 +1688,13 @@ namespace TkoolLauncher
                     case 3:
                         RenameMenu(st);
                         break;
-                    case 4:
+                    case 4: FindName(); break;
+                    case 5:
                         if (st.Hidden) { st.Hidden = false; GameData.Save(); Shell.ShowToast("다시 보이게 했어요", 1500); Shell.RefreshLists(); }
                         else Hide();
                         break;
-                    case 5: DupFinder.OpenFolder(game); break;
-                    case 6:
+                    case 6: DupFinder.OpenFolder(game); break;
+                    case 7:
                         PickerScreen.Show(Shell, "창 모양", wins, st.WinMode, k => { st.WinMode = k; GameData.Save(); },
                             "꽉 찬 창: 테두리 없이 작업 표시줄만 남기고 화면을 채움 (다음 실행부터)");
                         break;

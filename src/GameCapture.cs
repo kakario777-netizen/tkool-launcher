@@ -273,6 +273,13 @@ namespace TkoolLauncher
                     Activity.Set("cover", "표지 찍는 중 · " + g.Title, i + 1, list.Count);
                     string dir = g.InstallDir ?? g.Folder;
                     string err = "";
+                    // 이름만 필요하면 먼저 가진 그림(표지·타이틀 그림)의 글자로 — 되면 안 켬
+                    if (nameOnly.Contains(g) && !retry)
+                    {
+                        string pn = null;
+                        try { pn = Ocr.NameFromPictures(g); } catch { }
+                        if (pn != null) { nameCount++; Activity.Note("타이틀 그림 글자로 이름 찾음 · " + pn); continue; }
+                    }
                     try
                     {
                         Process.Start(new ProcessStartInfo(g.Exe) { WorkingDirectory = g.Folder, UseShellExecute = true });
@@ -301,7 +308,15 @@ namespace TkoolLauncher
                         }
                         if (err.Length == 0 && w != IntPtr.Zero && !nameOnly.Contains(g))
                         {
-                            if (!Cancel && FindTitle(g, w)) okCount++;   // 타이틀 화면까지 지켜봄 (확인 화면에서 적용)
+                            if (!Cancel && FindTitle(g, w))
+                            {
+                                okCount++;
+                                if (needName.Contains(g) && NameFinder.NeedsWinName(g) || needName.Contains(g) && GameData.Get(g).NameFrom == NameFinder.WinTried)
+                                {
+                                    string n = Ocr.NameFromShot(g, PendingPath(g), true);
+                                    if (n != null) { nameCount++; Activity.Note("타이틀 화면 글자로 이름 찾음 · " + n); }
+                                }
+                            }   // 타이틀 화면까지 지켜봄 (확인 화면에서 적용)
                             if (!Cancel) err = ErrorText(dir, g.Exe);       // 지켜보는 중에 뜬 오류 창
                         }
                     }

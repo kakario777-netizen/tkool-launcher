@@ -34,7 +34,8 @@ namespace TkoolLauncher
             string letters = new string(t.Where(char.IsLetter).ToArray());
             int digits = t.Count(char.IsDigit);
             if (letters.Length <= 3) return true;                          // my, abc, 3112
-            if (digits >= 3) return true;                                  // yagiri 3112, game2023
+            if (digits >= 3) return true;
+            if (Regex.IsMatch(t, @"^[A-Za-z]+[ _\-]*\d+$")) return true;     // 같은 이름에 숫자만 돌린 것 (yagiri 12)                                  // yagiri 3112, game2023
             var words = t.Split(new[] { ' ', '_', '-', '.' }, StringSplitOptions.RemoveEmptyEntries);
             if (words.Length == 1 && letters.Length <= 5) return true;     // 짧은 한 단어
             if (!t.Any(c => "aeiouAEIOU".IndexOf(c) >= 0)) return true;    // 모음 없는 영문 (xkcd 같은 것)
@@ -47,34 +48,67 @@ namespace TkoolLauncher
         public const string ByUser = " · 직접 고침";
         public const string WinTried = "-3w";   // 인터넷에서 못 찾아 게임을 켜서 창 제목까지 본 흔적
 
-        /// <summary>인터넷·읽어보기로 못 찾았고 이름이 아직 뜻 없음 → 표지 찍기 때 한 번 켜서 창 제목 보기</summary>
+        /// <summary>인터넷·읽어보기로 못 찾았고 이름이 아직 뜻 없음·외국어 → 표지 찍기 때 한 번 켜서 창 제목 보기</summary>
         public static bool NeedsWinName(GameInfo g)
         {
             if (g.Kind != GameKind.Tkool || !g.FromFolder) return false;
             var st = GameData.Get(g);
-            return st.NameFrom == Checked && Meaningless(g, g.Title);
+            if (st.NameFrom == null || st.NameFrom == WinTried || st.NameFrom.EndsWith(ByUser)) return false;   // 아직 인터넷 확인 전이거나 이미 봄·직접 고침
+            return Meaningless(g, g.Title) || Foreign(g.Title);
         }
 
-        /// <summary>창 제목으로 이름 정하기 (외국어면 번역). 못 쓰면 확인 흔적만</summary>
+        /// <summary>타이틀 화면에서 읽은 글자로 이름 넣기 — 직접 고친 이름은 안 건드림, 지금 이름이 뜻 없음·외국어일 때만</summary>
+        public static bool ApplyScreenName(GameInfo g, string t)
+        {
+            var st = GameData.Get(g);
+            if (st.NameFrom != null && st.NameFrom.EndsWith(ByUser)) return false;
+            if (st.Title != null && st.Title.StartsWith("=") && st.NameFrom == null) return false;
+            if (!Meaningless(g, g.Title) && !Foreign(g.Title)) return false;
+            t = (t ?? "").Trim();
+            if (t.Length == 0 || Meaningless(g, t) || BadName(t) || t == g.Title) return false;
+            string name = t, from = "타이틀 화면 글자";
+            if (Foreign(t))
+            {
+                string ko = null;
+                try { ko = Translate.Run(t); } catch { }
+                if (!string.IsNullOrWhiteSpace(ko) && Hangul.IsMatch(ko)) { name = ko.Trim(); from += " · 원제 " + t + " · 구글 번역"; }
+                else if (!Meaningless(g, g.Title)) return false;   // 번역 실패: 외국어 이름끼리 바꿀 필요 없음
+            }
+            st.NameFrom = (g.RawTitle ?? g.Title) + " · " + from;
+            st.Title = "=" + name;
+            g.Title = name;
+            GameData.Save();
+            Log.Info("화면 글자 이름: " + st.NameFrom + " → " + name);
+            return true;
+        }
+
+        /// <summary>창 제목으로 이름 정하기 (외국어면 번역). 창 제목이 쓸모없으면 지금 외국어 이름이라도 번역. 못 하면 확인 흔적만</summary>
         public static bool ApplyWinTitle(GameInfo g, string t)
         {
             var st = GameData.Get(g);
             t = (t ?? "").Trim();
-            if (t.Length > 0 && !Meaningless(g, t) && !BadName(t) && t != g.Title)
+            string pick = null, from = "게임 창 제목";
+            if (t.Length > 0 && !Meaningless(g, t) && !BadName(t)) pick = t;
+            else if (!Meaningless(g, g.Title) && Foreign(g.Title)) { pick = g.Title; from = ""; }
+            if (pick != null)
             {
-                string name = t, from = "게임 창 제목";
-                if (Foreign(t))
+                string name = pick;
+                if (Foreign(pick))
                 {
                     string ko = null;
-                    try { ko = Translate.Run(t); } catch { }
-                    if (!string.IsNullOrWhiteSpace(ko) && ko.Trim() != t) { name = ko.Trim(); from = "게임 창 제목 · 원제 " + t + " · 구글 번역"; }
+                    try { ko = Translate.Run(pick); } catch { }
+                    if (!string.IsNullOrWhiteSpace(ko) && ko.Trim() != pick && Hangul.IsMatch(ko)) { name = ko.Trim(); from = (from.Length > 0 ? from + " · " : "") + "원제 " + pick + " · 구글 번역"; }
+                    else if (pick == g.Title) return false;   // 번역 실패 → 흔적 안 남김 (다음에 다시)
                 }
-                st.NameFrom = (g.RawTitle ?? g.Title) + " · " + from;
-                st.Title = "=" + name;
-                g.Title = name;
-                GameData.Save();
-                Log.Info("창 제목 이름: " + st.NameFrom + " → " + name);
-                return true;
+                if (name != g.Title)
+                {
+                    st.NameFrom = (g.RawTitle ?? g.Title) + " · " + from;
+                    st.Title = "=" + name;
+                    g.Title = name;
+                    GameData.Save();
+                    Log.Info("창 제목 이름: " + st.NameFrom + " → " + name);
+                    return true;
+                }
             }
             st.NameFrom = WinTried;
             GameData.Save();
@@ -478,6 +512,31 @@ namespace TkoolLauncher
         }
 
         /// <summary>찾은 이름 적용 (없으면 확인 흔적만)</summary>
+        /// <summary>게임 하나 이름 다시 찾기 (상세 화면 더보기) — 직접 고친 이름도 풀고 처음부터. 이름 바뀌면 true</summary>
+        public static bool FindOne(GameInfo g)
+        {
+            var st = GameData.Get(g);
+            string before = g.Title;
+            if (st.NameFrom != null && !st.NameFrom.StartsWith("-"))
+            {
+                string orig = st.NameFrom.Split(new[] { " · " }, StringSplitOptions.None)[0];
+                if (orig.Length > 0) g.Title = TitleTidy.Clean(orig, new List<string>());
+            }
+            st.Title = null; st.NameFrom = null;
+            Found f = null;
+            try { f = Find(g, true); } catch { }
+            if (f != null && f.NeedTr)
+            {
+                string ko = null;
+                try { ko = Translate.Run(f.Name); } catch { }
+                if (!string.IsNullOrWhiteSpace(ko) && Hangul.IsMatch(ko)) { f.From = (f.From.Length > 0 ? f.From + " · 원제 " + f.Name + " · " : "원제 " + f.Name + " · ") + "구글 번역"; f.Name = ko.Trim(); }
+            }
+            Apply(g, f);
+            if (Meaningless(g, g.Title) || Foreign(g.Title)) { try { Ocr.NameFromPictures(g); } catch { } }
+            GameData.Save();
+            return g.Title != before;
+        }
+
         static bool Apply(GameInfo g, Found f)
         {
             var st = GameData.Get(g);

@@ -1496,8 +1496,17 @@ namespace TkoolLauncher
             try { ok = GameCapture.ShotNow(g); } catch (Exception ex) { Log.Error("표지 찍기", ex); }
             if (!ok) { coverTip?.SetText("찍지 못했어요 — 게임 화면이 앞에 있을 때 다시 Y 두 번"); return; }
             Log.Info("표지 직접 찍음: " + g.Title);
-            EndManualCover("표지로 저장했어요");
+            EndManualCover("표지로 저장했어요 — 화면 글자로 이름도 찾아볼게요");
             RefreshLists();
+            // 같은 화면에서 게임 이름 글자 읽기 (이름이 뜻 없음·외국어면 넣음, 후보는 이름 바꾸기 메뉴에)
+            string shot = CoverArt.AutoShotPath(g);
+            new System.Threading.Thread(() =>
+            {
+                Activity.Set("ocr", "타이틀 화면에서 이름 읽는 중 · " + g.Title, 0, 0);
+                string n = Ocr.NameFromShot(g, shot, true);
+                Activity.Done("ocr", n != null ? "화면 글자로 이름 넣음 · " + n : "화면 글자 읽기 끝 · " + g.Title);
+                try { BeginInvoke(new Action(() => { if (n != null) { ShowToast("이름도 넣었어요: " + n, 4000); CoverArt.Invalidate(g); RefreshLists(); } })); } catch { }
+            }) { IsBackground = true }.Start();
         }
 
         public void EndManualCover(string msg = null)
