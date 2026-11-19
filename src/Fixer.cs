@@ -14,6 +14,7 @@ namespace TkoolLauncher
         static readonly HashSet<string> tried = new HashSet<string>();   // 이번 실행에서 이미 설치한 부품 (같은 것 반복 안 함)
         public static volatile bool Busy;
 
+        static readonly Regex SysTitle = new Regex(@"\.exe\s*-\s*(시스템 오류|System Error|システム エラー|응용 프로그램 오류|Application Error|アプリケーション エラー)", RegexOptions.IgnoreCase);
         static readonly Regex SysErr = new Regex(@"^\s*(.+?\.exe)\s*-\s*", RegexOptions.IgnoreCase);
 
         /// <summary>"어떤.exe - 시스템 오류" 창이 이 게임 폴더의 프로그램 것인지 (게임이 다른 exe를 켜는 경우까지)</summary>
@@ -22,6 +23,8 @@ namespace TkoolLauncher
             if (string.IsNullOrEmpty(title) || string.IsNullOrEmpty(dir)) return false;
             var m = SysErr.Match(title);
             if (!m.Success) return false;
+            // 게임이 켜는 도우미 프로그램(티라노 player.exe 등)이 게임 폴더 밖에 있어도: 게임 켜 둔 동안 뜬 "시스템 오류" 창이면 게임 것으로 봄
+            if (SysTitle.IsMatch(title)) return true;
             try { return Directory.EnumerateFiles(dir, Path.GetFileName(m.Groups[1].Value), SearchOption.AllDirectories).Any(); }
             catch { return false; }
         }
