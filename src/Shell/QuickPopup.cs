@@ -60,6 +60,11 @@ namespace TkoolLauncher
 
         public void Open()
         {
+            // 해상도·회전이 바뀌었을 수 있어 열 때마다 지금 화면에 맞춰 자리 다시 잡기 (예전엔 처음 자리 그대로라 해상도를 줄이면 화면 밖에 떠서 안 보였음)
+            var sc = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
+            int w = QuickPanel.PanelWidth();
+            targetX = sc.Right - w;
+            Bounds = new Rectangle(sc.Right, sc.Top, w, sc.Height);
             qp.Show();       // 상태(밝기·소리 등) 다시 읽기
             qp.Open = true; qp.T = 1f;
             Show();

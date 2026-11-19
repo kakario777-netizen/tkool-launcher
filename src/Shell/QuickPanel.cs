@@ -146,11 +146,15 @@ namespace TkoolLauncher
                 rows.Add(new Row { Kind = Kind.Choice, Title = "윈도우 전원 모드", Choices = SystemControls.PowerNames, ChoiceIndex = power, Change = v => { power = v; SystemControls.SetPowerMode(v); } });
             rows.Add(new Row { Kind = Kind.Toggle, Title = "성능 표시 (화면 위)", On = OverlayForm.IsOn, Change = v => OverlayForm.Toggle(v == 1) });
             AddOverlayRows();
+            if (resGuardOld != null)
+                rows.Add(new Row { FixCat = 1, Kind = Kind.Action, Title = "✔ 이 해상도 유지하기", Keep = true,
+                    Sub = Math.Max(0, (int)(resGuardUntil - DateTime.Now).TotalSeconds) + "초 뒤 " + resGuardOld + "로 되돌려요",
+                    Act = () => { resGuardOld = null; resGuardT?.Stop(); } });
             if (resList.Count > 1)
                 rows.Add(new Row
                 {
                     Kind = Kind.Choice, Title = "해상도", Choices = resList.ToArray(), ChoiceIndex = Math.Max(0, resIndex),
-                    Change = v => { resIndex = v; SystemControls.SetResolution(resList[v]); Shell.AfterDisplayChange(); }
+                    Change = v => { string old = resIndex >= 0 && resIndex < resList.Count ? resList[resIndex] : null; resIndex = v; SystemControls.SetResolution(resList[v]); Shell.AfterDisplayChange(); StartResGuard(old); }
                 });
             rows.Add(new Row
             {
@@ -350,6 +354,33 @@ namespace TkoolLauncher
         }
 
         [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "GetForegroundWindow")] static extern IntPtr GetFg();
+
+        // ── 해상도 바꾼 뒤 15초 안에 "유지"를 안 누르면 되돌리기 (실수로 줄여서 화면을 못 쓰게 되는 것 막기) ──
+        static string resGuardOld;
+        static DateTime resGuardUntil;
+        static Timer resGuardT;
+        void StartResGuard(string old)
+        {
+            if (string.IsNullOrEmpty(old)) return;
+            resGuardOld = old; resGuardUntil = DateTime.Now.AddSeconds(15);
+            resGuardT?.Stop(); resGuardT?.Dispose();
+            resGuardT = new Timer { Interval = 1000 };
+            var shell = Shell;
+            resGuardT.Tick += (o, e) =>
+            {
+                if (resGuardOld == null) { resGuardT.Stop(); return; }
+                if (DateTime.Now < resGuardUntil) { try { Redraw(); } catch { } return; }
+                resGuardT.Stop();
+                string back = resGuardOld; resGuardOld = null;
+                Log.Info("해상도 유지 안 눌러서 되돌림: " + back);
+                SystemControls.SetResolution(back);
+                try { resList = SystemControls.Resolutions(out resIndex); } catch { }
+                shell.AfterDisplayChange();
+                shell.ShowToast("해상도를 " + back + "로 되돌렸어요", 3000);
+            };
+            resGuardT.Start();
+            Shell.ShowToast("15초 안에 '이 해상도 유지하기'를 안 누르면 되돌려요", 4000);
+        }
 
         // ── 오버레이 탭: 작은 메뉴(형태·위치·표시 정보 → 항목별 보이기·이름·색·순서) ──
         static int ovSub;   // 0 처음, 1 형태, 2 위치, 3 표시 정보, 10+i 항목 하나

@@ -112,3 +112,4 @@
 - 상세 화면 "화면 모드" 단추(예전 "해상도" + 더보기 "창 모양" 합침, DetailScreen.ScreenMenu): 화면 크기(그대로/원래 비율로 꽉/도트 선명 정수배/2배/3배 = ScreenFit.Remember, 늘려서 꽉(비율 무시) = WinMode 1)·해상도(NextRes)·작업 표시줄(기본·숨기기·보이기 = ScreenFit.Get/SetTaskbar "tb:id=" in cache\screenfit.txt, ShellForm.ApplyTaskbar). 작업 표시줄 보이면 ScreenFit은 WorkingArea 안에서만 채움. 단추 글은 "비율 꽉 · 1280x720"처럼.
 - 일본 한자 경로(용병의 모험 "傭兵の冒険_DLS" — 険은 CP949에 없음): 옛 게임은 경로를 "?"로 읽어 RGSS301.dll "File corrupted !" → GameDoctor.AnsiSafe(지금 윈도우 글자표로 못 쓰는 글자 있음)이면 어떤 게임이든 SafeRunDir가 C:\ProgramData\TkoolRun\g해시 영문 정션으로 켬.
 - 게임 끈 뒤 기다림 줄임: GameWatch 끝 확인 3초×2 → 0.6+0.7초(폴더 프로그램 두 번 연속 없으면 끝), 가림막 "돌아가는 중…" 450ms → 150ms.
+- 해상도 실수 막기: 게임 위 팝업(QuickPopup)이 처음 만들 때 자리를 고정해 해상도를 줄이면 화면 밖에 떠서 안 보였음 → Open 때마다 지금 화면에 맞춰 다시. 빠른 설정에서 해상도를 바꾸면 15초 안에 "✔ 이 해상도 유지하기"(화면 탭 맨 위)를 안 누르면 예전 해상도로 되돌림(QuickPanel.StartResGuard).
