@@ -284,6 +284,8 @@ namespace TkoolLauncher
                     var g = list[i];
                     progress((i + 1) + "/" + list.Count + " · " + g.Title + " — 홈 버튼을 누르면 멈춰요");
                     Activity.Set("cover", "표지 찍는 중 · " + g.Title, i + 1, list.Count);
+                    // 다른 곳에서 오류를 고치는 중이면 끝날 때까지 멈췄다가 이어서
+                    while (Fixer.Busy && !Cancel) { progress("오류 고치는 중 — 끝나면 이어서 찍어요"); System.Threading.Thread.Sleep(1000); }
                     string dir = g.InstallDir ?? g.Folder;
                     string err = "";
                     // 앞 게임 때부터 남아 있는 오류 창은 이 게임 것이 아님 → 닫고, 못 닫은 건 무시 목록에
@@ -355,7 +357,7 @@ namespace TkoolLauncher
                         if (!retry && Fixer.CanFix(g, err))
                         {
                             Activity.Set("cover", "오류 먼저 고치는 중 · " + g.Title, i + 1, list.Count);
-                            progress("오류 먼저 고치는 중 — " + g.Title);
+                            progress("표지 찍기 잠깐 멈춤 · 오류 고치는 중 — " + g.Title + " (끝나면 이 게임부터 이어서)");
                             string r = Fixer.FixNow(g, err);
                             progress("고쳤어요 — 다시 켜 봐요: " + r);
                             retry = true; i--;                    // 같은 게임 다시
