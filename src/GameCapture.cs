@@ -475,10 +475,19 @@ namespace TkoolLauncher
         }
 
         /// <summary>지금 앞에 있는 게임 화면을 표지로 (빠른 설정 버튼)</summary>
+        public static string LastShotProblem = "";
         public static bool ShotNow(GameInfo g, bool pending = false)
         {
             IntPtr w = GameWindow();
-            bool ok = w != IntPtr.Zero && Shot(g, w, true, pending);
+            if (w == IntPtr.Zero)
+            {
+                IntPtr fg = GetForegroundWindow(); GetWindowThreadProcessId(fg, out uint fp);
+                LastShotProblem = "게임 창을 못 찾았어요 (런처가 아는 게임 폴더와 앞 창 프로그램이 달라요)";
+                Log.Info("표지 찍기 실패: 창 없음 · 게임 폴더=" + (GameWatch.Dir ?? "(없음)") + " · 앞 창 프로그램=" + (GameWatch.PathOf((int)fp) ?? "?"));
+                return false;
+            }
+            bool ok = Shot(g, w, true, pending);
+            if (!ok) { LastShotProblem = "찍은 화면이 비어 있어요 (검은 화면) — 게임 화면이 나온 뒤 다시"; Log.Info("표지 찍기 실패: 찍은 그림이 비었음 · " + g.Title); }
             if (ok && !pending) CoverArt.MarkCoverOk(g);   // 사용자가 직접 찍은 표지 → 다시 안 찍음
             return ok;
         }

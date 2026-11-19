@@ -474,7 +474,7 @@ namespace TkoolLauncher
             }
             // 게임 중 팝업: 타일 아래 줄 전체 폭 "전체 화면 ↔ 창" 단추 (창으로 돌아오면 화면 가운데로)
             if (Popup && GameWatch.Running)
-                tiles.Add(new Row { Kind = Kind.Action, Title = "전체 화면 ↔ 창 모드", Act = () => Shell.ToggleFullscreen() });
+                tiles.Add(new Row { Kind = Kind.Action, Title = ScreenFit.On ? "화면 원래 크기로" : "화면 꽉 채우기", Act = () => Shell.ToggleFullscreen() });
             if (focus >= view.Count) focus = Math.Max(0, view.Count - 1);
             if (tileFocus >= tiles.Count) tileFocus = Math.Max(0, tiles.Count - 1);
         }

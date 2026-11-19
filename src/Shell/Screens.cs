@@ -867,6 +867,14 @@ namespace TkoolLauncher
 
         public override void OnPad(Pad b)
         {
+            // LT·RT = 위 동그라미 칩 왼쪽·오른쪽으로 (어디에 있든)
+            if ((b == Pad.LT || b == Pad.RT) && chips.Count > 0)
+            {
+                int ni = Math.Max(0, Math.Min(chips.Count - 1, chipIdx + (b == Pad.RT ? 1 : -1)));
+                if (ni != chipIdx) PickChip(ni);
+                Shell.Invalidate();
+                return;
+            }
             switch (b)
             {
                 case Pad.Left:

@@ -231,7 +231,17 @@ namespace TkoolLauncher
         public void ToggleFullscreen()
         {
             IntPtr gw = gameHwnd != IntPtr.Zero ? gameHwnd : GetForegroundWindow();
-            SendToGame(() => KeySender.Combo(KeySender.Alt, KeySender.Enter));
+            var pg = PlayingGame;
+            bool mvmz = pg != null && pg.IsTkool && (pg.Version == TkoolVersion.MV || pg.Version == TkoolVersion.MZ);
+            if (!mvmz)
+            {
+                // 게임 전체 화면 기능은 옛 게임에서 안 먹거나 검은 화면이 돼서, 런처가 직접 창을 키움 (안 되면 확대 기능)
+                bool was = ScreenFit.On;
+                ScreenFit.Toggle(gw, 2);   // 확대로 넘어가면 도트 선명(정수배)
+                ShowToast(was ? "원래 크기로 돌렸어요" : "화면을 꽉 채웠어요 — 게임이 크기를 되돌리면 확대 기능으로 바꿔요", 3000);
+                return;
+            }
+            SendToGame(() => KeySender.Combo(0x73));   // F4 — MV·MZ: F4가 게임 자체 전체 화면
             int tries = 0;
             var t = new Timer { Interval = 500 };
             t.Tick += (s, e) =>
@@ -1326,7 +1336,7 @@ namespace TkoolLauncher
                 playTimer?.Dispose(); playTimer = null;
                 Log.Info("게임 끝: " + g.Title + " (이번 " + (int)(DateTime.Now - sessionStart).TotalMinutes + "분, 총 " + st.TotalSeconds / 60 + "분)");
                 string hadProblem = GameProblem; var startedAt = sessionStart; var endedGame = g;
-                playStat = null; PlayingGame = null; TrackedExternal = false; GameProblem = null;
+                ScreenFit.Stop(); playStat = null; PlayingGame = null; TrackedExternal = false; GameProblem = null;
                 CheckAfterEnd(endedGame, dir, startedAt, hadProblem);
                 if (curtain && ours) { curtainLeaving = true; Invalidate(); Update(); System.Threading.Thread.Sleep(450); }
                 curtain = false; curtainLeaving = false; TaskbarHide.Show();
@@ -1536,7 +1546,7 @@ namespace TkoolLauncher
             }
             bool ok = false;
             try { ok = GameCapture.ShotNow(g); } catch (Exception ex) { Log.Error("표지 찍기", ex); }
-            if (!ok) { coverTip?.SetText("찍지 못했어요 — 게임 화면이 앞에 있을 때 다시 Y 두 번"); return; }
+            if (!ok) { coverTip?.SetText("찍지 못했어요: " + GameCapture.LastShotProblem + "  ·  Y 두 번 다시"); return; }
             Log.Info("표지 직접 찍음: " + g.Title);
             EndManualCover("표지로 저장했어요 — 화면 글자로 이름도 찾아볼게요");
             RefreshLists();

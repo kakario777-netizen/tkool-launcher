@@ -95,3 +95,6 @@
 - 필요한 키: InputNeeds가 읽어보기의 "A키·Sキー·F5·Shift·Space…"를 모아 Keys, 2000~Ace인데 런처 패드 변환(Z X Shift Esc Q W Enter)에 없는 키는 Unmapped → 상세 정보 조작 줄 아래 "필요한 키: … (패드에 없음: …)" 주황.
 - 상세 정보 칸 스크롤: DetailScreen 정보 칸을 잘라 그리고(infoRect) 넘치면 위아래 밀기(infoScroll), 오른쪽 가는 막대.
 - 패드 → 키보드 바꾸기(게임별): PadMap.cs(cache\padmap.txt on/off/자동). 자동 = IsTkool·MV/MZ 아님·Engine 없음·RPG_RT 또는 RGSS 파일(Game.ini Library 등) 있을 때만(예전엔 IsTkool이면 다 켜서 패드를 직접 읽는 게임에 겹쳐 보냄 — 울프 "히메가시마는 즐거운 한여름" A 누를 때 깜빡임 의심). 상세 더보기 "패드 → 키보드 바꾸기: 자동/켬/끔".
+- 화면 키우기: ScreenFit.cs — 게임 위 팝업 "화면 꽉 채우기"(MV·MZ 아닌 게임): 테두리 없앤 창을 비율 그대로 화면에 맞춰 가운데, 0.7초마다 크기 다시 맞춤, 게임이 2번 넘게 되돌리면 원래 창으로 두고 Scaler(화면 확대)로 키움(이땐 터치 위치가 안 맞을 수 있음). MV·MZ는 F4. 게임 끝나면 Stop.
+- 라이브러리 동그라미 칩: LT/RT로 좌우(Pad.LT/RT, 트리거 120 넘으면).
+- 표지 찍기 실패 이유: GameCapture.LastShotProblem(창 못 찾음/검은 화면) → 안내 글 + 로그에 게임 폴더·앞 창 프로그램.

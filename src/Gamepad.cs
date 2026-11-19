@@ -6,13 +6,14 @@ using System.Windows.Forms;
 namespace TkoolLauncher
 {
     [Flags]
-    enum Pad : ushort
+    enum Pad : uint
     {
         None = 0,
         Up = 0x0001, Down = 0x0002, Left = 0x0004, Right = 0x0008,
         Start = 0x0010, Back = 0x0020, LThumb = 0x0040, RThumb = 0x0080,
         LB = 0x0100, RB = 0x0200, Guide = 0x0400,
         A = 0x1000, B = 0x2000, X = 0x4000, Y = 0x8000,
+        LT = 0x10000, RT = 0x20000,   // 아날로그 트리거를 버튼처럼 (반 넘게 당기면)
     }
 
     /// <summary>런처 화면이 패드 입력을 받으려면 구현</summary>
@@ -121,7 +122,7 @@ namespace TkoolLauncher
         static readonly Pad[] All =
         {
             Pad.Up, Pad.Down, Pad.Left, Pad.Right, Pad.A, Pad.B, Pad.X, Pad.Y,
-            Pad.LB, Pad.RB, Pad.Start, Pad.Back, Pad.Guide
+            Pad.LB, Pad.RB, Pad.Start, Pad.Back, Pad.Guide, Pad.LT, Pad.RT
         };
 
         /// <summary>게임 중 홈 버튼(가이드 버튼, 또는 보기+메뉴 동시)</summary>
@@ -271,6 +272,8 @@ namespace TkoolLauncher
             if (s.LX > dead) p |= Pad.Right;
             if (s.LY > dead) p |= Pad.Up;
             if (s.LY < -dead) p |= Pad.Down;
+            if (s.LT > 120) p |= Pad.LT;
+            if (s.RT > 120) p |= Pad.RT;
             return p;
         }
 
