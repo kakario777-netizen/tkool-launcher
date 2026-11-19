@@ -569,7 +569,8 @@ namespace TkoolLauncher
         {
             int sw = 1920;
             try { sw = System.Windows.Forms.Screen.PrimaryScreen.Bounds.Width; } catch { }
-            return Math.Max(Theme.S(360), (int)(sw * 0.26f));
+            // 해상도를 아주 낮춰도 화면 안에 들어오게 (작은 화면에선 가로의 최대 60%까지만 — 미니판)
+            return Math.Min((int)(sw * (sw < 1280 ? 0.6f : 0.4f)), Math.Max(Theme.S(360), (int)(sw * 0.26f)));
         }
 
         public void Paint(Graphics g, Rectangle full)
