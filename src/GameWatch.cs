@@ -83,7 +83,7 @@ namespace TkoolLauncher
                     int quiet = 0;
                     while (quiet < 2 && !ForceEnd)
                     {
-                        Thread.Sleep(3000);
+                        Thread.Sleep(quiet == 0 ? 600 : 700);   // 예전 3초×2 → 1.3초 안팎 (게임 끈 뒤 기다림 줄임)
                         if (dir != null && AnyInDir(dir)) quiet = 0; else quiet++;
                     }
                 }

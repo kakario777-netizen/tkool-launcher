@@ -111,3 +111,4 @@
 - 마마쇼타RPG(VX Ace) 사건(사용자 기기 로그): "RPGVXAce RTP is required" 창 제목이 깨진 일본어라 Fixer가 일본어 환경을 켬 → LEProc가 게임을 못 켜고 튕김(코드 0xE0434352) 반복. 고침: Fixer.Fixable은 RTP·VC·DX 등 분명한 원인이 있거나 글에 rtp가 있으면 일본어 환경 안 고름. JpLocale.Start는 LEProc가 게임을 못 켜고 오류 코드로 끝나면 그 게임 일본어 환경을 끄고 그냥 켬. 구글 번역 429(너무 많이 물음)면 15분 쉼(Translate.Blocked) — 30초마다 계속 두드리던 것.
 - 상세 화면 "화면 모드" 단추(예전 "해상도" + 더보기 "창 모양" 합침, DetailScreen.ScreenMenu): 화면 크기(그대로/원래 비율로 꽉/도트 선명 정수배/2배/3배 = ScreenFit.Remember, 늘려서 꽉(비율 무시) = WinMode 1)·해상도(NextRes)·작업 표시줄(기본·숨기기·보이기 = ScreenFit.Get/SetTaskbar "tb:id=" in cache\screenfit.txt, ShellForm.ApplyTaskbar). 작업 표시줄 보이면 ScreenFit은 WorkingArea 안에서만 채움. 단추 글은 "비율 꽉 · 1280x720"처럼.
 - 일본 한자 경로(용병의 모험 "傭兵の冒険_DLS" — 険은 CP949에 없음): 옛 게임은 경로를 "?"로 읽어 RGSS301.dll "File corrupted !" → GameDoctor.AnsiSafe(지금 윈도우 글자표로 못 쓰는 글자 있음)이면 어떤 게임이든 SafeRunDir가 C:\ProgramData\TkoolRun\g해시 영문 정션으로 켬.
+- 게임 끈 뒤 기다림 줄임: GameWatch 끝 확인 3초×2 → 0.6+0.7초(폴더 프로그램 두 번 연속 없으면 끝), 가림막 "돌아가는 중…" 450ms → 150ms.

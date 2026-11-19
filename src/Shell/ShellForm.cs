@@ -1371,7 +1371,7 @@ namespace TkoolLauncher
                 string hadProblem = GameProblem; var startedAt = sessionStart; var endedGame = g;
                 ScreenFit.Stop(); OverlayForm.SetGame(null); playStat = null; PlayingGame = null; TrackedExternal = false; GameProblem = null;
                 CheckAfterEnd(endedGame, dir, startedAt, hadProblem);
-                if (curtain && ours) { curtainLeaving = true; Invalidate(); Update(); System.Threading.Thread.Sleep(450); }
+                if (curtain && ours) { curtainLeaving = true; Invalidate(); Update(); System.Threading.Thread.Sleep(150); }
                 curtain = false; curtainLeaving = false; TaskbarHide.Show();
                 if (coverFor != null) EndManualCover();
                 CameFromGame = false;
