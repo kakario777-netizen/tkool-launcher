@@ -243,6 +243,17 @@ namespace TkoolLauncher
             finally { best?.Dispose(); firstText?.Dispose(); }
         }
 
+        /// <summary>게임 켜기 (런처·표지 찍기 같은 길): 방화벽 허용 → # % ?·영문 연결 경로 → 일본어 환경</summary>
+        public static Process StartGame(GameInfo g)
+        {
+            Firewall.Allow(g);
+            string runDir = GameDoctor.SafeRunDir(g);
+            string exe = g.Exe, wd = g.Folder;
+            if (runDir != null && g.Exe.StartsWith(g.Folder, StringComparison.OrdinalIgnoreCase))
+            { exe = runDir + g.Exe.Substring(g.Folder.TrimEnd('\\').Length); wd = runDir; }
+            return JpLocale.Start(g, exe, wd);
+        }
+
         public static void KillDir(string dir)
         {
             foreach (var p in Process.GetProcesses())
@@ -301,9 +312,8 @@ namespace TkoolLauncher
                     }
                     try
                     {
-                        Firewall.Allow(g);
                         started = DateTime.Now;
-                        Process.Start(new ProcessStartInfo(g.Exe) { WorkingDirectory = g.Folder, UseShellExecute = true });
+                        StartGame(g);
                         IntPtr w = IntPtr.Zero;
                         for (int k = 0; k < 25 && !Cancel && w == IntPtr.Zero; k++)
                         {
@@ -313,6 +323,12 @@ namespace TkoolLauncher
                             IntPtr fg = GetForegroundWindow();
                             GetWindowThreadProcessId(fg, out uint pid);
                             if (GameWatch.InDir((int)pid, dir)) w = fg;
+                        }
+                        if (err.Length == 0 && w != IntPtr.Zero)
+                        {
+                            System.Threading.Thread.Sleep(1500);
+                            string fl = GameDoctor.FolderListTitle(dir);
+                            if (fl != null) err = "폴더 목록 화면: " + fl;
                         }
                         if (err.Length == 0 && w != IntPtr.Zero && needName.Contains(g))
                         {

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -36,11 +37,17 @@ namespace TkoolLauncher
             finally { CloseHandle(h); }
         }
 
+        /// <summary>게임 폴더 → 연결 경로(정션). 연결 경로로 켠 게임도 그 폴더 게임으로 알아봄</summary>
+        public static readonly Dictionary<string, string> Alias = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
         public static bool InDir(int pid, string dir)
         {
             if (dir == null) return false;
             string p = PathOf(pid);
-            return p != null && p.StartsWith(dir.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase);
+            if (p == null) return false;
+            if (p.StartsWith(dir.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase)) return true;
+            string al; lock (Alias) if (!Alias.TryGetValue(dir.TrimEnd('\\'), out al)) return false;
+            return p.StartsWith(al.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase);
         }
 
         public static bool AnyInDir(string dir)

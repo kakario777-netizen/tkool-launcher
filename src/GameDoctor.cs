@@ -406,13 +406,73 @@ namespace TkoolLauncher
         }
 
         /// <summary>MV·MZ 게임 경로에 # % ? 가 있으면, 그 글자 없는 연결 폴더(정션)를 만들어 그 경로를 돌려줌. 폴더 이름 자체는 안 바꿈</summary>
+        static HashSet<string> nwAscii;
+        static string NwAsciiPath => Path.Combine(Settings.Dir, "cache", "nwascii.txt");
+        public static bool NwAscii(GameInfo g)
+        {
+            lock (typeof(GameDoctor))
+            {
+                if (nwAscii == null) { nwAscii = new HashSet<string>(); try { if (File.Exists(NwAsciiPath)) foreach (var l in File.ReadAllLines(NwAsciiPath, Encoding.UTF8)) nwAscii.Add(l.Trim()); } catch { } }
+                return nwAscii.Contains(GameData.IdOf(g));
+            }
+        }
+        public static void SetNwAscii(GameInfo g)
+        {
+            lock (typeof(GameDoctor))
+            {
+                NwAscii(g); nwAscii.Add(GameData.IdOf(g));
+                try { Directory.CreateDirectory(Path.GetDirectoryName(NwAsciiPath)); File.WriteAllLines(NwAsciiPath, nwAscii.ToArray(), Encoding.UTF8); } catch { }
+            }
+        }
+
+        /// <summary>게임이 띄운 "폴더 목록"(nw.js가 게임 대신 폴더 내용을 보여 줌) 창 제목, 없으면 null</summary>
+        public static string FolderListTitle(string dir)
+        {
+            string found = null;
+            try
+            {
+                EnumWindows((h, l) =>
+                {
+                    if (!IsWindowVisible(h)) return true;
+                    GetWindowThreadProcessId(h, out uint wp);
+                    if (!GameWatch.InDir((int)wp, dir)) return true;
+                    string lt = Text(h).ToLowerInvariant();
+                    if (lt.StartsWith("index of") || lt.Contains("file:///") || lt.Contains(":\\") || lt.Contains("chrome-extension://")) { found = Text(h); return false; }
+                    return true;
+                }, IntPtr.Zero);
+            }
+            catch { }
+            return found;
+        }
+
+        /// <summary>폴더 목록이 뜬 게임 고치기: package.json 바로잡기, 그래도 안 되면 영문 연결 경로로 켜기</summary>
+        public static List<Issue> FolderListIssues(GameInfo g)
+        {
+            var list = new List<Issue>();
+            try { CheckMv(g, list, ""); } catch { }
+            list.RemoveAll(i => i.Fix == null);
+            if (list.Count == 0 && !NwAscii(g))
+                list.Add(new Issue
+                {
+                    Title = "게임 대신 폴더 목록이 떠요 (" + g.Title + ")",
+                    Explain = "게임 실행 부품(nw.js)이 폴더 경로의 글자(한글·일본어·특수 글자)를 못 읽어서 생겨요. 폴더 이름은 그대로 두고 영문 연결 경로로 켤게요.",
+                    FixLabel = "영문 경로로 켜기",
+                    Fix = () => { SetNwAscii(g); return "이 게임은 이제 영문 연결 경로로 켜요"; },
+                });
+            return list;
+        }
+
         public static string SafeRunDir(GameInfo g)
         {
             try
             {
-                if (g == null || !(g.Version == TkoolVersion.MV || g.Version == TkoolVersion.MZ)) return null;
-                if (g.Folder.IndexOfAny(new[] { '#', '%', '?' }) < 0) return null;
-                string root = Path.Combine(Settings.Dir, "run");
+                if (g == null || g.Folder == null) return null;
+                bool nw = g.Version == TkoolVersion.MV || g.Version == TkoolVersion.MZ || File.Exists(Path.Combine(g.Folder, "package.json")) || File.Exists(Path.Combine(g.Folder, "nw.pak"));
+                if (!nw) return null;
+                bool bad = g.Folder.IndexOfAny(new[] { '#', '%', '?' }) >= 0;
+                bool ascii = NwAscii(g);   // 폴더 목록이 떠서 영문 경로로 켜기로 한 게임 (옛 nw.js는 한글·일본어 경로를 못 읽기도 함)
+                if (!bad && !ascii) return null;
+                string root = ascii ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "TkoolRun") : Path.Combine(Settings.Dir, "run");
                 Directory.CreateDirectory(root);
                 string link = Path.Combine(root, "g" + ((uint)g.Folder.ToLowerInvariant().GetHashCode()).ToString("x8"));
                 if (!Directory.Exists(link))
@@ -422,6 +482,7 @@ namespace TkoolLauncher
                     p.WaitForExit(5000);
                 }
                 if (!Directory.Exists(link)) return null;
+                lock (GameWatch.Alias) GameWatch.Alias[g.Folder.TrimEnd('\\')] = link;
                 Log.Info("경로에 # % ? 가 있어 연결 경로로 실행: " + link);
                 return link;
             }
@@ -496,7 +557,7 @@ namespace TkoolLauncher
                     var start = DateTime.Now;
                     string seen = "";
                     bool box = false;
-                    bool mv = g.Version == TkoolVersion.MV || g.Version == TkoolVersion.MZ;
+                    bool mv = g.Version == TkoolVersion.MV || g.Version == TkoolVersion.MZ || File.Exists(Path.Combine(g.Folder ?? "", "package.json")) || File.Exists(Path.Combine(g.Folder ?? "", "nw.pak"));
                     while (true)
                     {
                         Thread.Sleep(500);
