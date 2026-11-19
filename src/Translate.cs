@@ -70,7 +70,7 @@ namespace TkoolLauncher
         }
 
         /// <summary>글을 1200자 안팎 덩어리로 나눠 번역 (줄바꿈 유지)</summary>
-        public static string Run(string text)
+        public static string Run(string text, string sl = "auto")
         {
             var lines = text.Replace("\r", "").Split('\n');
             var chunks = new List<string>();
@@ -101,11 +101,11 @@ namespace TkoolLauncher
                                 wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0";
                                 string json;
                                 if (attempt == 1 && c.Length < 1500)   // 두 번째는 GET으로
-                                    json = wc.DownloadString("https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ko&dt=t&q=" + Uri.EscapeDataString(c));
+                                    json = wc.DownloadString("https://translate.googleapis.com/translate_a/single?client=gtx&sl=" + sl + "&tl=ko&dt=t&q=" + Uri.EscapeDataString(c));
                                 else
                                 {
                                     wc.Headers[HttpRequestHeader.ContentType] = "application/x-www-form-urlencoded; charset=UTF-8";
-                                    json = wc.UploadString("https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ko&dt=t", "q=" + Uri.EscapeDataString(c));
+                                    json = wc.UploadString("https://translate.googleapis.com/translate_a/single?client=gtx&sl=" + sl + "&tl=ko&dt=t", "q=" + Uri.EscapeDataString(c));
                                 }
                                 part = Parse(json);
                             }

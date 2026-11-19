@@ -492,7 +492,26 @@ namespace TkoolLauncher
                                 f.Name = ko;
                                 if (Apply(g, f)) n++;
                             }
-                            else if (f.From.Length > 0 && f.Name != g.Title) { if (Apply(g, f)) n++; }   // 번역은 안 됐지만 DLsite·읽어보기 이름은 씀
+                            else if (!trFailed)
+                            {
+                                // 묶음 번역이 영어를 그대로 돌려줌(고유 이름으로 봄) → 언어를 정해서 하나씩 다시
+                                string sl = Kana.IsMatch(f.Name) ? "ja" : "en", one = null;
+                                try { one = Tidy(Translate.Run(f.Name, sl)); } catch { }
+                                if (one != null && Hangul.IsMatch(one) && one != f.Name)
+                                {
+                                    f.From = f.From.Length == 0 ? "구글 번역" : f.From + " (구글 번역)";
+                                    f.Name = one;
+                                    if (Apply(g, f)) n++;
+                                }
+                                else if (f.From.Length > 0 && f.Name != g.Title) { if (Apply(g, f)) n++; }   // 번역은 안 됐지만 DLsite·읽어보기 이름은 씀
+                                else
+                                {
+                                    // 번역해도 그대로인 이름 (고유 이름) — 계속 다시 하지 않게 흔적, "이름 다시 찾기"로 풀림
+                                    var stx = GameData.Get(g);
+                                    if (stx.NameFrom == null || stx.NameFrom.StartsWith("-")) stx.NameFrom = Checked;
+                                    Activity.Note("번역해도 그대로인 이름 · " + f.Name);
+                                }
+                            }
                             // 제목 번역만 실패한 건 표시 안 함 → 다음에 다시 시도
                         }
                         done2 += batch.Count;
