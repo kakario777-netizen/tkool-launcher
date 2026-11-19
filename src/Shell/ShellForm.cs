@@ -227,6 +227,27 @@ namespace TkoolLauncher
         /// <summary>팝업 닫기. backToGame이면 원래 앞에 있던 게임으로 포커스를 돌려줌</summary>
         bool popupMapWas, popupPadOffWas;
 
+        /// <summary>이 게임에 기억해 둔 화면 크기가 있으면 창이 자리 잡은 뒤(2초) 걸기</summary>
+        void AutoScreenSize(IntPtr w)
+        {
+            var g = PlayingGame;
+            if (g == null || w == IntPtr.Zero) return;
+            int m = ScreenFit.Remembered(g);
+            if (m <= 0) return;
+            var t = new Timer { Interval = 2000 };
+            t.Tick += (o, e) => { t.Stop(); t.Dispose(); if (PlayingGame == g && !ScreenFit.On) { ScreenFit.Apply(w, m, 2); Log.Info("게임 화면 크기 자동: " + ScreenFit.ModeNames[m]); } };
+            t.Start();
+        }
+
+        /// <summary>게임 화면 크기 강제 (원래·꽉 채우기·정수배·2배·3배) + 이 게임은 다음에도</summary>
+        public void SetGameScreenSize(int mode)
+        {
+            IntPtr gw = gameHwnd != IntPtr.Zero ? gameHwnd : GetForegroundWindow();
+            ScreenFit.Apply(gw, mode, 2);
+            if (PlayingGame != null) ScreenFit.Remember(PlayingGame, mode);
+            ShowToast(mode == 0 ? "원래 크기로 돌렸어요" : "게임 화면: " + ScreenFit.ModeNames[mode] + " (다음에도 이 크기로)", 3000);
+        }
+
         /// <summary>전체 화면 ↔ 창 (Alt+Enter) 뒤 창이 되면 화면 가운데로</summary>
         public void ToggleFullscreen()
         {
@@ -1326,6 +1347,7 @@ namespace TkoolLauncher
             st.LastPlayed = DateTime.Now.Ticks;
             GameData.Save();
             playStat = st; playStart = sessionStart = DateTime.Now;
+            OverlayForm.SetGame(GameData.IdOf(g));   // 이 게임만의 성능 표시 위치가 있으면 그걸로
             PlayingGame = g; TrackedExternal = !ours; GameProblem = null; hungCount = 0; noWinCount = 0;
             Log.Info((ours ? "게임 시작: " : "런처 밖에서 켠 게임 확인: ") + g.Title);
             playTimer?.Dispose();
@@ -1339,7 +1361,7 @@ namespace TkoolLauncher
                 playTimer?.Dispose(); playTimer = null;
                 Log.Info("게임 끝: " + g.Title + " (이번 " + (int)(DateTime.Now - sessionStart).TotalMinutes + "분, 총 " + st.TotalSeconds / 60 + "분)");
                 string hadProblem = GameProblem; var startedAt = sessionStart; var endedGame = g;
-                ScreenFit.Stop(); playStat = null; PlayingGame = null; TrackedExternal = false; GameProblem = null;
+                ScreenFit.Stop(); OverlayForm.SetGame(null); playStat = null; PlayingGame = null; TrackedExternal = false; GameProblem = null;
                 CheckAfterEnd(endedGame, dir, startedAt, hadProblem);
                 if (curtain && ours) { curtainLeaving = true; Invalidate(); Update(); System.Threading.Thread.Sleep(450); }
                 curtain = false; curtainLeaving = false; TaskbarHide.Show();
@@ -1464,7 +1486,7 @@ namespace TkoolLauncher
                             }
                             if (anyWin && curtain)
                             {
-                                if (!curtainSeen) { curtainSeen = true; Invalidate(); CenterGameWin(bigWin); if (!Settings.TaskbarInGame) TaskbarHide.Hide(); }
+                                if (!curtainSeen) { curtainSeen = true; Invalidate(); CenterGameWin(bigWin); if (!Settings.TaskbarInGame) TaskbarHide.Hide(); AutoScreenSize(bigWin); }
                                 // 게임 창이 가림막 뒤에 숨어 있으면 앞으로 (스팀으로 켠 게임 등)
                                 if (!CameFromGame && Form.ActiveForm == this && bigWin != IntPtr.Zero && !PopupOpen) ForceForeground(bigWin);
                             }

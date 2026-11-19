@@ -70,8 +70,33 @@ namespace TkoolLauncher
             SetWindowLong(Handle, -20, ex);
             editTimer.Stop();
             if (on) editTimer.Start();
+            // 끌기 손잡이: 픽셀 투명 창은 터치를 잘 못 받아서, 옮기는 동안만 위에 보통 창을 덮어 받음
+            if (on && handle == null) { handle = new MoveHandle(this); handle.Show(); }
+            if (!on && handle != null) { handle.Close(); handle = null; }
             Render();
         }
+        MoveHandle handle;
+
+        class MoveHandle : Form
+        {
+            readonly OverlayForm o;
+            public MoveHandle(OverlayForm o)
+            {
+                this.o = o;
+                FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; TopMost = true;
+                StartPosition = FormStartPosition.Manual; BackColor = Color.FromArgb(26, 159, 255); Opacity = 0.25;
+                Bounds = o.Bounds;
+            }
+            protected override bool ShowWithoutActivation => true;
+            protected override CreateParams CreateParams { get { var cp = base.CreateParams; cp.ExStyle |= 0x80 | 0x08000000; return cp; } }
+            protected override void OnMouseDown(MouseEventArgs e) { o.DragDown(); Capture = true; }
+            protected override void OnMouseMove(MouseEventArgs e) { if (o.dragging) { o.DragMove(); Bounds = o.Bounds; } }
+            protected override void OnMouseUp(MouseEventArgs e) { Capture = false; o.DragUp(); if (!IsDisposed) Bounds = o.Bounds; }
+        }
+
+        void DragDown() => OnMouseDown(null);
+        void DragMove() => OnMouseMove(null);
+        void DragUp() => OnMouseUp(null);
 
         protected override void OnMouseDown(MouseEventArgs e)
         {
@@ -101,10 +126,7 @@ namespace TkoolLauncher
             if (moved)
             {
                 var wa = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
-                Settings.OvPos = PosCustom;
-                Settings.OvX = (float)(Left - wa.X) / wa.Width;
-                Settings.OvY = (float)(Top - wa.Y) / wa.Height;
-                Settings.Save();
+                SetPos(PosCustom, (float)(Left - wa.X) / wa.Width, (float)(Top - wa.Y) / wa.Height);
                 editTimer.Start();
                 Render();
             }
@@ -150,6 +172,105 @@ namespace TkoolLauncher
         protected override void OnPaintBackground(PaintEventArgs e) { }
 
         static bool Want(int i) => (Settings.OvItems & (1 << i)) != 0;
+
+        // ── 항목 순서·항목별 색 ──
+        public static List<int> Order()
+        {
+            var l = new List<int>();
+            foreach (var p in (Settings.OvOrder ?? "").Split(','))
+            { int v; if (int.TryParse(p, out v) && v >= 0 && v < ItemNames.Length && !l.Contains(v)) l.Add(v); }
+            for (int i = 0; i < ItemNames.Length; i++) if (!l.Contains(i)) l.Add(i);
+            return l;
+        }
+        public static void MoveItem(int item, int d)
+        {
+            var l = Order(); int p = l.IndexOf(item), q = p + d;
+            if (p < 0 || q < 0 || q >= l.Count) return;
+            l[p] = l[q]; l[q] = item;
+            Settings.OvOrder = string.Join(",", l); Settings.Save(); ApplyStyle();
+        }
+        /// <summary>항목 색: -1 = 전체 글자 색 따라감</summary>
+        public static int ItemColor(int item)
+        {
+            foreach (var p in (Settings.OvItemColors ?? "").Split(';'))
+            {
+                var kv = p.Split('='); int a, b;
+                if (kv.Length == 2 && int.TryParse(kv[0], out a) && a == item && int.TryParse(kv[1], out b)) return b;
+            }
+            return -1;
+        }
+        public static void SetItemColor(int item, int c)
+        {
+            var parts = (Settings.OvItemColors ?? "").Split(';').Where(p => p.Length > 0 && !p.StartsWith(item + "=")).ToList();
+            if (c >= 0) parts.Add(item + "=" + c);
+            Settings.OvItemColors = string.Join(";", parts); Settings.Save(); ApplyStyle();
+        }
+        static Color ItemTxt(string[] cell, Color def, int alpha)
+        {
+            int it; if (cell.Length < 3 || !int.TryParse(cell[2], out it)) return def;
+            int c = ItemColor(it);
+            return c < 0 || c >= Colors.Length ? def : Color.FromArgb(alpha, Colors[c]);
+        }
+
+        // ── 게임별 위치 (그 게임 하는 동안만, 끝나면 평소 위치로) ──
+        static string curGame;
+        public static string CurGame => curGame;
+        public static void SetGame(string id) { curGame = id; ApplyStyle(); }
+        static string GameEntry(string id)
+        {
+            if (id == null) return null;
+            foreach (var p in (Settings.OvGame ?? "").Split(';')) if (p.StartsWith(id + "=")) return p.Substring(id.Length + 1);
+            return null;
+        }
+        public static bool GameHasPos => GameEntry(curGame) != null;
+        public static void SetGameOwn(bool on)
+        {
+            if (curGame == null) return;
+            var parts = (Settings.OvGame ?? "").Split(';').Where(p => p.Length > 0 && !p.StartsWith(curGame + "=")).ToList();
+            if (on) parts.Add(curGame + "=" + Settings.OvPos + "," + F(Settings.OvX) + "," + F(Settings.OvY));
+            Settings.OvGame = string.Join(";", parts); Settings.Save(); ApplyStyle();
+        }
+        static string F(float v) => v.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        /// <summary>지금 쓸 위치 (게임별 위치가 있으면 그것)</summary>
+        public static void GetPos(out int pos, out float x, out float y)
+        {
+            pos = Settings.OvPos; x = Settings.OvX; y = Settings.OvY;
+            var e = GameEntry(curGame);
+            if (e == null) return;
+            var a = e.Split(',');
+            if (a.Length == 3) { int.TryParse(a[0], out pos); float.TryParse(a[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out x); float.TryParse(a[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out y); }
+        }
+        /// <summary>위치 바꾸기 — 게임별 위치를 쓰는 중이면 그 게임 것만</summary>
+        public static void SetPos(int pos, float x, float y)
+        {
+            if (GameHasPos)
+            {
+                var parts = (Settings.OvGame ?? "").Split(';').Where(p => p.Length > 0 && !p.StartsWith(curGame + "=")).ToList();
+                parts.Add(curGame + "=" + pos + "," + F(x) + "," + F(y));
+                Settings.OvGame = string.Join(";", parts);
+            }
+            else { Settings.OvPos = pos; Settings.OvX = x; Settings.OvY = y; }
+            Settings.Save(); ApplyStyle();
+        }
+        /// <summary>슬라이더로 조금씩 옮기기 (0~100, -1이면 그 축은 그대로)</summary>
+        public static void SetSlide(int sx, int sy)
+        {
+            if (inst == null) Toggle(true);
+            float cx, cy; CurrentXY(out cx, out cy);
+            if (sx >= 0) cx = sx / 100f; if (sy >= 0) cy = sy / 100f;
+            var wa = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
+            float fx = cx * (wa.Width - inst.Width) / wa.Width, fy = cy * (wa.Height - inst.Height) / wa.Height;
+            SetPos(PosCustom, fx, fy);
+        }
+
+        /// <summary>지금 상자 위치 (화면 비율)</summary>
+        public static void CurrentXY(out float x, out float y)
+        {
+            x = y = 0;
+            if (inst == null) return;
+            var wa = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
+            x = (float)(inst.Left - wa.X) / Math.Max(1, wa.Width - inst.Width); y = (float)(inst.Top - wa.Y) / Math.Max(1, wa.Height - inst.Height);
+        }
 
         void Measure()
         {
@@ -221,7 +342,8 @@ namespace TkoolLauncher
                 int m = Settings.OvMargin <= 0 ? 0 : Settings.OvMargin == 2 ? Theme.S(28) : Theme.S(10), x, y;
                 int cx = wa.X + (wa.Width - bmp.Width) / 2, cy = wa.Y + (wa.Height - bmp.Height) / 2;
                 int l = wa.X + m, r = wa.Right - bmp.Width - m, t = wa.Y + m, b = wa.Bottom - bmp.Height - m;
-                switch (Settings.OvPos)
+                int opos; float ox, oy; GetPos(out opos, out ox, out oy);
+                switch (opos)
                 {
                     case 1: x = cx; y = t; break;
                     case 2: x = r; y = t; break;
@@ -231,8 +353,8 @@ namespace TkoolLauncher
                     case 6: x = r; y = cy; break;
                     case 7: x = cx; y = b; break;
                     case PosCustom:
-                        if (Settings.OvX < 0) goto default;
-                        x = wa.X + (int)(Settings.OvX * wa.Width); y = wa.Y + (int)(Settings.OvY * wa.Height);
+                        if (ox < 0) goto default;
+                        x = wa.X + (int)(ox * wa.Width); y = wa.Y + (int)(oy * wa.Height);
                         break;
                     default: x = l; y = t; break;
                 }
@@ -257,7 +379,7 @@ namespace TkoolLauncher
 
             // 보일 항목 (FPS는 측정 전이면 "-")
             var items = new List<int>();
-            for (int i = 0; i < 11; i++) if (Want(i) && (vals[i] != null || (i == 0 && measured == false))) items.Add(i);
+            foreach (int i in Order()) if (Want(i) && (vals[i] != null || (i == 0 && measured == false))) items.Add(i);
             if (Settings.OvStyle == 2) { items = new List<int> { 0 }; }
 
             using (var fV = new Font(Theme.FontName, Theme.S(14) * k, FontStyle.Bold, GraphicsUnit.Pixel))
@@ -280,7 +402,8 @@ namespace TkoolLauncher
                     if (i == 2 && Want(1) && Settings.OvStyle == 0) l = "";   // 가로 줄: CPU 45% 62°C 처럼 붙여 쓰기
                     if (i == 2 && Settings.OvStyle == 1) l = "온도";
                     if (i == 9 && Settings.OvStyle == 1) l = "시간";
-                    cells.Add(new[] { l, v });
+                    if ((Settings.OvLabels & (1 << i)) == 0) l = "";   // 이름 숨김 (색으로 구분)
+                    cells.Add(new[] { l, v, i.ToString() });
                 }
                 if (cells.Count == 0) cells.Add(new[] { "", "표시할 항목 없음" });
 
@@ -342,7 +465,7 @@ namespace TkoolLauncher
                         string v = cells[0][1];
                         float vw = W(v, fBig);
                         float y0 = (bh - fBig.Size * 1.1f) / 2;
-                        Txt(v, fBig, txt, pad, y0);
+                        Txt(v, fBig, ItemTxt(cells[0], txt, ta), pad, y0);
                         Txt("FPS", fL, lab, pad + vw + Theme.S(6) * k, bh - pad - fL.Size * 1.3f);
                     }
                     else if (Settings.OvStyle == 1)
@@ -352,7 +475,7 @@ namespace TkoolLauncher
                         {
                             float y = pad + i * rowH;
                             Txt(cells[i][0], fL, lab, pad, y + (fV.Size - fL.Size) * 0.6f);
-                            Txt(cells[i][1], fV, txt, pad + lw + gap, y);
+                            Txt(cells[i][1], fV, ItemTxt(cells[i], txt, ta), pad + lw + gap, y);
                         }
                     }
                     else
@@ -366,7 +489,7 @@ namespace TkoolLauncher
                                 Txt(cells[i][0], fL, lab, x, y + (fV.Size - fL.Size) * 0.6f);
                                 x += W(cells[i][0], fL) + Theme.S(4) * k;
                             }
-                            Txt(cells[i][1], fV, txt, x, y);
+                            Txt(cells[i][1], fV, ItemTxt(cells[i], txt, ta), x, y);
                             x += W(cells[i][1], fV);
                         }
                     }
@@ -418,6 +541,7 @@ namespace TkoolLauncher
                 var bl = new BLEND { Op = 0, Flags = 0, Alpha = 255, Format = 1 };
                 UpdateLayeredWindow(Handle, screen, ref dst, ref size, mem, ref src, 0, ref bl, 2);
                 Bounds = new Rectangle(at, bmp.Size);
+                if (handle != null && !handle.IsDisposed && !dragging) handle.Bounds = Bounds;
             }
             catch { }
             finally
@@ -430,6 +554,7 @@ namespace TkoolLauncher
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            if (handle != null) { try { handle.Close(); } catch { } handle = null; }
             timer.Stop(); timer.Dispose(); editTimer.Stop(); editTimer.Dispose(); cpu?.Dispose();
             base.OnFormClosed(e);
         }

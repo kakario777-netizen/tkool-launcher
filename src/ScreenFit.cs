@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
@@ -21,6 +22,33 @@ namespace TkoolLauncher
         [StructLayout(LayoutKind.Sequential)] struct R { public int L, T, Rr, B; }
 
         public static bool On => win != IntPtr.Zero;
+
+        // 게임별로 고른 크기 기억 (cache\screenfit.txt id=모드) → 다음에 켜면 창이 뜰 때 알아서
+        static readonly string MemFile = System.IO.Path.Combine(Settings.Dir, "cache", "screenfit.txt");
+        public static int Remembered(GameInfo g)
+        {
+            try
+            {
+                string id = GameData.IdOf(g);
+                if (System.IO.File.Exists(MemFile))
+                    foreach (var l in System.IO.File.ReadAllLines(MemFile))
+                        if (l.StartsWith(id + "=")) { int m; if (int.TryParse(l.Substring(id.Length + 1), out m)) return m; }
+            }
+            catch { }
+            return 0;
+        }
+        public static void Remember(GameInfo g, int mode)
+        {
+            try
+            {
+                string id = GameData.IdOf(g);
+                var lines = System.IO.File.Exists(MemFile) ? System.IO.File.ReadAllLines(MemFile).Where(l => !l.StartsWith(id + "=")).ToList() : new System.Collections.Generic.List<string>();
+                if (mode > 0) lines.Add(id + "=" + mode);
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(MemFile));
+                System.IO.File.WriteAllLines(MemFile, lines);
+            }
+            catch { }
+        }
         static IntPtr win;
         static int oldStyle;
         static R oldRect;
@@ -29,17 +57,30 @@ namespace TkoolLauncher
         static Timer lockT;
         public static string LastWay = "";
 
+        public static readonly string[] ModeNames = { "원래 크기", "꽉 채우기", "도트 선명", "2배", "3배" };
+        public static int Mode;   // 지금 걸린 방식
+
         public static void Toggle(IntPtr h, int scalerMode)
         {
             if (On) { Restore(); return; }
-            if (h == IntPtr.Zero || !IsWindow(h)) return;
+            Apply(h, 1, scalerMode);
+        }
+
+        /// <summary>게임 화면 크기 강제: 0 원래 / 1 꽉 채우기 / 2 정수배 최대 / 3 2배 / 4 3배 (비율은 언제나 그대로)</summary>
+        public static void Apply(IntPtr h, int mode, int scalerMode = 2)
+        {
+            if (On) Restore();
+            Mode = 0;
+            if (mode <= 0 || h == IntPtr.Zero || !IsWindow(h)) return;
             win = h;
             oldStyle = GetWindowLong(h, -16);
             GetWindowRect(h, out oldRect);
             GetClientRect(h, out R c);
             int cw = Math.Max(1, c.Rr - c.L), ch = Math.Max(1, c.B - c.T);
             var sb = System.Windows.Forms.Screen.FromHandle(h).Bounds;
-            double k = Math.Min(sb.Width / (double)cw, sb.Height / (double)ch);
+            double fit = Math.Min(sb.Width / (double)cw, sb.Height / (double)ch);
+            double k = mode == 2 ? Math.Max(1, Math.Floor(fit)) : mode == 3 ? Math.Min(2, fit) : mode == 4 ? Math.Min(3, fit) : fit;
+            Mode = mode;
             int nw = (int)(cw * k), nh = (int)(ch * k);
             // 테두리·제목 막대 없앰 → 게임 그림만 화면 가운데 꽉 (남는 곳은 런처 검은 판)
             SetWindowLong(h, -16, (oldStyle & ~0x00C00000 & ~0x00040000 & ~0x00080000 & ~0x00020000 & ~0x00010000) | unchecked((int)0x80000000));
@@ -96,14 +137,14 @@ namespace TkoolLauncher
                 }
             }
             catch { }
-            LastWay = "";
+            LastWay = ""; Mode = 0;
         }
 
         /// <summary>게임이 끝나면 정리만</summary>
         public static void Stop()
         {
             lockT?.Stop(); lockT?.Dispose(); lockT = null;
-            win = IntPtr.Zero;
+            win = IntPtr.Zero; Mode = 0;
         }
     }
 }

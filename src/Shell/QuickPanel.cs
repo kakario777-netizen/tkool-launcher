@@ -106,6 +106,14 @@ namespace TkoolLauncher
                     Act = () => { if (!confirmQuit) { confirmQuit = true; } else { confirmQuit = false; Shell.QuitGame(); } }
                 });
             }
+            if (GameWatch.Running && Shell.PlayingGame != null)
+                rows.Add(new Row
+                {
+                    FixCat = 1, Kind = Kind.Choice, Title = "게임 화면 크기", Keep = true,
+                    Sub = ScreenFit.LastWay.Length > 0 ? "지금: " + ScreenFit.LastWay : "이 게임은 다음에도 이 크기로",
+                    Choices = ScreenFit.ModeNames, ChoiceIndex = ScreenFit.Mode,
+                    Change = v => Shell.SetGameScreenSize(v)
+                });
             if (brightness >= 0)
                 rows.Add(new Row { Kind = Kind.Slider, Title = "밝기", Num = brightness, Change = v => { brightness = v; SystemControls.SetBrightness(v); } });
             if (volume >= 0)
@@ -343,33 +351,75 @@ namespace TkoolLauncher
 
         [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "GetForegroundWindow")] static extern IntPtr GetFg();
 
-        // ── 오버레이 탭: 모양·위치·크기·색·진하기·보일 항목 ──
+        // ── 오버레이 탭: 작은 메뉴(형태·위치·표시 정보 → 항목별 보이기·이름·색·순서) ──
+        static int ovSub;   // 0 처음, 1 형태, 2 위치, 3 표시 정보, 10+i 항목 하나
+        void OvGo(int sub) { ovSub = sub; focus = 0; zone = 1; }
+        void OvBack() { OvGo(ovSub >= 10 ? 3 : 0); }
+
         void AddOverlayRows()
         {
             Action apply = () => { Settings.Save(); OverlayForm.ApplyStyle(); };
-            rows.Add(new Row { FixCat = 6, Kind = Kind.Toggle, Title = "성능 표시 켜기", On = OverlayForm.IsOn, Change = v => OverlayForm.Toggle(v == 1) });
-            rows.Add(new Row { FixCat = 6, Kind = Kind.Choice, Title = "모양", Choices = OverlayForm.StyleNames, ChoiceIndex = Clamp(Settings.OvStyle, OverlayForm.StyleNames), Change = v => { Settings.OvStyle = v; apply(); } });
-            rows.Add(new Row { FixCat = 6, Kind = Kind.Choice, Title = "위치", Choices = OverlayForm.PosNames, ChoiceIndex = Clamp(Settings.OvPos, OverlayForm.PosNames), Change = v => { Settings.OvPos = v; apply(); } });
-            rows.Add(new Row { FixCat = 6, Kind = Kind.Choice, Title = "가장자리 여백", Choices = OverlayForm.MarginNames, ChoiceIndex = Clamp(Settings.OvMargin, OverlayForm.MarginNames), Change = v => { Settings.OvMargin = v; apply(); } });
-            rows.Add(new Row
+            Action<Row> add = r => { r.FixCat = 6; rows.Add(r); };
+            if (ovSub != 0) add(new Row { Kind = Kind.Action, Title = "‹ 뒤로", Act = OvBack });
+            int pos; float px, py; OverlayForm.GetPos(out pos, out px, out py);
+            if (ovSub == 0)
             {
-                FixCat = 6, Kind = Kind.Action, Title = OverlayForm.Editing ? "옮기는 중 — 끝내기" : "끌어서 위치 옮기기",
-                Sub = "마우스나 손가락으로 끌어 놓고, 한 번 톡 누르면 고정",
-                Act = () => { if (OverlayForm.Editing) OverlayForm.StopMove(); else { OverlayForm.StartMove(); Hide(); } }
-            });
-            rows.Add(new Row { FixCat = 6, Kind = Kind.Choice, Title = "크기", Choices = OverlayForm.SizeNames, ChoiceIndex = Clamp(Settings.OvSize, OverlayForm.SizeNames), Change = v => { Settings.OvSize = v; apply(); } });
-            rows.Add(new Row { FixCat = 6, Kind = Kind.Choice, Title = "글자 색", Choices = OverlayForm.ColorNames, ChoiceIndex = Clamp(Settings.OvColor, OverlayForm.ColorNames), Change = v => { Settings.OvColor = v; apply(); } });
-            rows.Add(new Row { FixCat = 6, Kind = Kind.Slider, Title = "배경 진하기", Num = Settings.OvBg, Change = v => { Settings.OvBg = v; apply(); } });
-            rows.Add(new Row { FixCat = 6, Kind = Kind.Slider, Title = "글자 진하기", Num = Settings.OvText, Change = v => { Settings.OvText = Math.Max(20, v); apply(); } });
-            for (int i = 0; i < OverlayForm.ItemNames.Length; i++)
+                add(new Row { Kind = Kind.Toggle, Title = "성능 표시 켜기", On = OverlayForm.IsOn, Change = v => OverlayForm.Toggle(v == 1) });
+                add(new Row { Kind = Kind.Action, Title = "형태 ›", Sub = OverlayForm.StyleNames[Clamp(Settings.OvStyle, OverlayForm.StyleNames)] + " · " + OverlayForm.SizeNames[Clamp(Settings.OvSize, OverlayForm.SizeNames)], Keep = true, Act = () => OvGo(1) });
+                add(new Row { Kind = Kind.Action, Title = "위치 ›", Sub = OverlayForm.PosNames[Clamp(pos, OverlayForm.PosNames)] + (OverlayForm.GameHasPos ? " · 이 게임 전용" : ""), Keep = true, Act = () => OvGo(2) });
+                int shown = 0; for (int i = 0; i < OverlayForm.ItemNames.Length; i++) if ((Settings.OvItems & (1 << i)) != 0) shown++;
+                add(new Row { Kind = Kind.Action, Title = "표시 정보 ›", Sub = shown + "개 보임 · 순서·색·이름", Keep = true, Act = () => OvGo(3) });
+            }
+            else if (ovSub == 1)
             {
-                int bit = 1 << i;
-                rows.Add(new Row
+                add(new Row { Kind = Kind.Choice, Title = "모양", Choices = OverlayForm.StyleNames, ChoiceIndex = Clamp(Settings.OvStyle, OverlayForm.StyleNames), Change = v => { Settings.OvStyle = v; apply(); } });
+                add(new Row { Kind = Kind.Choice, Title = "크기", Choices = OverlayForm.SizeNames, ChoiceIndex = Clamp(Settings.OvSize, OverlayForm.SizeNames), Change = v => { Settings.OvSize = v; apply(); } });
+                add(new Row { Kind = Kind.Choice, Title = "글자 색 (전체)", Choices = OverlayForm.ColorNames, ChoiceIndex = Clamp(Settings.OvColor, OverlayForm.ColorNames), Change = v => { Settings.OvColor = v; apply(); } });
+                add(new Row { Kind = Kind.Slider, Title = "배경 진하기", Num = Settings.OvBg, Change = v => { Settings.OvBg = v; apply(); } });
+                add(new Row { Kind = Kind.Slider, Title = "글자 진하기", Num = Settings.OvText, Change = v => { Settings.OvText = Math.Max(20, v); apply(); } });
+                int all = (1 << OverlayForm.ItemNames.Length) - 1;
+                add(new Row { Kind = Kind.Choice, Title = "항목 이름 글자", Choices = new[] { "모두 보이기", "모두 숨기기", "항목마다 따로" },
+                    ChoiceIndex = (Settings.OvLabels & all) == all ? 0 : (Settings.OvLabels & all) == 0 ? 1 : 2,
+                    Change = v => { if (v == 0) Settings.OvLabels = all; else if (v == 1) Settings.OvLabels = 0; apply(); } });
+            }
+            else if (ovSub == 2)
+            {
+                if (OverlayForm.CurGame != null)
+                    add(new Row { Kind = Kind.Toggle, Title = "이 게임에서만 이 위치", Sub = "끝나면 평소 위치로", Keep = true, On = OverlayForm.GameHasPos, Change = v => OverlayForm.SetGameOwn(v == 1) });
+                add(new Row { Kind = Kind.Choice, Title = "위치", Choices = OverlayForm.PosNames, ChoiceIndex = Clamp(pos, OverlayForm.PosNames), Change = v => OverlayForm.SetPos(v, px, py) });
+                add(new Row { Kind = Kind.Choice, Title = "가장자리 여백", Choices = OverlayForm.MarginNames, ChoiceIndex = Clamp(Settings.OvMargin, OverlayForm.MarginNames), Change = v => { Settings.OvMargin = v; apply(); } });
+                float cx, cy; OverlayForm.CurrentXY(out cx, out cy);
+                add(new Row { Kind = Kind.Slider, Title = "가로 위치 (조금씩)", Num = (int)Math.Round(Math.Max(0, Math.Min(1, cx)) * 100), Change = v => OverlayForm.SetSlide(v, -1) });
+                add(new Row { Kind = Kind.Slider, Title = "세로 위치 (조금씩)", Num = (int)Math.Round(Math.Max(0, Math.Min(1, cy)) * 100), Change = v => OverlayForm.SetSlide(-1, v) });
+                add(new Row { Kind = Kind.Action, Title = OverlayForm.Editing ? "옮기는 중 — 끝내기" : "손가락으로 끌어서 옮기기", Sub = "끌어 놓고 톡 누르면 고정", Keep = true,
+                    Act = () => { if (OverlayForm.Editing) OverlayForm.StopMove(); else { OverlayForm.StartMove(); if (Popup) Shell.ClosePopup(); else Hide(); } } });
+            }
+            else if (ovSub == 3)
+            {
+                foreach (int i in OverlayForm.Order())
                 {
-                    FixCat = 6, Kind = Kind.Toggle, Title = "보이기 · " + OverlayForm.ItemNames[i], On = (Settings.OvItems & bit) != 0,
+                    int it = i, bit = 1 << i;
+                    bool on = (Settings.OvItems & bit) != 0, lab = (Settings.OvLabels & bit) != 0;
+                    int c = OverlayForm.ItemColor(i);
+                    add(new Row { Kind = Kind.Action, Title = (on ? "● " : "○ ") + OverlayForm.ItemNames[i] + " ›", Keep = true,
+                        Sub = (on ? "보임" : "숨김") + " · 이름 " + (lab ? "보임" : "숨김") + " · 색 " + (c < 0 ? "전체 색" : OverlayForm.ColorNames[c]),
+                        Act = () => OvGo(10 + it) });
+                }
+            }
+            else
+            {
+                int i = ovSub - 10, bit = 1 << i;
+                if (i < 0 || i >= OverlayForm.ItemNames.Length) { ovSub = 3; return; }
+                add(new Row { Kind = Kind.Toggle, Title = OverlayForm.ItemNames[i] + " 보이기", On = (Settings.OvItems & bit) != 0,
                     Sub = i == 0 && Settings.OvStyle == 2 ? "'FPS만 크게' 모양에선 FPS만 보여요" : null,
-                    Change = v => { Settings.OvItems = v == 1 ? Settings.OvItems | bit : Settings.OvItems & ~bit; apply(); }
-                });
+                    Change = v => { Settings.OvItems = v == 1 ? Settings.OvItems | bit : Settings.OvItems & ~bit; apply(); } });
+                add(new Row { Kind = Kind.Toggle, Title = "이름 글자 보이기", Sub = "끄면 값만 (색으로 구분)", Keep = true, On = (Settings.OvLabels & bit) != 0,
+                    Change = v => { Settings.OvLabels = v == 1 ? Settings.OvLabels | bit : Settings.OvLabels & ~bit; apply(); } });
+                var cs = new[] { "전체 색 따라감" }.Concat(OverlayForm.ColorNames).ToArray();
+                add(new Row { Kind = Kind.Choice, Title = "이 항목 색", Choices = cs, ChoiceIndex = OverlayForm.ItemColor(i) + 1, Change = v => OverlayForm.SetItemColor(i, v - 1) });
+                var ord = OverlayForm.Order(); int at = ord.IndexOf(i);
+                add(new Row { Kind = Kind.Action, Title = "▲ 앞으로 (순서 " + (at + 1) + "/" + ord.Count + ")", Act = () => OverlayForm.MoveItem(i, -1) });
+                add(new Row { Kind = Kind.Action, Title = "▼ 뒤로", Act = () => OverlayForm.MoveItem(i, 1) });
             }
         }
 
@@ -796,6 +846,7 @@ namespace TkoolLauncher
                 case Pad.LB: StepTab(-1); return;
                 case Pad.RB: StepTab(1); return;
                 case Pad.B: case Pad.Start: case Pad.Guide:
+                    if (b == Pad.B && tab == 6 && ovSub != 0) { OvBack(); Redraw(); return; }
                     if (Popup) { Shell.ClosePopup(); return; }
                     if (GameWatch.Running && Shell.CameFromGame) Shell.ReturnToGame(); else Hide();
                     return;
