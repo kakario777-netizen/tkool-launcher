@@ -149,7 +149,6 @@ namespace TkoolLauncher
                 Kind = Kind.Choice, Title = "화면 회전", Choices = SystemControls.RotationNames, ChoiceIndex = rot,
                 Change = v => { rot = v; SystemControls.SetRotation(v); try { resList = SystemControls.Resolutions(out resIndex); } catch { } Shell.AfterDisplayChange(); }
             });
-            rows.Add(new Row { Kind = Kind.Action, Title = "치트 모드", Sub = "게임 옆 팝업에서 치트·세이브 수정", Act = () => Shell.OpenCheatPanel() });
             rows.Add(new Row { Kind = Kind.Action, Title = "치트 에디터", Sub = "미니 치트 켜기", Act = () => Shell.OpenCheat() });
             rows.Add(new Row
             {
@@ -442,7 +441,7 @@ namespace TkoolLauncher
             new[] { "소리", "음소거", "와이파이", "블루투스", "비행기 모드" },
             new[] { "가상 패드", "컨트롤러 끄기", "진동 세기", "조이스틱 데드존", "조이스틱 감도", "연사 (", "연사 속도", "자이로 (", "자이로 감도", "자이로 켜는 법", "좌우 회전 축", "자이로 좌우", "자이로 상하", "조이스틱 마우스 모드" },
             new[] { "조이스틱 조명", "조명 색", "조명 밝기", "조명 효과" },
-            new[] { "게임으로 돌아가기", "게임 끝내기", "한 번 더 누르면", "치트 모드", "치트 에디터", "지금 화면을 표지로", "런처 열기", "스크린샷", "ESC 보내기", "전체 화면 전환", "화상 키보드", "작업 전환", "윈도우 시작 메뉴", "메모리 정리", "미니 모드" },
+            new[] { "게임으로 돌아가기", "게임 끝내기", "한 번 더 누르면", "치트 에디터", "지금 화면을 표지로", "런처 열기", "스크린샷", "ESC 보내기", "전체 화면 전환", "화상 키보드", "작업 전환", "윈도우 시작 메뉴", "메모리 정리", "미니 모드" },
             new string[0],   // 오버레이 (FixCat으로 들어감)
         };
 

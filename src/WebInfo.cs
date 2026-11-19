@@ -320,11 +320,12 @@ namespace TkoolLauncher
             again = false;
             var list = games.Where(g => g.FromFolder && g.Exe != null && !Tried(GameData.IdOf(g)))
                             .Where(g => { string c = NameFinder.FindCode(g); return c == null || DlsiteInfo.Get(g) == null; }).ToList();
-            if (list.Count == 0) { Activity.Note("스팀·ふりーむ · 새로 찾을 게임 없음"); done?.Invoke(0); return; }
+            if (list.Count == 0) { Activity.Note("다른 사이트(스팀·FANZA·ふりーむ·itch.io) · 새로 찾을 게임 없음"); done?.Invoke(0); return; }
             Busy = true;
             var th = new System.Threading.Thread(() =>
             {
                 int n = 0, k = 0;
+                var cnt = new int[5];   // 스팀·FANZA·ふりーむ·itch.io·찾을 이름 없음
                 try
                 {
                     foreach (var g in list)
@@ -339,11 +340,13 @@ namespace TkoolLauncher
                         if (i == null && cid != null) try { i = Fanza(cid, new List<string>()); } catch { }
                         if (i == null && names.Count > 0)
                         {
-                            try { i = Steam(names); } catch (Exception ex) { Log.Error("스팀 찾기", ex); }
-                            if (i == null) try { i = Fanza(null, names); } catch (Exception ex) { Log.Error("FANZA 찾기", ex); }
-                            if (i == null) try { i = Freem(names); } catch (Exception ex) { Log.Error("ふりーむ 찾기", ex); }
-                            if (i == null) try { i = Itch(names); } catch (Exception ex) { Log.Error("itch.io 찾기", ex); }
+                            Activity.Set("web", "스팀에서 찾는 중 · " + g.Title, k, list.Count);
+                            try { i = Steam(names); if (i != null) cnt[0]++; } catch (Exception ex) { Log.Error("스팀 찾기", ex); }
+                            if (i == null && !fanzaOff) { Activity.Set("web", "FANZA에서 찾는 중 · " + g.Title, k, list.Count); try { i = Fanza(null, names); if (i != null) cnt[1]++; } catch (Exception ex) { Log.Error("FANZA 찾기", ex); } }
+                            if (i == null) { Activity.Set("web", "ふりーむ에서 찾는 중 · " + g.Title, k, list.Count); try { i = Freem(names); if (i != null) cnt[2]++; } catch (Exception ex) { Log.Error("ふりーむ 찾기", ex); } }
+                            if (i == null) { Activity.Set("web", "itch.io에서 찾는 중 · " + g.Title, k, list.Count); try { i = Itch(names); if (i != null) cnt[3]++; } catch (Exception ex) { Log.Error("itch.io 찾기", ex); } }
                         }
+                        else if (names.Count == 0 && i == null) cnt[4]++;
                         try { Save(id, i); } catch { }
                         lock (mem) mem[id] = i;
                         if (i != null)
@@ -358,7 +361,7 @@ namespace TkoolLauncher
                 }
                 finally
                 {
-                    Activity.Done("web", "스팀·ふりーむ 끝 · " + list.Count + "개 찾아봄, " + n + "개 채움");
+                    Activity.Done("web", "다른 사이트 끝 · " + list.Count + "개 찾아봄, " + n + "개 채움 (스팀 " + cnt[0] + " · FANZA " + cnt[1] + (fanzaOff ? "(접속 안 됨)" : "") + " · ふりーむ " + cnt[2] + " · itch.io " + cnt[3] + (cnt[4] > 0 ? " · 찾을 이름 없음 " + cnt[4] : "") + ")");
                     Busy = false;
                     done?.Invoke(n);
                     if (again) RunAll(games, done);   // 도는 중에 새로 생긴 게임(DLsite에도 없던 것)
