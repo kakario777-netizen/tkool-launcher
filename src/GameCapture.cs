@@ -381,10 +381,10 @@ namespace TkoolLauncher
         }
 
         /// <summary>지금 앞에 있는 게임 화면을 표지로 (빠른 설정 버튼)</summary>
-        public static bool ShotNow(GameInfo g)
+        public static bool ShotNow(GameInfo g, bool pending = false)
         {
             IntPtr w = GameWindow();
-            return w != IntPtr.Zero && Shot(g, w, true);
+            return w != IntPtr.Zero && Shot(g, w, true, pending);
         }
 
         /// <summary>게임 창 안쪽을 그림으로 (못 찍으면 null)</summary>
@@ -416,7 +416,7 @@ namespace TkoolLauncher
             catch { bmp?.Dispose(); return null; }
         }
 
-        static bool Shot(GameInfo g, IntPtr w, bool force = false)
+        static bool Shot(GameInfo g, IntPtr w, bool force = false, bool pending = false)
         {
             Bitmap bmp = null;
             try
@@ -453,7 +453,7 @@ namespace TkoolLauncher
                 }
                 if (!force && Plain(bmp)) return false; // 검은 화면·로딩 화면이면 다음에
                 Directory.CreateDirectory(CoverArt.CoverDir);
-                bmp.Save(CoverArt.AutoShotPath(g), ImageFormat.Png);
+                bmp.Save(pending ? PendingPath(g) : CoverArt.AutoShotPath(g), ImageFormat.Png);   // 다시 찍기는 확인 목록으로
                 CoverArt.Invalidate(g);
                 return true;
             }

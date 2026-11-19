@@ -20,7 +20,7 @@ namespace TkoolLauncher
         readonly HashSet<GameInfo> rejected = new HashSet<GameInfo>();
         readonly Dictionary<GameInfo, Bitmap> thumbs = new Dictionary<GameInfo, Bitmap>();
         int focus;          // 0..Per-1 = 그림, Per = 적용 단추
-        Rectangle[] cells = new Rectangle[0];
+        Rectangle[] cells = new Rectangle[0], retakes = new Rectangle[0];
         Rectangle applyR, laterR;
 
         public CoverReviewScreen() { }
@@ -60,20 +60,20 @@ namespace TkoolLauncher
             int pad = S(40);
             var page = Page;
             Draw.Text(g, "찍은 표지 확인", Theme.Px(20, true), new Rectangle(Area.X + pad, Area.Y + S(10), S(400), S(44)), Theme.Text, Draw.Left);
-            Draw.Text(g, page.Count == 0 ? "" : "아닌 것만 눌러서 취소하고 [적용]  ·  남은 " + items.Count + "개", Draw.Body,
+            Draw.Text(g, page.Count == 0 ? "" : "아닌 건 눌러서 취소 · 맘에 안 들면 ↻ 다시 찍기 · 다 보고 [적용]  ·  남은 " + items.Count + "개", Draw.Body,
                 new Rectangle(Area.X + pad + S(300), Area.Y + S(10), Area.Width - pad * 2 - S(300), S(44)), Theme.SubText,
                 TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
             if (page.Count == 0)
             {
                 Draw.Text(g, "확인할 표지가 없어요.", Draw.Menu, Area, Theme.SubText, Draw.Center);
-                cells = new Rectangle[0]; applyR = laterR = Rectangle.Empty;
+                cells = new Rectangle[0]; retakes = new Rectangle[0]; applyR = laterR = Rectangle.Empty;
                 return;
             }
 
             int top = Area.Y + S(64), bottom = Area.Bottom - S(84), gap = S(14);
             int cw = (Area.Width - pad * 2 - gap * (Cols - 1)) / Cols;
             int ch = (bottom - top - gap * (RowsPerPage - 1)) / RowsPerPage;
-            cells = new Rectangle[page.Count];
+            cells = new Rectangle[page.Count]; retakes = new Rectangle[page.Count];
             for (int i = 0; i < page.Count; i++)
             {
                 var gm = page[i];
@@ -100,6 +100,11 @@ namespace TkoolLauncher
                     Draw.Text(g, "취소", Draw.BodyBold, badge, Color.White, Draw.Center);
                 }
                 Draw.Text(g, gm.Title, Draw.Small, new Rectangle(r.X + S(8), r.Bottom - S(32), r.Width - S(16), S(28)), no ? Theme.SubText : Theme.Text, Draw.Center);
+                // 다시 찍기 단추 (그림 오른쪽 위)
+                var rr = new Rectangle(ir.Right - S(104), ir.Y + S(6), S(98), S(34));
+                retakes[i] = rr;
+                Draw.Fill(g, rr, S(17), Color.FromArgb(220, 30, 34, 44));
+                Draw.Text(g, "↻ 다시 찍기", Draw.Small, rr, Color.White, Draw.Center);
                 if (i == focus && Shell.ShowFocus) Draw.FocusGlow(g, r, S(8));
             }
 
@@ -115,6 +120,26 @@ namespace TkoolLauncher
         }
 
         void Toggle(GameInfo gm) { if (!rejected.Remove(gm)) rejected.Add(gm); }
+
+        /// <summary>이 게임만 다시 찍기 — 켜서 Y 두 번, 찍은 그림이 이 칸에 바뀌어 들어옴 (적용은 마지막에 한꺼번에)</summary>
+        void Retake(GameInfo gm)
+        {
+            if (GameWatch.Running) { Shell.ShowToast("게임을 끈 다음에 해 주세요", 2500); return; }
+            Shell.RetakeCover(gm, () =>
+            {
+                try
+                {
+                    Shell.BeginInvoke(new Action(() =>
+                    {
+                        Bitmap ob; if (thumbs.TryGetValue(gm, out ob)) ob?.Dispose();
+                        thumbs.Remove(gm); rejected.Remove(gm);
+                        Shell.Bring(); Shell.Activate();
+                        Shell.Invalidate();
+                    }));
+                }
+                catch { }
+            });
+        }
 
         void Apply()
         {
@@ -150,6 +175,7 @@ namespace TkoolLauncher
                     if (focus < n) Toggle(Page[focus]);
                     break;
                 case Pad.X: Apply(); return;
+                case Pad.Y: if (focus < n) Retake(Page[focus]); return;
                 case Pad.B: Shell.Pop(); return;
             }
             Shell.Invalidate();
@@ -160,6 +186,8 @@ namespace TkoolLauncher
             if (applyR.Contains(p)) { Apply(); return; }
             if (laterR.Contains(p)) { Shell.Pop(); return; }
             var page = Page;
+            for (int i = 0; i < retakes.Length && i < page.Count; i++)
+                if (retakes[i].Contains(p)) { focus = i; Retake(page[i]); return; }
             for (int i = 0; i < cells.Length && i < page.Count; i++)
                 if (cells[i].Contains(p)) { focus = i; Toggle(page[i]); Shell.Invalidate(); return; }
         }
@@ -167,6 +195,7 @@ namespace TkoolLauncher
         public override List<Hint> Hints() => new List<Hint>
         {
             new Hint(Pad.A, "취소/되돌리기", () => OnPad(Pad.A)),
+            new Hint(Pad.Y, "다시 찍기", () => OnPad(Pad.Y)),
             new Hint(Pad.X, "적용", Apply),
             new Hint(Pad.B, "나중에", Shell.Pop),
         };

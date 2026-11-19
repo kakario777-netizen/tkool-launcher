@@ -1541,10 +1541,31 @@ namespace TkoolLauncher
             else ReturnToGame();
         }
 
+        Action retakeDone;   // 표지 확인 화면의 "다시 찍기" (찍은 그림은 확인 목록으로)
+
+        /// <summary>표지 확인 목록에서 한 게임만 다시 찍기: 켜고 Y 두 번 → 확인 목록 그림을 바꾸고 게임 끄고 돌아옴</summary>
+        public void RetakeCover(GameInfo g, Action done)
+        {
+            retakeDone = done;
+            ManualCover(g);
+            coverTip?.SetText("다시 찍기: 표지로 쓸 화면에서 Y를 빠르게 두 번  ·  그만두기: AYA 버튼");
+        }
+
         void TakeManualCover()
         {
             var g = coverFor;
             if (g == null) return;
+            if (retakeDone != null)
+            {
+                bool ok2 = false;
+                try { ok2 = GameCapture.ShotNow(g, true); } catch (Exception ex) { Log.Error("다시 찍기", ex); }
+                if (!ok2) { coverTip?.SetText("찍지 못했어요 — 게임 화면이 앞에 있을 때 다시 Y 두 번"); return; }
+                var d = retakeDone; retakeDone = null;
+                EndManualCover("다시 찍었어요 — 확인 목록으로 돌아가요");
+                GameCapture.KillDir(g.InstallDir ?? g.Folder);   // 게임 끄고 확인 목록으로
+                d?.Invoke();
+                return;
+            }
             bool ok = false;
             try { ok = GameCapture.ShotNow(g); } catch (Exception ex) { Log.Error("표지 찍기", ex); }
             if (!ok) { coverTip?.SetText("찍지 못했어요 — 게임 화면이 앞에 있을 때 다시 Y 두 번"); return; }
@@ -1564,6 +1585,7 @@ namespace TkoolLauncher
 
         public void EndManualCover(string msg = null)
         {
+            if (msg == null) retakeDone = null;   // 그만두면 다시 찍기도 취소
             Gamepad.DoubleY = null;
             coverFor = null;
             var tip = coverTip; coverTip = null;
