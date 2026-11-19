@@ -1548,7 +1548,8 @@ namespace TkoolLauncher
             }
             bool ok = false;
             try { ok = GameCapture.ShotNow(g); } catch (Exception ex) { Log.Error("표지 찍기", ex); }
-            if (!ok) { Gamepad.Buzz(70, 3); coverTip?.SetText("찍지 못했어요: " + GameCapture.LastShotProblem + "  ·  Y 두 번 다시"); return; }
+            if (!ok) { Gamepad.Buzz(70, 3); Activity.Note("표지 찍기 실패 · " + g.Title + " · " + GameCapture.LastShotProblem); coverTip?.SetText("찍지 못했어요: " + GameCapture.LastShotProblem + "  ·  Y 두 번 다시"); return; }
+            Activity.Note("표지 직접 찍음 · " + g.Title);
             Log.Info("표지 직접 찍음: " + g.Title);
             Gamepad.Buzz(350);
             EndManualCover("표지로 저장했어요 — 화면 글자로 이름도 찾아볼게요");

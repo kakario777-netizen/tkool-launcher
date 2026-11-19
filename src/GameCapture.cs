@@ -496,7 +496,7 @@ namespace TkoolLauncher
                 Log.Info("표지 찍기 실패: 창 없음 · 게임 폴더=" + (GameWatch.Dir ?? "(없음)") + " · 앞 창 프로그램=" + (GameWatch.PathOf((int)fp) ?? "?"));
                 return false;
             }
-            bool ok = Shot(g, w, true, pending);
+            bool ok = Shot(g, w, false, pending);   // 검은 화면이면 일단 실패로 보고 아래에서 다시
             if (!ok)
             {
                 // 진짜 전체 화면(해상도 바꾸는 방식)은 찍으면 검게 나옴 → 잠깐 창 모드로 바꿔 찍고 되돌림
@@ -513,8 +513,9 @@ namespace TkoolLauncher
                     KeySender.Combo(0x12, 0x0D);
                 }
             }
+            if (!ok && Shot(g, w, true, pending)) { ok = true; Log.Info("표지 찍기: 어두운 화면이지만 그대로 저장 · " + g.Title); }
             if (!ok) { LastShotProblem = "찍은 화면이 비어 있어요 (검은 화면) — 게임 화면이 나온 뒤 다시"; Log.Info("표지 찍기 실패: 찍은 그림이 비었음 · " + g.Title); }
-            if (ok && !pending) CoverArt.MarkCoverOk(g);   // 사용자가 직접 찍은 표지 → 다시 안 찍음
+            if (ok && !pending) { CoverArt.MarkCoverOk(g); CoverArt.Invalidate(g); }   // 사용자가 직접 찍은 표지 → 다시 안 찍음
             return ok;
         }
 
