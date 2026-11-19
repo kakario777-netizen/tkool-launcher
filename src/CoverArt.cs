@@ -103,6 +103,17 @@ namespace TkoolLauncher
             var list = games.ToList();
             var th = new Thread(() =>
             {
+                // 한 번만: 직접 찍은 표지를 타이틀 그림보다 먼저·검은 둘레 잘라 다시 만들기
+                try
+                {
+                    string flag = Path.Combine(CacheDir, "covers_v2.flag");
+                    if (!File.Exists(flag))
+                    {
+                        foreach (var g in list) if (IsCoverOk(g) && File.Exists(AutoShotPath(g))) Invalidate(g);
+                        File.WriteAllText(flag, "1");
+                    }
+                }
+                catch { }
                 foreach (var g in list)
                 {
                     try
@@ -324,13 +335,21 @@ namespace TkoolLauncher
             catch { return null; }
         }
 
+        static Bitmap Trimmed(Bitmap b)
+        {
+            if (b == null) return null;
+            var t = GameCapture.TrimBlack(b);
+            if (t == null) return b;
+            b.Dispose(); return t;
+        }
+
         static GameArt Build(GameInfo g)
         {
             string id = GameData.IdOf(g);
             string custom = CustomCover(g);
             string auto = AutoShotPath(g);
             if (!File.Exists(auto)) auto = null;
-            string stamp = (auto != null ? File.GetLastWriteTimeUtc(auto).Ticks.ToString() : "") + "|" + Version + "|" + (g.CoverHint ?? "") + "|" + (g.HeroHint ?? "") + "|" + (custom ?? "") + "|" + (custom != null ? File.GetLastWriteTimeUtc(custom).Ticks.ToString() : "") + "|" + g.Title + (auto != null && IsCoverOk(g) ? "|ok" : "");
+            string stamp = (auto != null ? File.GetLastWriteTimeUtc(auto).Ticks.ToString() : "") + "|" + Version + "|" + (g.CoverHint ?? "") + "|" + (g.HeroHint ?? "") + "|" + (custom ?? "") + "|" + (custom != null ? File.GetLastWriteTimeUtc(custom).Ticks.ToString() : "") + "|" + g.Title + (auto != null && IsCoverOk(g) ? "|ok2" : "");
             string cPath = Path.Combine(CacheDir, id + "_c.png");
             string hPath = Path.Combine(CacheDir, id + "_h.png");
             string bPath = Path.Combine(CacheDir, id + "_b.png");
@@ -361,7 +380,7 @@ namespace TkoolLauncher
             else
             {
                 // 직접 찍은(확인한) 표지가 게임 안 타이틀 그림보다 먼저 — 예전엔 타이틀 그림이 있으면 찍은 표지를 무시했음
-                Bitmap src = custom != null ? LoadPng(custom) : auto != null && IsCoverOk(g) ? LoadPng(auto) : ArtExtract.FindTitleImage(g);
+                Bitmap src = custom != null ? LoadPng(custom) : auto != null && IsCoverOk(g) ? Trimmed(LoadPng(auto)) : ArtExtract.FindTitleImage(g);
                 if (src == null && auto != null) src = LoadPng(auto);   // 처음 켰을 때 찍어 둔 게임 화면
                 lock (lk) { if (src == null && custom == null && g.HeroHint == null) NeedsCover.Add(id); else NeedsCover.Remove(id); }
                 Bitmap heroOnly = src == null && g.HeroHint != null ? LoadPng(g.HeroHint) : null;

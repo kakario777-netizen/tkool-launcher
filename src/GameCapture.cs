@@ -584,6 +584,8 @@ namespace TkoolLauncher
                     }
                 }
                 if (!force && Plain(bmp)) return false; // 검은 화면·로딩 화면이면 다음에
+                var trimmed = TrimBlack(bmp);   // 작은 게임 화면 둘레 검은 판은 잘라냄 (표지가 작게 보이던 것)
+                if (trimmed != null) { bmp.Dispose(); bmp = trimmed; }
                 Directory.CreateDirectory(CoverArt.CoverDir);
                 bmp.Save(pending ? PendingPath(g) : CoverArt.AutoShotPath(g), ImageFormat.Png);   // 다시 찍기는 확인 목록으로
                 CoverArt.Invalidate(g);
@@ -591,6 +593,36 @@ namespace TkoolLauncher
             }
             catch { return false; }
             finally { bmp?.Dispose(); }
+        }
+
+        static bool DarkLine(Bitmap b, int fixedPos, bool row, int step)
+        {
+            int len = row ? b.Width : b.Height;
+            for (int i = 0; i < len; i += step)
+            {
+                var c = row ? b.GetPixel(i, fixedPos) : b.GetPixel(fixedPos, i);
+                if (c.R > 24 || c.G > 24 || c.B > 24) return false;
+            }
+            return true;
+        }
+
+        /// <summary>둘레의 까만 판 잘라내기 (잘라낼 게 없거나 너무 작아지면 null)</summary>
+        public static Bitmap TrimBlack(Bitmap b)
+        {
+            try
+            {
+                int w = b.Width, h = b.Height, st = Math.Max(2, Math.Min(w, h) / 160);
+                int top = 0, bot = h - 1, left = 0, right = w - 1;
+                while (top < bot && DarkLine(b, top, true, st)) top++;
+                while (bot > top && DarkLine(b, bot, true, st)) bot--;
+                while (left < right && DarkLine(b, left, false, st)) left++;
+                while (right > left && DarkLine(b, right, false, st)) right--;
+                int cw = right - left + 1, ch = bot - top + 1;
+                if (cw < 120 || ch < 90) return null;
+                if (cw > w - 8 && ch > h - 8) return null;   // 거의 그대로
+                return b.Clone(new Rectangle(left, top, cw, ch), b.PixelFormat);
+            }
+            catch { return null; }
         }
 
         /// <summary>거의 한 색인지 (검은 화면·흰 화면·로딩)</summary>
