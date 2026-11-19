@@ -27,9 +27,21 @@ namespace TkoolLauncher
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder sb, int n);
 
         /// <summary>게임이 띄운 오류 창 글 (게임 폴더 프로그램의 메시지 상자, 또는 "Game.exe - 시스템 오류")</summary>
+        [DllImport("user32.dll")] static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
+        static readonly HashSet<IntPtr> errSeen = new HashSet<IntPtr>();   // 이번 게임 전부터 떠 있던 오류 창 (다른 게임 것)
+        static readonly List<IntPtr> errNow = new List<IntPtr>();
+
+        /// <summary>떠 있는 오류 창 닫기 (윈도우가 띄운 "시스템 오류" 창은 게임을 꺼도 남아서 다음 게임까지 막음)</summary>
+        static void CloseErrors()
+        {
+            foreach (var h in errNow) { try { PostMessage(h, 0x0010, IntPtr.Zero, IntPtr.Zero); } catch { } }   // WM_CLOSE
+            errNow.Clear();
+        }
+
         static string ErrorText(string dir, string exe)
         {
             var sb = new StringBuilder();
+            errNow.Clear();
             string exeName = Path.GetFileName(exe ?? "").ToLowerInvariant();
             EnumWindows((h, l) =>
             {
@@ -39,7 +51,8 @@ namespace TkoolLauncher
                 var tt = new StringBuilder(256); GetWindowText(h, tt, 256);
                 GetWindowThreadProcessId(h, out uint pid);
                 bool mine = GameWatch.InDir((int)pid, dir) || (exeName.Length > 0 && tt.ToString().ToLowerInvariant().StartsWith(exeName)) || Fixer.IsGameSysErr(tt.ToString(), dir);
-                if (!mine) return true;
+                if (!mine || errSeen.Contains(h)) return true;
+                errNow.Add(h);
                 sb.Append(tt).Append('\n');
                 EnumChildWindows(h, (c, l2) => { var t = new StringBuilder(512); GetWindowText(c, t, 512); if (t.Length > 2) sb.Append(t).Append('\n'); return true; }, IntPtr.Zero);
                 return true;
@@ -273,6 +286,9 @@ namespace TkoolLauncher
                     Activity.Set("cover", "표지 찍는 중 · " + g.Title, i + 1, list.Count);
                     string dir = g.InstallDir ?? g.Folder;
                     string err = "";
+                    // 앞 게임 때부터 남아 있는 오류 창은 이 게임 것이 아님 → 닫고, 못 닫은 건 무시 목록에
+                    errSeen.Clear();
+                    EnumWindows((h, l) => { if (IsWindowVisible(h)) { var c = new StringBuilder(16); GetClassName(h, c, 16); if (c.ToString() == "#32770") errSeen.Add(h); } return true; }, IntPtr.Zero);
                     DateTime started = DateTime.Now;
                     // 이름만 필요하면 먼저 가진 그림(표지·타이틀 그림)의 글자로 — 되면 안 켬
                     if (nameOnly.Contains(g) && !retry)
@@ -324,6 +340,7 @@ namespace TkoolLauncher
                     }
                     catch (Exception ex) { Log.Info("표지 찍기 실행 " + g.Title + ": " + ex.Message); }
                     KillDir(dir);
+                    if (err.Length > 0) { CloseErrors(); System.Threading.Thread.Sleep(300); }
                     if (err.Length == 0 && !Cancel)
                     {
                         // 오류 창 없이 튕겼으면 윈도우 기록에서 원인 모듈 (msvcr120.dll·xaudio2_7.dll 등)
