@@ -1730,6 +1730,7 @@ namespace TkoolLauncher
                     string exe = g.Exe, wd = g.Folder;
                     if (runDir != null && g.Exe.StartsWith(g.Folder, StringComparison.OrdinalIgnoreCase))
                     { exe = runDir + g.Exe.Substring(g.Folder.TrimEnd('\\').Length); wd = runDir; }
+                    Firewall.Allow(g);   // 방화벽 허용 묻는 창이 게임 위에 안 뜨게
                     p = JpLocale.Start(g, exe, wd);   // 일본어 환경이 켜진 게임은 Locale Emulator로
                 }
             }

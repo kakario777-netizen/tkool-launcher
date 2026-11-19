@@ -301,6 +301,7 @@ namespace TkoolLauncher
                     }
                     try
                     {
+                        Firewall.Allow(g);
                         started = DateTime.Now;
                         Process.Start(new ProcessStartInfo(g.Exe) { WorkingDirectory = g.Folder, UseShellExecute = true });
                         IntPtr w = IntPtr.Zero;
