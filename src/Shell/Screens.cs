@@ -1782,6 +1782,14 @@ namespace TkoolLauncher
     {
         int focus;
         float scroll;
+        bool freeScroll; float dragBase;
+        public override void OnDrag(int dx, int dy, bool start)
+        {
+            if (dx == int.MinValue) return;
+            if (start) dragBase = scroll;
+            freeScroll = true;
+            scroll = dragBase - dy;
+        }
         readonly List<Rectangle> rows = new List<Rectangle>();
         string updateNote;
 
@@ -1930,9 +1938,13 @@ namespace TkoolLauncher
             var list = Rows();
             int rowStep = S(74);
             int visible = Area.Bottom - (Area.Y + S(58)) - S(8);
-            float need = (focus + 1) * rowStep - visible;
-            if (need > scroll) scroll = need;
-            if (focus * rowStep < scroll) scroll = focus * rowStep;
+            if (!freeScroll)
+            {
+                float need = (focus + 1) * rowStep - visible;
+                if (need > scroll) scroll = need;
+                if (focus * rowStep < scroll) scroll = focus * rowStep;
+            }
+            scroll = Math.Min(scroll, Math.Max(0, list.Count * rowStep - visible));
             if (scroll < 0) scroll = 0;
             var clipS = g.Clip;
             g.SetClip(new Rectangle(Area.X, Area.Y + S(54), Area.Width, Area.Height - S(54)));
@@ -1972,6 +1984,7 @@ namespace TkoolLauncher
 
         public override void OnPad(Pad b)
         {
+            freeScroll = false;
             int n = Rows().Count;
             switch (b)
             {

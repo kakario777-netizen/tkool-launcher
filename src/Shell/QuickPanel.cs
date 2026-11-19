@@ -627,8 +627,14 @@ namespace TkoolLauncher
             int fy = 0;
             for (int i = 0; i < view.Count && i < focus; i++) fy += RowH(view[i]) + S(8);
             int fh = view.Count > 0 ? RowH(view[Math.Min(focus, view.Count - 1)]) : 0;
-            if (fy - scroll < 0) scroll = fy;
-            if (fy + fh - scroll > area.Height) scroll = fy + fh - area.Height;
+            if (!freeScroll)
+            {
+                if (fy - scroll < 0) scroll = fy;
+                if (fy + fh - scroll > area.Height) scroll = fy + fh - area.Height;
+            }
+            int total = 0;
+            foreach (var vr in view) total += RowH(vr) + S(8);
+            scroll = Math.Min(scroll, Math.Max(0, total - area.Height));
             if (scroll < 0) scroll = 0;
 
             int y = area.Y - (int)scroll;
@@ -684,8 +690,13 @@ namespace TkoolLauncher
             int gap = S(8), cw = (area.Width - gap) / 2, ch = S(74);
             int row0 = focus / 2;
             float fyTop = row0 * (ch + gap);
-            if (fyTop - scroll < 0) scroll = fyTop;
-            if (fyTop + ch - scroll > area.Height) scroll = fyTop + ch - area.Height;
+            if (!freeScroll)
+            {
+                if (fyTop - scroll < 0) scroll = fyTop;
+                if (fyTop + ch - scroll > area.Height) scroll = fyTop + ch - area.Height;
+            }
+            int totalG = ((view.Count + 1) / 2) * (ch + gap);
+            scroll = Math.Min(scroll, Math.Max(0, totalG - area.Height));
             if (scroll < 0) scroll = 0;
             for (int i = 0; i < view.Count; i++)
             {
@@ -754,6 +765,7 @@ namespace TkoolLauncher
 
         public void OnPad(Pad b)
         {
+            freeScroll = false;
             try { Build(); Categorize(); } catch { }
             switch (b)
             {
@@ -821,6 +833,25 @@ namespace TkoolLauncher
                 Redraw();
                 return;
             }
+        }
+
+        // ── 터치로 위아래 밀기 (밀면 포커스 따라가기를 잠시 멈춤, 패드를 누르면 다시) ──
+        bool freeScroll;
+        float dragBase;
+        public void ScrollDrag(int dy, bool start)
+        {
+            if (start) dragBase = scroll;
+            freeScroll = true;
+            scroll = dragBase - dy;
+            Redraw();
+        }
+
+        /// <summary>이 점이 슬라이더 위인지 (슬라이더는 옆으로 끌기)</summary>
+        public bool OnSlider(Point p)
+        {
+            foreach (var r in view)
+                if (r.Kind == Kind.Slider && p.X >= r.Rect.X && p.X <= r.Rect.Right && p.Y >= r.Rect.Y - S(20) && p.Y <= r.Rect.Bottom + S(20)) return true;
+            return false;
         }
 
         /// <summary>슬라이더 끌기</summary>

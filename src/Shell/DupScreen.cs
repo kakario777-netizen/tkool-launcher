@@ -48,7 +48,7 @@ namespace TkoolLauncher
                 new Rectangle(Area.X + pad + S(200), Area.Y + S(10), Area.Width - pad * 2 - S(200), S(44)), Theme.SubText,
                 TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
 
-            int rh = S(176), listTop = Area.Y + S(64), listBottom = Area.Bottom - S(80);
+            int rh = S(176); lastRh = rh; int listTop = Area.Y + S(64), listBottom = Area.Bottom - S(80);
             int n = grp.Games.Count, fit = Math.Max(1, (listBottom - listTop) / rh);
             if (row < top) top = row; if (row >= top + fit) top = row - fit + 1;
             top = Math.Max(0, Math.Min(top, Math.Max(0, n - fit)));
@@ -174,6 +174,17 @@ namespace TkoolLauncher
                 case Pad.Y: NotDup(); return;
                 case Pad.B: Shell.Pop(); return;
             }
+            Shell.Invalidate();
+        }
+
+        int dragTop, lastRh = 1;
+        public override void OnDrag(int dx, int dy, bool start)
+        {
+            if (dx == int.MinValue) return;
+            if (start) dragTop = top;
+            int n = G.Count > 0 ? G[Math.Min(gi, G.Count - 1)].Games.Count : 0;
+            top = Math.Max(0, Math.Min(Math.Max(0, n - 1), dragTop - dy / Math.Max(1, lastRh)));
+            row = top;   // 보이는 첫 줄로 (그리기에서 포커스가 화면 안에 있게 맞춤)
             Shell.Invalidate();
         }
 

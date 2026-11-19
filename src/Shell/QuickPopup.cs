@@ -17,7 +17,7 @@ namespace TkoolLauncher
         readonly Timer refresh = new Timer { Interval = 1500 };   // 지금 상태(TDP·팬·온도) 숫자 새로 그리기
         int targetX;
         List<Hint> hints = new List<Hint>();
-        Point down; bool isDown, dragged;
+        Point down; bool isDown, dragged, vScroll;
 
         public QuickPopup(ShellForm s)
         {
@@ -144,8 +144,14 @@ namespace TkoolLauncher
         protected override void OnMouseMove(MouseEventArgs e)
         {
             if (!isDown) return;
-            if (Math.Abs(e.X - down.X) > Theme.S(10)) dragged = true;
-            if (dragged) { qp.OnDrag(e.Location); Invalidate(); }
+            int dx = e.X - down.X, dy = e.Y - down.Y;
+            if (!dragged && (Math.Abs(dx) > Theme.S(10) || Math.Abs(dy) > Theme.S(10)))
+            {
+                dragged = true;
+                vScroll = Math.Abs(dy) > Math.Abs(dx) && !qp.OnSlider(down);   // 위아래 = 목록 밀기, 슬라이더 위 옆으로 = 값 바꾸기
+                if (vScroll) qp.ScrollDrag(0, true);
+            }
+            if (dragged) { if (vScroll) qp.ScrollDrag(dy, false); else qp.OnDrag(e.Location); Invalidate(); }
         }
 
         protected override void OnMouseUp(MouseEventArgs e)

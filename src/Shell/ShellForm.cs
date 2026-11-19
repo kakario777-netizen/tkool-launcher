@@ -1129,12 +1129,25 @@ namespace TkoolLauncher
             try { Cur.DownAt = e.Location; } catch { }
         }
 
+        bool quickScroll;
+
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
             if (!isDown || menu.Open) return;
             int dx = e.X - down.X, dy = e.Y - down.Y;
-            if (quick.Open) { quick.OnDrag(e.Location); dragging = Math.Abs(dx) > Theme.S(12); return; }
+            if (quick.Open)
+            {
+                // 위아래로 밀면 목록 밀기, 옆으로(슬라이더 위)면 슬라이더 끌기
+                if (!dragging && (Math.Abs(dx) > Theme.S(12) || Math.Abs(dy) > Theme.S(12)))
+                {
+                    dragging = true;
+                    quickScroll = Math.Abs(dy) > Math.Abs(dx) && !quick.OnSlider(down);
+                    if (quickScroll) quick.ScrollDrag(0, true);
+                }
+                if (dragging) { if (quickScroll) quick.ScrollDrag(dy, false); else quick.OnDrag(e.Location); Invalidate(); }
+                return;
+            }
             // 위쪽 끝에서 아래로 쓸어내리면 빠른 설정
             if (down.Y < Theme.S(TopH) && dy > Theme.S(60)) { isDown = false; OpenQuick(); return; }
             if (!dragging && (Math.Abs(dx) > Theme.S(12) || Math.Abs(dy) > Theme.S(12)) && Cur.Area.Contains(down))
