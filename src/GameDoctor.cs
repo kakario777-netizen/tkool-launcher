@@ -36,7 +36,8 @@ namespace TkoolLauncher
             seen = seen ?? "";
             string low = seen.ToLowerInvariant();
             try { var vc = VcIssue(g, low); if (vc != null) list.Add(vc); } catch { }
-            if (!g.IsTkool) return list;   // 쯔꾸르가 아니면 런타임(VC++) 안내만
+            try { var dx = DxIssue(low); if (dx != null) list.Add(dx); } catch { }
+            if (!g.IsTkool) return list;   // 쯔꾸르가 아니면 런타임(VC++·DirectX) 안내만
             try { CheckBlocked(g, list); } catch { }
             try
             {
@@ -52,14 +53,6 @@ namespace TkoolLauncher
             }
             catch (Exception ex) { Log.Error("실행 문제 확인", ex); }
             try { CheckFont(g, list, low); } catch { }
-            if (low.Contains("d3dx9") || low.Contains("directx") || low.Contains("d3d9"))
-                list.Add(new Issue
-                {
-                    Title = "DirectX 9 부품이 없어요",
-                    Explain = "이 게임은 옛날 DirectX 9 파일(d3dx9)을 써요. 마이크로소프트 'DirectX 최종 사용자 런타임'을 설치하면 돼요.",
-                    FixLabel = "설치 페이지 열기",
-                    Fix = () => { Open("https://www.microsoft.com/download/details.aspx?id=35"); return "설치 페이지를 열었어요. 설치 후 다시 실행해 보세요"; },
-                });
             return list;
         }
 
@@ -110,6 +103,44 @@ namespace TkoolLauncher
                         Log.Error("VC++ 설치", ex);
                         Open(page);
                         return "자동 설치가 안 돼서 받는 페이지를 열었어요. Visual C++ " + year + " " + arch + "를 설치해 주세요";
+                    }
+                },
+            };
+        }
+
+        // ───────── DirectX 옛 부품 (d3dx9_43.dll·xinput1_3.dll·d3dcompiler_43.dll 등) ─────────
+        public static readonly System.Text.RegularExpressions.Regex DxDll = new System.Text.RegularExpressions.Regex(@"d3dx(9|10|11)\w*\.dll|d3dcompiler_\d+\.dll|xinput1_[123]\.dll|xaudio2_\d\.dll|x3daudio1_\d\.dll|xactengine\w*\.dll|d3dx9|directx", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        public static Issue DxIssue(string low)
+        {
+            var m = DxDll.Match(low ?? "");
+            if (!m.Success) return null;
+            const string web = "https://download.microsoft.com/download/1/7/1/1718CCC4-6315-4D8E-9543-8E28A4E18C4C/dxwebsetup.exe";
+            const string page = "https://www.microsoft.com/download/details.aspx?id=35";
+            return new Issue
+            {
+                Title = "DirectX 옛 부품이 없어요 (" + m.Value + ")",
+                Explain = "이 게임은 'DirectX 최종 사용자 런타임'(d3dx9·xinput1_3 같은 옛 파일)이 있어야 돌아가요. 윈도우 11에도 기본으로는 없어요. 받아서 조용히 설치할게요 (몇 분 걸려요).",
+                FixLabel = "받아서 설치하기",
+                Fix = () =>
+                {
+                    try
+                    {
+                        string dir = Path.Combine(Settings.Dir, "tools");
+                        Directory.CreateDirectory(dir);
+                        string f = Path.Combine(dir, "dxwebsetup.exe");
+                        System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12;
+                        using (var wc = new System.Net.WebClient()) { wc.Headers[System.Net.HttpRequestHeader.UserAgent] = "Mozilla/5.0"; wc.DownloadFile(web, f); }
+                        var pr = Process.Start(new ProcessStartInfo(f, "/Q") { UseShellExecute = true });
+                        pr.WaitForExit(600000);
+                        Log.Info("DirectX 런타임 설치 끝 (코드 " + (pr.HasExited ? pr.ExitCode.ToString() : "?") + ")");
+                        return "DirectX 런타임 설치를 마쳤어요";
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error("DirectX 설치", ex);
+                        Open(page);
+                        return "자동 설치가 안 돼서 받는 페이지를 열었어요. 'DirectX 최종 사용자 런타임'을 설치해 주세요";
                     }
                 },
             };
@@ -456,7 +487,7 @@ namespace TkoolLauncher
                         if (exited)
                         {
                             int code = 0; try { code = p.ExitCode; } catch { }
-                            if ((box || sec < 12) && (g.IsTkool || VcDll.IsMatch(seen))) { Log.Info("게임이 금방 꺼짐 (" + (int)sec + "초, 코드 " + code + ") " + seen.Replace("\n", " / ")); onProblem(seen, false); }
+                            if ((box || sec < 12) && (g.IsTkool || VcDll.IsMatch(seen) || DxDll.IsMatch(seen))) { Log.Info("게임이 금방 꺼짐 (" + (int)sec + "초, 코드 " + code + ") " + seen.Replace("\n", " / ")); onProblem(seen, false); }
                             return;
                         }
                         // 게임 창들 읽기
@@ -491,7 +522,7 @@ namespace TkoolLauncher
                         }, IntPtr.Zero);
                         if (sec >= 9999) return;
                         // dll 없음(Visual C++ 런타임) 창이면 바로 알려 줌 (창을 닫을 때까지 안 기다림)
-                        if (box && VcDll.IsMatch(seen)) { Log.Info("런타임 없음: " + seen.Replace("\n", " / ")); onProblem(seen, true); return; }
+                        if (box && (VcDll.IsMatch(seen) || DxDll.IsMatch(seen))) { Log.Info("런타임 없음: " + seen.Replace("\n", " / ")); onProblem(seen, true); return; }
                         if (sec > 15 && !box) return;   // 잘 켜졌음
                         if (sec > 600) return;
                     }
