@@ -115,3 +115,4 @@
 - 해상도 실수 막기: 게임 위 팝업(QuickPopup)이 처음 만들 때 자리를 고정해 해상도를 줄이면 화면 밖에 떠서 안 보였음 → Open 때마다 지금 화면에 맞춰 다시. 빠른 설정에서 해상도를 바꾸면 15초 안에 "✔ 이 해상도 유지하기"(화면 탭 맨 위)를 안 누르면 예전 해상도로 되돌림(QuickPanel.StartResGuard).
 - 팝업 폭은 화면이 작으면 가로 60%(1280 미만)·40%를 넘지 않게(PanelWidth) — 어떤 해상도에서도 화면 안에 뜸.
 - 팝업 중 게임이 같이 움직이던 것: 가상 패드를 안 쓸 때(패드를 직접 읽는 MV·MZ·Unity 등) 팝업 여는 동안 VirtualPad.HideForPopup이 HidHide로 진짜 패드를 숨김(런처만 보이게 등록, --cloak-on), 닫으면 --cloak-off. 관리자·HidHide 있을 때만.
+- 울프 RPG "A previous boot failure detected … SoftModeFlag=1" 창: Fixer.Fixable이 알아보고 Game.ini SoftModeFlag=1(바이트 그대로, .bak 남김)로 고친 뒤 다시 켬(Fixer.WolfSoftMode).

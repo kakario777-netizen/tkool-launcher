@@ -66,6 +66,15 @@ namespace TkoolLauncher
             try { var d = GameDoctor.DxIssue(low); if (d != null) list.Add(d); } catch { }
             try { var v = GameDoctor.VcIssue(g, low); if (v != null) list.Add(v); } catch { }
             try { var r = GameDoctor.RtpAuto(g, low); if (r != null) list.Add(r); } catch { }
+            // 울프 RPG: "A previous boot failure detected … Game.ini SoftModeFlag=1" → 소프트웨어 그리기 모드로
+            if (g != null && (low.Contains("softmodeflag") || low.Contains("previous boot failure")))
+                list.Add(new GameDoctor.Issue
+                {
+                    Title = "울프 RPG 그래픽 시작 실패 (" + g.Title + ")",
+                    Explain = "그래픽 시작이 실패해서 Game.ini의 SoftModeFlag를 1(소프트웨어 그리기)로 바꿔요.",
+                    FixLabel = "소프트웨어 그리기로",
+                    Fix = () => WolfSoftMode(g),
+                });
             if (low.Contains("폴더 목록 화면") && g != null) { try { list.AddRange(GameDoctor.FolderListIssues(g)); } catch { } }
             // 일본어가 한국어로 깨진 오류 창(긁갉긁…) → 일본어 환경으로 켜기
             string jp = JpLocale.Unmangle(text);
@@ -86,6 +95,27 @@ namespace TkoolLauncher
                     },
                 });
             return list;
+        }
+
+        /// <summary>울프 RPG Game.ini의 SoftModeFlag=1 (원래 글자 바이트 그대로 두고 그 줄만)</summary>
+        static string WolfSoftMode(GameInfo g)
+        {
+            try
+            {
+                string dir = g.InstallDir ?? g.Folder;
+                string ini = System.IO.Directory.EnumerateFiles(dir, "Game.ini", System.IO.SearchOption.TopDirectoryOnly).FirstOrDefault()
+                             ?? System.IO.Directory.EnumerateFiles(dir, "*.ini", System.IO.SearchOption.TopDirectoryOnly).FirstOrDefault(f => System.IO.File.ReadAllText(f).IndexOf("SoftModeFlag", StringComparison.OrdinalIgnoreCase) >= 0);
+                if (ini == null) return "Game.ini를 못 찾았어요";
+                var latin = System.Text.Encoding.GetEncoding(28591);
+                string t = latin.GetString(System.IO.File.ReadAllBytes(ini));
+                System.IO.File.Copy(ini, ini + ".bak", true);
+                var re = new System.Text.RegularExpressions.Regex(@"(?im)^(\s*SoftModeFlag\s*=\s*)\d*");
+                t = re.IsMatch(t) ? re.Replace(t, "${1}1") : t.TrimEnd('\r', '\n') + "\r\nSoftModeFlag=1\r\n";
+                System.IO.File.WriteAllBytes(ini, latin.GetBytes(t));
+                Log.Info("울프 SoftModeFlag=1: " + ini);
+                return "그래픽을 소프트웨어 그리기로 바꿨어요 (원래 파일은 Game.ini.bak)";
+            }
+            catch (Exception ex) { return "Game.ini를 못 고쳤어요: " + ex.Message; }
         }
 
         public static bool CanFix(GameInfo g, string text) => Fixable(g, text).Any(i => i.Fix != null && !tried.Contains(i.Title));
