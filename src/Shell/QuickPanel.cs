@@ -706,16 +706,41 @@ namespace TkoolLauncher
                 bool f = zone == 1 && i == focus;
                 Draw.Fill(g, r, S(8), f ? Theme.TileHot : Color.FromArgb(255, 23, 29, 37));
                 var tc = row.Danger ? Color.FromArgb(240, 140, 140) : Theme.Text;
-                // 한 줄로만 — 길면 글자를 줄여서 (어중간한 줄바꿈 없음)
-                var tr = new Rectangle(r.X + S(8), r.Y + S(6), r.Width - S(16), SubOf(row) != null ? S(36) : r.Height - S(12));
-                var tf = Draw.BodyBold;
-                if (Draw.Measure(g, TitleOf(row), tf) > tr.Width) tf = Draw.Body;
-                if (Draw.Measure(g, TitleOf(row), tf) > tr.Width) tf = Draw.Small;
-                Draw.Text(g, TitleOf(row), tf, tr, tc,
-                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+                // 길면 낱말 단위로 두 줄·세 줄 (낱말 가운데서 끊지 않음, 그래도 넘치면 글자를 줄임)
+                var tr = new Rectangle(r.X + S(8), r.Y + S(4), r.Width - S(16), SubOf(row) != null ? S(40) : r.Height - S(8));
+                DrawWrapped(g, TitleOf(row), tr, tc);
                 if (SubOf(row) != null) Draw.Text(g, SubOf(row), Draw.Tiny, new Rectangle(r.X + S(8), r.Y + S(44), r.Width - S(16), S(24)), Theme.SubText,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
                 if (f) Draw.Ring(g, r, S(8), Theme.Focus, S(2));
+            }
+        }
+
+        /// <summary>단추 글자: 한 줄에 안 들어가면 띄어쓰기에서 줄을 나눠 최대 3줄, 그래도 안 되면 작은 글씨로</summary>
+        void DrawWrapped(Graphics g, string text, Rectangle box, Color col)
+        {
+            text = text ?? "";
+            foreach (var f in new[] { Draw.BodyBold, Draw.Body, Draw.Small, Draw.Tiny })
+            {
+                int lh = (int)Math.Ceiling(f.GetHeight(g));
+                int maxLines = Math.Max(1, Math.Min(3, box.Height / Math.Max(1, lh)));
+                var lines = new List<string>();
+                bool ok = true;
+                string cur = "";
+                foreach (var w in text.Split(' '))
+                {
+                    if (w.Length == 0) continue;
+                    if (Draw.Measure(g, w, f) > box.Width) { ok = false; break; }   // 낱말 하나가 안 들어감 → 더 작은 글씨
+                    string t = cur.Length == 0 ? w : cur + " " + w;
+                    if (Draw.Measure(g, t, f) <= box.Width) cur = t;
+                    else { lines.Add(cur); cur = w; }
+                }
+                if (cur.Length > 0) lines.Add(cur);
+                if (!ok || lines.Count > maxLines) { if (f != Draw.Tiny) continue; }
+                int y0 = box.Y + (box.Height - lh * Math.Min(lines.Count, maxLines)) / 2;
+                for (int k = 0; k < lines.Count && k < maxLines; k++)
+                    Draw.Text(g, lines[k], f, new Rectangle(box.X, y0 + k * lh, box.Width, lh), col,
+                        TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+                return;
             }
         }
 
