@@ -40,16 +40,23 @@ namespace TkoolLauncher
             int rowH = S(56), n = Math.Min(MaxRows, opts.Length);
             if (sel < top) top = sel;
             if (sel >= top + n) top = sel - n + 1;
-            int headH = S(sub != null ? 84 : 60);
             int w = Math.Min(Area.Width - S(80), S(560));
+            // 설명 글: 줄바꿈해서 다 보이게 (최대 6줄 높이)
+            int subH = 0;
+            if (sub != null)
+            {
+                var ms = TextRenderer.MeasureText(g, sub, Draw.Small, new Size(w - S(44), 0), TextFormatFlags.WordBreak | TextFormatFlags.NoPadding);
+                subH = Math.Max(S(26), Math.Min(ms.Height + S(4), Draw.Small.Height * 6 + S(4)));
+            }
+            int headH = sub != null ? S(58) + subH : S(60);
             int h = headH + n * rowH + S(20);
             box = new Rectangle(Area.X + (Area.Width - w) / 2, Area.Y + (Area.Height - h) / 2, w, h);
             Draw.Fill(g, box, S(10), Color.FromArgb(255, 34, 40, 50));
             Draw.Text(g, title, Draw.Menu, new Rectangle(box.X + S(22), box.Y + S(12), w - S(44), S(36)), Theme.Text,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
             if (sub != null)
-                Draw.Text(g, sub, Draw.Small, new Rectangle(box.X + S(22), box.Y + S(48), w - S(44), S(26)), Theme.SubText,
-                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
+                Draw.Text(g, sub, Draw.Small, new Rectangle(box.X + S(22), box.Y + S(48), w - S(44), subH), Theme.SubText,
+                    TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
             if (rects.Length != n) rects = new Rectangle[n];
             for (int k = 0; k < n; k++)
             {

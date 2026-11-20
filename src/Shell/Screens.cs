@@ -711,6 +711,7 @@ namespace TkoolLauncher
             }
             Draw.PadGlyph(g, Pad.RB, x + S(20), cy);
             Draw.Text(g, items.Count + "개", Draw.Body, new Rectangle(Area.Right - Pad0 - S(120), Area.Y, S(120), TabH), Theme.SubText, Draw.Right);
+            PaintBell(g, new Rectangle(Area.Right - Pad0 - S(120) - S(58), Area.Y + (TabH - S(44)) / 2, S(44), S(44)));
             using (var p = new Pen(Color.FromArgb(40, 255, 255, 255))) g.DrawLine(p, Area.X + Pad0, Area.Y + TabH, Area.Right - Pad0, Area.Y + TabH);
             if (TkTab) PaintChips(g);
 
@@ -752,6 +753,40 @@ namespace TkoolLauncher
             }
             g.Clip = clip;
             PaintBar(g);
+        }
+
+        // ── 알림 종: 새 게임·중복·찍은 표지·시리즈 폴더 알림 모음 ──
+        Rectangle bellR;
+        void PaintBell(Graphics g, Rectangle r)
+        {
+            bellR = r;
+            int n = Shell.NoticeCount();
+            var oldSm = g.SmoothingMode; g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            var c = n > 0 ? Theme.Text : Theme.SubText;
+            float cx = r.X + r.Width / 2f, top = r.Y + S(9), bot = r.Y + S(30), hw = S(11);
+            using (var path = new System.Drawing.Drawing2D.GraphicsPath())
+            {
+                path.AddArc(cx - hw * 0.7f, top, hw * 1.4f, hw * 1.4f, 180, 180);
+                path.AddLine(cx + hw * 0.7f, top + hw * 0.7f, cx + hw, bot);
+                path.AddLine(cx + hw, bot, cx - hw, bot);
+                path.CloseFigure();
+                using (var b = new SolidBrush(c)) g.FillPath(b, path);
+            }
+            using (var b = new SolidBrush(c))
+            {
+                g.FillEllipse(b, cx - S(4), bot + S(1), S(8), S(6));
+                g.FillEllipse(b, cx - S(2), top - S(4), S(4), S(4));
+            }
+            if (n > 0)
+            {
+                string t = n > 99 ? "99+" : n.ToString();
+                var f = Theme.Px(11, true);
+                int bw = Math.Max(S(20), Draw.Measure(g, t, f) + S(10));
+                var br = new Rectangle(r.Right - bw + S(2), r.Y + S(2), bw, S(20));
+                using (var b = new SolidBrush(Color.FromArgb(255, 226, 72, 72))) using (var pth = Theme.Round(br, S(10))) g.FillPath(b, pth);
+                Draw.Text(g, t, f, br, Color.White, Draw.Center);
+            }
+            g.SmoothingMode = oldSm;
         }
 
         static readonly Color NewYellow = Color.FromArgb(255, 238, 196, 60);
@@ -1091,6 +1126,7 @@ namespace TkoolLauncher
 
         public override void OnTap(Point p)
         {
+            if (Rectangle.Inflate(bellR, S(8), S(8)).Contains(p)) { Shell.OpenNotices(); return; }
             for (int i = 0; i < tabRects.Length; i++) if (tabRects[i].Contains(p)) { SetTab(i); return; }
             if (TkTab)
             {
@@ -2118,7 +2154,7 @@ namespace TkoolLauncher
         Rectangle panel;
         readonly List<Rectangle> rects = new List<Rectangle>();
 
-        string[] Names => new[] { "라이브러리", "설정", "게임 폴더 설정", "게임 다시 찾기", "런처가 한 일", "런처 끄기" };
+        string[] Names { get { int n = Shell.NoticeCount(); return new[] { "라이브러리", "설정", "게임 폴더 설정", "게임 다시 찾기", "런처가 한 일", n > 0 ? "알림 " + n : "알림", "런처 끄기" }; } }
 
         public bool Tick(float dt)
         {
@@ -2171,7 +2207,8 @@ namespace TkoolLauncher
                 case 2: Shell.OpenFolders(); break;
                 case 3: Shell.Rescan(); break;
                 case 4: Shell.ShowActivityLog(); break;
-                case 5: Shell.Close(); break;
+                case 5: Shell.OpenNotices(); break;
+                case 6: Shell.Close(); break;
             }
         }
 

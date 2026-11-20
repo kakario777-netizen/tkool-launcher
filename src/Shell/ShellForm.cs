@@ -1672,6 +1672,57 @@ namespace TkoolLauncher
         Timer dupTimer;
         int dupShown = -1;
         /// <summary>썸네일이 다 읽힌 뒤(20초 뒤) 중복 게임 찾기</summary>
+        // ── 알림 모음 (라이브러리 오른쪽 위 종, 왼쪽 메뉴 "알림") ──
+        int noticeN; DateTime noticeAt;
+        public int NoticeCount()
+        {
+            if ((DateTime.Now - noticeAt).TotalSeconds < 2) return noticeN;
+            noticeAt = DateTime.Now;
+            int n = 0;
+            try
+            {
+                if (NewInbox.Count > 0) n++;
+                if (DupFinder.Groups.Count > 0) n++;
+                if (GameCapture.PendingCount(Games) > 0) n++;
+                n += SeriesHint.Current.Count;
+            }
+            catch { }
+            return noticeN = n;
+        }
+
+        public void OpenNotices()
+        {
+            var names = new List<string>(); var acts = new List<Action>();
+            int nn = NewInbox.Count;
+            if (nn > 0) { names.Add("새로 들어온 게임 " + nn + "개 확인하기"); acts.Add(() => { GoHome(); ShowToast("쯔꾸르 탭 맨 위 노란 칸에서 확인해 주세요", 2500); }); }
+            int dn = DupFinder.Groups.Count;
+            if (dn > 0) { names.Add("중복으로 보이는 게임 " + dn + "묶음 정리하기"); acts.Add(() => Push(new DupScreen())); }
+            int pc = GameCapture.PendingCount(Games);
+            if (pc > 0) { names.Add("찍은 표지 " + pc + "개 확인하기"); acts.Add(() => Push(new CoverReviewScreen())); }
+            foreach (var c0 in SeriesHint.Current.ToList())
+            {
+                var c = c0;
+                names.Add("시리즈일까요? " + c.Name + " (게임 " + c.Games.Count + "개)");
+                acts.Add(() => ShowSeriesHint(c, 0));
+            }
+            names.Add("정리 모드 열기"); acts.Add(() => Push(new TidyScreen()));
+            PickerScreen.Show(this, "알림", names.ToArray(), -1, i => { if (i >= 0 && i < acts.Count) acts[i](); },
+                names.Count == 1 ? "새 알림이 없어요" : null);
+        }
+
+        /// <summary>"[시리즈]" 안 붙은 폴더에 게임이 여러 개 — 폴더 열기 / 나중에 / 시리즈 아님</summary>
+        public void ShowSeriesHint(SeriesHint.Cand c, int more)
+        {
+            string list = string.Join(", ", c.Games.Take(4).Select(x => x.Title)) + (c.Games.Count > 4 ? " …" : "");
+            string sub = "이 폴더 안에 게임이 " + c.Games.Count + "개 있어요: " + list + "\n시리즈라면 폴더 이름 앞에 [시리즈]를 붙여 주세요."
+                + (more > 0 ? "\n(비슷한 폴더 " + more + "개 더 — 오른쪽 위 알림에서 볼 수 있어요)" : "");
+            PickerScreen.Show(this, "시리즈 폴더일까요? · " + c.Name, new[] { "폴더 위치 열기", "나중에 (알림에 남김)", "시리즈 아님 (다시 안 알림)" }, 0, i =>
+            {
+                if (i == 0) SeriesHint.OpenFolder(c.Dir);
+                else if (i == 2) { SeriesHint.Ignore(c); noticeAt = DateTime.MinValue; Invalidate(); }
+            }, sub);
+        }
+
         void ScheduleDupScan()
         {
             dupTimer?.Dispose();
@@ -1688,6 +1739,14 @@ namespace TkoolLauncher
                             int n = DupFinder.Groups.Count;
                             if (n > 0 && n != dupShown && Visible) ShowToast("중복으로 보이는 게임 " + n + "묶음 — 쯔꾸르 탭 '중복 확인'", 5000);
                             dupShown = n;
+                            // 시리즈일 수도 있는 폴더 (처음 보는 것만 팝업, 나머지는 알림 종에)
+                            try
+                            {
+                                SeriesHint.Find(Games);
+                                var nw = SeriesHint.TakeNew();
+                                if (nw.Count > 0 && Visible && !curtain) ShowSeriesHint(nw[0], nw.Count - 1);
+                            }
+                            catch (Exception ex) { Log.Error("시리즈 폴더 찾기", ex); }
                             Invalidate();
                         }));
                     }
