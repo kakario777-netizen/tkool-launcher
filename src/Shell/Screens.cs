@@ -421,6 +421,8 @@ namespace TkoolLauncher
         static List<string> TagsAll(GameInfo g)
         {
             var l = new List<string>(GameData.TagsOf(g));
+            string ser = g.FromFolder ? GameScanner.Series(g.Folder ?? g.InstallDir) : null;
+            if (ser != null) l.Insert(0, "시리즈: " + ser);
             var d = DlsiteInfo.Get(g);
             if (d != null)
                 for (int k = 0; k < d.Genres.Count; k++)

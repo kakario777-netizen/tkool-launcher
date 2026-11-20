@@ -70,11 +70,31 @@ namespace TkoolLauncher
                 {
                     string up = Path.GetDirectoryName(d);
                     if (string.IsNullOrEmpty(up) || Path.GetPathRoot(up) == up) break;
+                    if (SeriesTag.IsMatch(Path.GetFileName(up) ?? "")) break; // 시리즈 묶음 폴더 이름은 게임 이름으로 안 씀
                     d = up; name = Path.GetFileName(d);
                 }
                 return name;
             }
             catch { return Path.GetFileName(dir); }
+        }
+
+        // 사용자가 시리즈 게임을 한 폴더에 모으고 "[시리즈] 이름"으로 붙임
+        static readonly System.Text.RegularExpressions.Regex SeriesTag = new System.Text.RegularExpressions.Regex(@"^\s*[\[\(【［]\s*시리즈\s*[\]\)】］]\s*");
+        /// <summary>게임이 "[시리즈] 이름" 폴더 안에 있으면 그 이름, 없으면 null</summary>
+        public static string Series(string dir)
+        {
+            try
+            {
+                string d = (dir ?? "").TrimEnd('\\', '/');
+                for (int i = 0; i < 4 && !string.IsNullOrEmpty(d) && Path.GetPathRoot(d) != d; i++)
+                {
+                    string n = Path.GetFileName(d) ?? "";
+                    if (SeriesTag.IsMatch(n)) { string r = SeriesTag.Replace(n, "").Trim(); return r.Length > 0 ? r : n; }
+                    d = Path.GetDirectoryName(d);
+                }
+            }
+            catch { }
+            return null;
         }
 
         /// <summary>이름 고르기 후보: 게임 폴더와 그 위 두 단계 폴더 이름</summary>
@@ -84,7 +104,7 @@ namespace TkoolLauncher
             try
             {
                 string d = (dir ?? "").TrimEnd('\\', '/');
-                for (int i = 0; i < 3 && !string.IsNullOrEmpty(d) && Path.GetPathRoot(d) != d; i++) { string n = Path.GetFileName(d); if (!string.IsNullOrEmpty(n) && !l.Contains(n)) l.Add(n); d = Path.GetDirectoryName(d); }
+                for (int i = 0; i < 3 && !string.IsNullOrEmpty(d) && Path.GetPathRoot(d) != d; i++) { string n = Path.GetFileName(d); if (SeriesTag.IsMatch(n ?? "")) break; if (!string.IsNullOrEmpty(n) && !l.Contains(n)) l.Add(n); d = Path.GetDirectoryName(d); }
             }
             catch { }
             return l;
