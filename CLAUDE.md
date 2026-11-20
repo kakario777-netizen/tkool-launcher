@@ -130,3 +130,4 @@
 - 상세 화면 제목 뒤 초록 "(수정)" = 직접 바꾼 이름(NameFrom … 직접 고침). 시리즈 폴더 게임(NameFinder.InSeries)은 검수된 것 — 이름 자동 찾기·창 제목·화면 글자·TitleTidy 정리 모두 안 함.
 - 시리즈 진열: 라이브러리 SortWide가 시리즈 게임을 한자리에 모음(GroupSeries, 이름순이면 시리즈 이름 자리), 카드 이름 "시리즈 : 게임"(시리즈 보라), 이어진 시리즈 카드 뒤 보라 둥근 음영(PaintSeriesBacks, 줄 넘어가면 위아래 닿게).
 - 알림 모음: 라이브러리 탭 줄 오른쪽 종(빨간 개수, 누르면 ShellForm.OpenNotices)·왼쪽 메뉴 "알림 N" — 새 게임·중복·찍은 표지·시리즈일까요?·정리 모드. 시리즈 후보: SeriesHint.cs([시리즈] 안 붙은 폴더에 게임 2~8개, 게임 루트·#/_ 분류 폴더 제외), 중복 검사 끝날 때 새로 본 폴더면 팝업(폴더 위치 열기/나중에/시리즈 아님 → cache\series_ignore.txt). PickerScreen 설명 글은 줄바꿈(최대 6줄).
+- 폴더 이름·위치 바뀌어도 정보 유지: Reconcile(Sig=exe 이름|크기|게임 데이터 제목이 같은 예전 기록 하나)로 이어 붙일 때 MoveIdData가 옛 id→새 id를 cache 안 파일 이름·.txt/.ini 내용(바이트 그대로 latin1)·설정 OvGame/DupIgnore·메모리의 문자열 열쇠 사전/집합(리플렉션)까지 모두 바꿈. Rescan은 NewInbox.Update 전에 Reconcile → 이어 붙인 게임(GameData.Relinked)은 새 게임 칸에 안 들어감. 폴더 이름을 바꿨으면 TitleTidy 정리한 폴더 이름을 직접 고친 이름으로.

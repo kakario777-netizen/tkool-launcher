@@ -62,6 +62,7 @@ namespace TkoolLauncher
                         known.Add(k);
                         var st = GameData.Get(g);
                         if (st.TotalSeconds > 0 || st.LastPlayed > 0) continue;   // 폴더만 옮긴 예전 게임(기록 있음)은 새 게임 아님
+                        if (GameData.Relinked.Contains(GameData.IdOf(g))) continue;   // 이름·위치만 바뀐 예전 게임 (게임 데이터가 같음)
                         if (fresh.Add(k)) added++;
                     }
                 }

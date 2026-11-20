@@ -68,6 +68,85 @@ namespace TkoolLauncher
         /// 실행 파일 이름·크기·게임 데이터 제목이 같고, 그 기록이 지금 목록의 다른 게임 것이 아니면 같은 게임으로 봄.
         /// (꼭 g.Title이 스캔한 원래 제목일 때 — 저장된 이름을 덮어쓰기 전에 부름)
         /// </summary>
+        /// <summary>폴더를 옮기거나 이름을 바꿔 예전 기록을 이어 붙인 게임 (새 게임 칸에 안 넣음)</summary>
+        public static readonly HashSet<string> Relinked = new HashSet<string>();
+
+        /// <summary>
+        /// 게임 id(실행 파일 경로 해시)가 바뀌었을 때 런처가 모아 둔 정보 전부를 새 id로 옮김:
+        /// cache 안 파일 이름(표지·썸네일·소개·사이트 정보…)과 목록 파일 안의 id(패드 변환·조작·화면 크기·일본어 환경·직접 표지·찾은 번호…),
+        /// 설정(게임별 오버레이 위치·중복 아님), 그리고 이미 읽어 둔 메모리 표까지.
+        /// </summary>
+        static string Swap(string t, Dictionary<string, string> moves)
+        {
+            foreach (var kv in moves) if (t.Contains(kv.Key)) t = t.Replace(kv.Key, kv.Value);
+            return t;
+        }
+        static void MoveIdData(Dictionary<string, string> moves)
+        {
+            int files = 0, texts = 0;
+            var latin = Encoding.GetEncoding(28591);   // 바이트 그대로 (어떤 글자표 파일이든 id만 바꿈)
+            try
+            {
+                string cache = Path.Combine(Settings.Dir, "cache");
+                if (Directory.Exists(cache))
+                    foreach (var f in Directory.GetFiles(cache, "*", SearchOption.AllDirectories))
+                    {
+                        try
+                        {
+                            string name = Path.GetFileName(f);
+                            string target = f;
+                            string nn = Swap(name, moves);
+                            if (nn != name)
+                            {
+                                target = Path.Combine(Path.GetDirectoryName(f), nn);
+                                if (!File.Exists(target)) { File.Move(f, target); files++; } else target = f;
+                            }
+                            string ext = Path.GetExtension(target).ToLowerInvariant();
+                            if ((ext == ".txt" || ext == ".ini") && new FileInfo(target).Length < 8 * 1024 * 1024)
+                            {
+                                string t = latin.GetString(File.ReadAllBytes(target));
+                                string t2 = Swap(t, moves);
+                                if (t2 != t) { File.WriteAllBytes(target, latin.GetBytes(t2)); texts++; }
+                            }
+                        }
+                        catch { }
+                    }
+                string og = Swap(Settings.OvGame, moves), di = Swap(Settings.DupIgnore, moves);
+                if (og != Settings.OvGame || di != Settings.DupIgnore) { Settings.OvGame = og; Settings.DupIgnore = di; Settings.Save(); }
+                // 이미 읽어 둔 표(사전·집합)의 열쇠도 바꿈 — 다시 켜지 않아도 그대로 보이게
+                foreach (var tp in typeof(GameData).Assembly.GetTypes())
+                {
+                    if (tp == typeof(GameData)) continue;
+                    foreach (var fi in tp.GetFields(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
+                    {
+                        try
+                        {
+                            if (fi.FieldType.IsGenericType && fi.FieldType.GetGenericTypeDefinition() == typeof(Dictionary<,>) && fi.FieldType.GetGenericArguments()[0] == typeof(string))
+                            {
+                                var d = fi.GetValue(null) as System.Collections.IDictionary;
+                                if (d == null) continue;
+                                lock (d)
+                                {
+                                    var ks = new List<string>();
+                                    foreach (var k in d.Keys) { var sk = k as string; if (sk != null && Swap(sk, moves) != sk) ks.Add(sk); }
+                                    foreach (var k in ks) { string nk = Swap(k, moves); if (!d.Contains(nk)) d[nk] = d[k]; d.Remove(k); }
+                                }
+                            }
+                            else if (fi.FieldType == typeof(HashSet<string>))
+                            {
+                                var h = fi.GetValue(null) as HashSet<string>;
+                                if (h == null) continue;
+                                lock (h) foreach (var kv in moves) if (h.Remove(kv.Key)) h.Add(kv.Value);
+                            }
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch (Exception ex) { Log.Error("게임 정보 옮기기", ex); }
+            Log.Info("게임 정보 옮김 " + moves.Count + "개 (파일 " + files + " · 목록 " + texts + ")");
+        }
+
         public static void Reconcile(List<GameInfo> games)
         {
             try
@@ -82,6 +161,7 @@ namespace TkoolLauncher
                         l.Add(kv.Key);
                     }
                 bool changed = false;
+                var moves = new Dictionary<string, string>();
                 foreach (var g in games)
                 {
                     string id = IdOf(g);
@@ -113,17 +193,21 @@ namespace TkoolLauncher
                         string nm = GameScanner.FolderName(g.Folder);
                         if (!string.IsNullOrEmpty(nm) && nm == folder)
                         {
-                            st.Title = "=" + nm.Trim();
+                            string clean = TitleTidy.Clean(nm, new List<string>());
+                            st.Title = "=" + (string.IsNullOrWhiteSpace(clean) ? nm.Trim() : clean.Trim());
                             st.NameFrom = "폴더 이름" + NameFinder.ByUser;
                             Log.Info("폴더 이름 직접 바뀜 → 이름 고정: " + st.FolderName + " → " + nm);
                         }
                     }
                     st.FolderName = folder; st.Sig = sig;
                     stats[id] = st;
+                    Relinked.Add(id);
+                    moves[old] = id;
                     changed = true;
                     Log.Info("옮겨진 게임 기록 이어 붙임: " + g.Title + " (" + g.Folder + ")");
                 }
                 if (changed) Save();
+                if (moves.Count > 0) MoveIdData(moves);
             }
             catch (Exception ex) { Log.Error("게임 기록 맞추기", ex); }
         }

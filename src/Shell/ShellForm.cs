@@ -1295,6 +1295,7 @@ namespace TkoolLauncher
                     Scanning = false;
                     Activity.Done("scan", "게임 " + found.Count + "개 찾음");
                     int before = knownCount;
+                    GameData.Reconcile(found);   // 먼저 이어 붙여야 이름·위치만 바뀐 게임이 새 게임으로 안 잡힘
                     int fresh = NewInbox.Update(found);
                     SetGames(found);
                     knownCount = found.Count;
