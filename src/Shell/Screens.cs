@@ -354,9 +354,72 @@ namespace TkoolLauncher
 
         List<GameInfo> SortWide(IEnumerable<GameInfo> src)
         {
-            if (sortMode == 1) return src.OrderByDescending(Added).ToList();
-            if (sortMode == 2) return src.OrderByDescending(x => GameData.Get(x).TotalSeconds).ThenBy(x => x.Title, StringComparer.CurrentCulture).ToList();
-            return src.OrderBy(x => x.Title, StringComparer.CurrentCulture).ToList();
+            List<GameInfo> l;
+            if (sortMode == 1) l = src.OrderByDescending(Added).ToList();
+            else if (sortMode == 2) l = src.OrderByDescending(x => GameData.Get(x).TotalSeconds).ThenBy(x => x.Title, StringComparer.CurrentCulture).ToList();
+            else l = src.OrderBy(x => SeriesOf(x) ?? x.Title, StringComparer.CurrentCulture).ThenBy(x => x.Title, StringComparer.CurrentCulture).ToList();
+            return GroupSeries(l);
+        }
+
+        // ── 시리즈 폴더("[시리즈] 이름") 게임은 붙여서 진열 + 뒤에 꾸러미 음영 ──
+        static readonly Dictionary<string, string> seriesCache = new Dictionary<string, string>();
+        internal static string SeriesOf(GameInfo g)
+        {
+            if (g == null || !g.FromFolder || g.Folder == null) return null;
+            string v;
+            if (!seriesCache.TryGetValue(g.Folder, out v)) { v = GameScanner.Series(g.Folder); seriesCache[g.Folder] = v; }
+            return v;
+        }
+        /// <summary>시리즈 게임을 처음 나온 자리에 모두 모음(안에서는 이름순)</summary>
+        static List<GameInfo> GroupSeries(List<GameInfo> l)
+        {
+            var bySer = new Dictionary<string, List<GameInfo>>();
+            foreach (var x in l) { string s = SeriesOf(x); if (s == null) continue; List<GameInfo> m; if (!bySer.TryGetValue(s, out m)) bySer[s] = m = new List<GameInfo>(); m.Add(x); }
+            if (bySer.Count == 0) return l;
+            var outL = new List<GameInfo>(l.Count);
+            var done = new HashSet<string>();
+            foreach (var x in l)
+            {
+                string s = SeriesOf(x);
+                if (s == null) { outL.Add(x); continue; }
+                if (!done.Add(s)) continue;
+                outL.AddRange(bySer[s].OrderBy(y => y.Title, StringComparer.CurrentCulture));
+            }
+            return outL;
+        }
+        static readonly Color SeriesColor = Color.FromArgb(255, 170, 150, 255);
+        /// <summary>같은 시리즈가 이어진 카드 뒤에 줄마다 둥근 음영 (줄이 넘어가면 위아래가 닿게)</summary>
+        void PaintSeriesBacks(Graphics g)
+        {
+            int padX = Math.Max(S(6), Gap / 2), padY = S(8);
+            for (int i = 0; i < items.Count; )
+            {
+                string s = SeriesOf(items[i]);
+                if (s == null) { i++; continue; }
+                int j = i;
+                while (j + 1 < items.Count && SeriesOf(items[j + 1]) == s) j++;
+                if (j > i)
+                {
+                    int a = i;
+                    while (a <= j)
+                    {
+                        int b = a;
+                        while (b + 1 <= j && ItemTop(b + 1) == ItemTop(a)) b++;
+                        var ra = CapRect(a); var rb = CapRect(b);
+                        int top = ra.Top - padY, bot = ra.Bottom + padY;
+                        if (a > i) top = ra.Top - Gap / 2 - S(1);
+                        if (b < j) bot = ra.Bottom + Gap / 2 + S(1);
+                        var box = new Rectangle(ra.Left - padX, top, rb.Right - ra.Left + padX * 2, bot - top);
+                        if (box.Bottom > GridArea.Top - S(20) && box.Top < GridArea.Bottom + S(20))
+                            using (var path = Theme.Round(box, S(12)))
+                            using (var br = new SolidBrush(Color.FromArgb(70, SeriesColor.R, SeriesColor.G, SeriesColor.B)))
+                            using (var pen = new Pen(Color.FromArgb(120, SeriesColor.R, SeriesColor.G, SeriesColor.B), Math.Max(1, S(1))))
+                            { g.FillPath(br, path); g.DrawPath(pen, path); }
+                        a = b + 1;
+                    }
+                }
+                i = j + 1;
+            }
         }
 
         void PickChip(int i)
@@ -663,6 +726,7 @@ namespace TkoolLauncher
             }
             newChkR = newEndR = Rectangle.Empty;
             if (newN > 0) PaintNewBox(g);
+            if (Wide) PaintSeriesBacks(g);
             for (int i = 0; i < items.Count; i++)
             {
                 var r = CapRect(i);
@@ -921,8 +985,17 @@ namespace TkoolLauncher
 
             // 아래 띠
             int bx = r.X + S(12), bw = r.Width - S(24);
-            Draw.Text(g, gm.Title, Draw.BodyBold, new Rectangle(bx, imgR.Bottom + S(6), bw, S(26)), Theme.Text,
-                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+            var tf = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+            string ser = SeriesOf(gm);
+            if (ser != null)
+            {
+                // "시리즈 : 게임 이름" — 시리즈는 보라, 길면 시리즈 쪽을 최대 45%로 줄임
+                string sp = ser + " : ";
+                int sw = Math.Min(Draw.Measure(g, sp, Draw.BodyBold) + S(2), bw * 45 / 100);
+                Draw.Text(g, sp, Draw.BodyBold, new Rectangle(bx, imgR.Bottom + S(6), sw, S(26)), SeriesColor, tf);
+                Draw.Text(g, gm.Title, Draw.BodyBold, new Rectangle(bx + sw, imgR.Bottom + S(6), bw - sw, S(26)), Theme.Text, tf);
+            }
+            else Draw.Text(g, gm.Title, Draw.BodyBold, new Rectangle(bx, imgR.Bottom + S(6), bw, S(26)), Theme.Text, tf);
             int ly = imgR.Bottom + S(33), lh = S(18);
             int dx = bx;
             // 엔진 색 점 + 이름
