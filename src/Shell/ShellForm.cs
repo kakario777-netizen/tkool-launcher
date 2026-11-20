@@ -222,11 +222,18 @@ namespace TkoolLauncher
             if (VirtualPad.Running) VirtualPad.ControllerOff = true;
             if (GameWatch.Running) GameFreeze.Freeze();   // 패드를 직접 읽는 게임이 팝업 조작에 같이 움직이지 않게 — 여는 동안 게임 일시 정지
             Gamepad.Overlay = popup;
+            // 팝업 바깥을 누른 터치·클릭은 게임 대신 덮개가 받아 팝업만 닫음 (멈춘 게임에 클릭이 쌓였다 풀리면서 눌리던 것)
+            if (GameWatch.Running)
+            {
+                if (shield == null || shield.IsDisposed) shield = new PopupShield(() => BeginInvoke(new Action(() => ClosePopup())));
+                shield.Cover();
+            }
             popup.Open();
         }
 
         /// <summary>팝업 닫기. backToGame이면 원래 앞에 있던 게임으로 포커스를 돌려줌</summary>
         bool popupMapWas, popupPadOffWas;
+        PopupShield shield;
 
         bool autoMouse;
 
@@ -295,7 +302,8 @@ namespace TkoolLauncher
             Gamepad.Overlay = null;
             Gamepad.MapKeys = popupMapWas && GameWatch.Running;
             VirtualPad.ControllerOff = popupPadOffWas;
-            GameFreeze.Resume();
+            if (shield != null && !shield.IsDisposed && shield.Visible) shield.Hide();
+            GameFreeze.ResumeWhenReleased();   // 팝업에서 누른 버튼을 다 뗀 뒤에 게임 풀기
             // 팝업이 포커스를 안 가져가니 보통은 게임이 그대로 앞 — 혹시 다른 창이 앞이면 게임으로
             if (backToGame && gameHwnd != IntPtr.Zero && gameHwnd != Handle && GetForegroundWindow() != gameHwnd)
             {

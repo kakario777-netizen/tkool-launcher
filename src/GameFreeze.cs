@@ -40,6 +40,19 @@ namespace TkoolLauncher
             }
         }
 
+        /// <summary>패드 버튼을 다 뗄 때까지(최대 2초) 기다렸다가 풀기 — 팝업에서 누른 A·B가 풀리자마자 게임에 들어가지 않게</summary>
+        public static void ResumeWhenReleased()
+        {
+            if (!Frozen) return;
+            new System.Threading.Thread(() =>
+            {
+                var until = DateTime.Now.AddSeconds(2);
+                while (DateTime.Now < until && Gamepad.Held != 0) System.Threading.Thread.Sleep(15);
+                System.Threading.Thread.Sleep(80);
+                Resume();
+            }) { IsBackground = true }.Start();
+        }
+
         public static void Resume()
         {
             lock (frozen)

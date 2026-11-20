@@ -201,6 +201,8 @@ namespace TkoolLauncher
         }
 
         static int liveBits, edgeBits;
+        /// <summary>지금 눌려 있는 버튼 (스틱 방향 포함)</summary>
+        public static Pad Held => (Pad)System.Threading.Volatile.Read(ref liveBits);
         static volatile bool idle;
         static void PollLoop()
         {

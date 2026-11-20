@@ -124,3 +124,4 @@
 - HidHide 없으면 빠른 설정 컨트롤러 탭 맨 위 "팝업 중 게임 입력 막기 도구 설치"(VirtualPad.InstallDrivers — winget, 허락 창 한 번, 끝나면 재부팅).
 - 게임 폴더 살펴보기 진단: GameScanner.Current(지금 폴더)·Timing(폴더/스토어/설치 기록 초) — 아래 줄에 지금 폴더 이름, 끝나면 log "게임 폴더 살펴보기 끝: N개 · 초", 한 곳에 1분 넘게 머물면 log. RestoreRenamed·ScanAll 예외도 기록.
 - 팝업 중 게임 멈춤(HidHide 방식은 실패 — 이미 켜진 게임은 열어 둔 패드를 계속 읽음): GameFreeze.cs — 게임 위 팝업 열면 게임 폴더 프로그램을 NtSuspendProcess로 일시 정지, 닫으면 NtResumeProcess. 화면 크기·전체 화면 바꾸기 전·런처 종료·예외 때도 꼭 풂. 빠른 설정 컨트롤러 탭 "팝업 여는 동안 게임 멈춤"(Settings.PopupFreeze, 기본 켬). HidHide 설치 줄은 뺌.
+- 팝업 중 입력 완전 차단: 팝업 바깥 터치·클릭은 거의 투명한 덮개(Shell/PopupShield — 맨 위·포커스 안 뺏음, 팝업은 그 위)가 받아 팝업만 닫음(예전엔 멈춘 게임에 클릭이 쌓였다가 풀릴 때 눌림). 닫을 때 GameFreeze.ResumeWhenReleased — 패드 버튼을 다 뗄 때까지(최대 2초) 기다렸다 게임 풂(Gamepad.Held).
