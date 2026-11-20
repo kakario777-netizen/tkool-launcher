@@ -1714,7 +1714,7 @@ namespace TkoolLauncher
                 if (g.FromFolder)
                 {
                     string cleaned = TitleTidy.Clean(g.Title, g.Tags);
-                    if (!fixedByUser) g.Title = cleaned;
+                    if (!fixedByUser && !NameFinder.InSeries(g)) g.Title = cleaned;   // 시리즈 폴더 게임은 검수된 이름 그대로
                 }
             }
             Games = found;

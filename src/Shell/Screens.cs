@@ -1411,7 +1411,20 @@ namespace TkoolLauncher
 
             int pad = S(48);
             // 제목
-            Draw.TextShadow(g, game.Title, Draw.Hero, new Rectangle(pad, heroBottom - S(110), full.Width - pad * 2, S(56)), Theme.Text);
+            {
+                var stN = GameData.Get(game);
+                bool edited = stN.NameFrom != null && stN.NameFrom.EndsWith(NameFinder.ByUser);
+                int tw = full.Width - pad * 2, ty = heroBottom - S(110);
+                if (edited)
+                {
+                    // 직접 바꾼 이름 표시: 이름 뒤 초록 "(수정)" — 이름이 길면 이름 칸을 줄여 자리 확보
+                    int mw = Draw.Measure(g, "(수정)", Draw.Body) + S(14);
+                    int nw = Math.Min(Draw.Measure(g, game.Title, Draw.Hero) + S(4), tw - mw);
+                    Draw.TextShadow(g, game.Title, Draw.Hero, new Rectangle(pad, ty, nw, S(56)), Theme.Text);
+                    Draw.TextShadow(g, "(수정)", Draw.Body, new Rectangle(pad + nw + S(10), ty, mw, S(56)), Color.FromArgb(110, 220, 120));
+                }
+                else Draw.TextShadow(g, game.Title, Draw.Hero, new Rectangle(pad, ty, tw, S(56)), Theme.Text);
+            }
 
             // 버튼 줄
             int rowY = heroBottom - S(36);

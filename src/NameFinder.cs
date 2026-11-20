@@ -49,8 +49,12 @@ namespace TkoolLauncher
         public const string WinTried = "-3w";   // 인터넷에서 못 찾아 게임을 켜서 창 제목까지 본 흔적
 
         /// <summary>인터넷·읽어보기로 못 찾았고 이름이 아직 뜻 없음·외국어 → 표지 찍기 때 한 번 켜서 창 제목 보기</summary>
+        /// <summary>시리즈 폴더("[시리즈] …") 게임은 사용자가 검수한 것 — 이름 자동으로 안 바꿈</summary>
+        public static bool InSeries(GameInfo g) => g != null && g.FromFolder && GameScanner.Series(g.Folder) != null;
+
         public static bool NeedsWinName(GameInfo g)
         {
+            if (InSeries(g)) return false;
             if (g.Kind != GameKind.Tkool || !g.FromFolder) return false;
             var st = GameData.Get(g);
             if (st.NameFrom == null || st.NameFrom == WinTried || st.NameFrom.EndsWith(ByUser)) return false;   // 아직 인터넷 확인 전이거나 이미 봄·직접 고침
@@ -61,6 +65,7 @@ namespace TkoolLauncher
         public static bool ApplyScreenName(GameInfo g, string t)
         {
             var st = GameData.Get(g);
+            if (InSeries(g)) return false;
             if (st.NameFrom != null && st.NameFrom.EndsWith(ByUser)) return false;
             if (st.Title != null && st.Title.StartsWith("=") && st.NameFrom == null) return false;
             if (!Meaningless(g, g.Title) && !Foreign(g.Title)) return false;
@@ -86,7 +91,7 @@ namespace TkoolLauncher
         public static bool ApplyWinTitle(GameInfo g, string t)
         {
             var st = GameData.Get(g);
-            if (st.NameFrom != null && st.NameFrom.EndsWith(ByUser)) return false;   // 직접 고친 이름은 안 건드림
+            if (InSeries(g) || (st.NameFrom != null && st.NameFrom.EndsWith(ByUser))) return false;   // 직접 고친 이름·시리즈 폴더는 안 건드림
             t = (t ?? "").Trim();
             string pick = null, from = "게임 창 제목";
             if (t.Length > 0 && !Meaningless(g, t) && !BadName(t)) pick = t;
@@ -119,7 +124,7 @@ namespace TkoolLauncher
         /// <summary>찾아볼 게임: 아직 2판으로 확인 안 한 모든 쯔꾸르 폴더 게임 (사용자가 직접 고른 이름은 빼고)</summary>
         public static bool Wants(GameInfo g)
         {
-            if (!g.FromFolder || g.Folder == null) return false;
+            if (!g.FromFolder || g.Folder == null || InSeries(g)) return false;
             var st = GameData.Get(g);
             if (st.Title != null && st.Title.StartsWith("=") && st.NameFrom == null) return false;  // 사용자가 고른 이름
             if (st.NameFrom == null || st.NameFrom == "-" || st.NameFrom == "-2") return true;   // 아직 안 봤거나 예전 판
@@ -560,6 +565,7 @@ namespace TkoolLauncher
         static bool Apply(GameInfo g, Found f)
         {
             var st = GameData.Get(g);
+            if (InSeries(g)) return false;
             if (f != null && !string.IsNullOrWhiteSpace(f.Name) && f.Name != g.Title)
             {
                 st.NameFrom = (g.RawTitle ?? g.Title) + " · " + f.From;
