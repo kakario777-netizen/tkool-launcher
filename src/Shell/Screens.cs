@@ -28,6 +28,7 @@ namespace TkoolLauncher
         public virtual void OnDrag(int dx, int dy, bool start) { }
         public virtual void OnGamesChanged() { }
         public virtual List<Hint> Hints() => new List<Hint>();
+        public virtual void OnLeave() { }   // 화면이 닫히거나 다른 화면에 덮일 때
         public Point DownAt;            // 마지막으로 누른 곳 (끌기 시작 위치)
         protected int S(float v) => Theme.S(v);
     }
@@ -712,6 +713,7 @@ namespace TkoolLauncher
             Draw.PadGlyph(g, Pad.RB, x + S(20), cy);
             Draw.Text(g, items.Count + "개", Draw.Body, new Rectangle(Area.Right - Pad0 - S(120), Area.Y, S(120), TabH), Theme.SubText, Draw.Right);
             PaintBell(g, new Rectangle(Area.Right - Pad0 - S(120) - S(58), Area.Y + (TabH - S(44)) / 2, S(44), S(44)));
+            PaintSearchIcon(g, new Rectangle(Area.Right - Pad0 - S(120) - S(58) - S(54), Area.Y + (TabH - S(44)) / 2, S(44), S(44)));
             using (var p = new Pen(Color.FromArgb(40, 255, 255, 255))) g.DrawLine(p, Area.X + Pad0, Area.Y + TabH, Area.Right - Pad0, Area.Y + TabH);
             if (TkTab) PaintChips(g);
 
@@ -756,6 +758,21 @@ namespace TkoolLauncher
         }
 
         // ── 알림 종: 새 게임·중복·찍은 표지·시리즈 폴더 알림 모음 ──
+        Rectangle searchR;
+        void PaintSearchIcon(Graphics g, Rectangle r)
+        {
+            searchR = r;
+            var oldSm = g.SmoothingMode; g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            float cx = r.X + r.Width * 0.44f, cy = r.Y + r.Height * 0.44f, rad = S(9);
+            using (var p = new Pen(Theme.Text, Math.Max(2, S(3))))
+            {
+                g.DrawEllipse(p, cx - rad, cy - rad, rad * 2, rad * 2);
+                p.StartCap = p.EndCap = System.Drawing.Drawing2D.LineCap.Round;
+                g.DrawLine(p, cx + rad * 0.72f, cy + rad * 0.72f, cx + rad * 1.6f, cy + rad * 1.6f);
+            }
+            g.SmoothingMode = oldSm;
+        }
+
         Rectangle bellR;
         void PaintBell(Graphics g, Rectangle r)
         {
@@ -1126,7 +1143,8 @@ namespace TkoolLauncher
 
         public override void OnTap(Point p)
         {
-            if (Rectangle.Inflate(bellR, S(8), S(8)).Contains(p)) { Shell.OpenNotices(); return; }
+            if (Rectangle.Inflate(bellR, S(6), S(8)).Contains(p)) { Shell.OpenNotices(); return; }
+            if (Rectangle.Inflate(searchR, S(6), S(8)).Contains(p)) { Shell.Push(new SearchScreen()); return; }
             for (int i = 0; i < tabRects.Length; i++) if (tabRects[i].Contains(p)) { SetTab(i); return; }
             if (TkTab)
             {

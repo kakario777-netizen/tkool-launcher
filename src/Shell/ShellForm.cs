@@ -170,6 +170,7 @@ namespace TkoolLauncher
 
         public void Push(Screen s)
         {
+            try { if (stack.Count > 0) stack[stack.Count - 1].OnLeave(); } catch { }
             s.Shell = this;
             stack.Add(s);
             LayoutScreens();
@@ -181,6 +182,7 @@ namespace TkoolLauncher
         public void Pop()
         {
             if (stack.Count <= 1) return;
+            try { stack[stack.Count - 1].OnLeave(); } catch { }
             stack.RemoveAt(stack.Count - 1);
             FocusChanged();
             Animate();
@@ -188,7 +190,7 @@ namespace TkoolLauncher
 
         public void GoHome()
         {
-            while (stack.Count > 1) stack.RemoveAt(stack.Count - 1);
+            while (stack.Count > 1) { try { stack[stack.Count - 1].OnLeave(); } catch { } stack.RemoveAt(stack.Count - 1); }
             FocusChanged();
             Animate();
         }
@@ -1711,16 +1713,39 @@ namespace TkoolLauncher
                 names.Count == 1 ? "새 알림이 없어요" : null);
         }
 
+        /// <summary>폴더 이름 앞에 "[시리즈] " 붙이기 — 사용자가 고른 것만, 게임 중이면 안 함. 기록은 Reconcile이 이어 붙임</summary>
+        void MarkSeries(SeriesHint.Cand c)
+        {
+            if (GameWatch.Running) { ShowToast("게임을 끈 뒤에 해 주세요", 2500); return; }
+            string name = Path.GetFileName(c.Dir);
+            string to = Path.Combine(Path.GetDirectoryName(c.Dir), "[시리즈] " + name);
+            if (Directory.Exists(to)) { ShowToast("같은 이름 폴더가 이미 있어요", 2500); return; }
+            try
+            {
+                Directory.Move(c.Dir, to);
+                Log.Info("시리즈 폴더로 이름 바꿈: " + c.Dir + " → " + to);
+                SeriesHint.Current.Remove(c); noticeAt = DateTime.MinValue;
+                ShowToast("'[시리즈] " + name + "'(으)로 바꿨어요 — 목록을 다시 살펴볼게요", 3000);
+                Rescan();
+            }
+            catch (Exception ex)
+            {
+                Log.Error("시리즈 폴더 이름 바꾸기", ex);
+                ShowToast("이름을 못 바꿨어요 — 폴더 안 파일을 쓰는 프로그램이 있으면 닫고 다시 해 주세요", 4000);
+            }
+        }
+
         /// <summary>"[시리즈]" 안 붙은 폴더에 게임이 여러 개 — 폴더 열기 / 나중에 / 시리즈 아님</summary>
         public void ShowSeriesHint(SeriesHint.Cand c, int more)
         {
             string list = string.Join(", ", c.Games.Take(4).Select(x => x.Title)) + (c.Games.Count > 4 ? " …" : "");
             string sub = "이 폴더 안에 게임이 " + c.Games.Count + "개 있어요: " + list + "\n시리즈라면 폴더 이름 앞에 [시리즈]를 붙여 주세요."
                 + (more > 0 ? "\n(비슷한 폴더 " + more + "개 더 — 오른쪽 위 알림에서 볼 수 있어요)" : "");
-            PickerScreen.Show(this, "시리즈 폴더일까요? · " + c.Name, new[] { "폴더 위치 열기", "나중에 (알림에 남김)", "시리즈 아님 (다시 안 알림)" }, 0, i =>
+            PickerScreen.Show(this, "시리즈 폴더일까요? · " + c.Name, new[] { "폴더 이름 앞에 [시리즈] 붙이기", "폴더 위치 열기", "나중에 (알림에 남김)", "시리즈 아님 (다시 안 알림)" }, 0, i =>
             {
-                if (i == 0) SeriesHint.OpenFolder(c.Dir);
-                else if (i == 2) { SeriesHint.Ignore(c); noticeAt = DateTime.MinValue; Invalidate(); }
+                if (i == 0) MarkSeries(c);
+                else if (i == 1) SeriesHint.OpenFolder(c.Dir);
+                else if (i == 3) { SeriesHint.Ignore(c); noticeAt = DateTime.MinValue; Invalidate(); }
             }, sub);
         }
 

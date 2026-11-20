@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Text;
+using System.Windows.Forms;
 
 namespace TkoolLauncher
 {
@@ -28,7 +29,7 @@ namespace TkoolLauncher
             new[] { "A","B","C","D","E","F","G","H","I","J","K","L","M" },
             new[] { "N","O","P","Q","R","S","T","U","V","W","X","Y","Z" },
             new[] { "あ","か","さ","た","な","は","ま","や","ら","わ","1","2","3" },
-            new[] { "4","5","6","7","8","9","0","지우기","모두 지우기" },
+            new[] { "4","5","6","7","8","9","0","지우기","모두 지우기","⌨ 직접 입력" },
         };
 
         string query = "";
@@ -94,8 +95,48 @@ namespace TkoolLauncher
             return sb.ToString();
         }
 
+        // ───── 직접 입력 (윈도우 터치 키보드) — 화면은 키보드 위쪽에만 그림 ─────
+        TextBox tb;
+        bool Typing => tb != null;
+        Rectangle boxR;
+
+        void StartTyping()
+        {
+            if (tb != null) { tb.Focus(); TouchKeyboard.Show(); return; }
+            tb = new TextBox
+            {
+                Text = query, Font = Theme.Px(22, true), BorderStyle = BorderStyle.None,
+                BackColor = Color.FromArgb(23, 29, 37), ForeColor = Color.White,
+                Bounds = new Rectangle(boxR.X + S(20), boxR.Y + (boxR.Height - S(32)) / 2, Math.Max(S(100), boxR.Width - S(260)), S(32)),
+            };
+            tb.TextChanged += (o, e) => { query = tb.Text; Update(); Shell.Invalidate(); };
+            tb.KeyDown += (o, e) =>
+            {
+                if (e.KeyCode == System.Windows.Forms.Keys.Enter || e.KeyCode == System.Windows.Forms.Keys.Escape) { e.SuppressKeyPress = true; StopTyping(); if (results.Count > 0) onResults = true; Shell.FocusChanged(); }
+            };
+            Shell.Controls.Add(tb);
+            tb.BringToFront();
+            tb.Focus(); tb.SelectionStart = tb.Text.Length;
+            TouchKeyboard.Show();
+            onResults = false;
+            Shell.Invalidate();
+        }
+
+        void StopTyping()
+        {
+            if (tb == null) return;
+            var t = tb; tb = null;
+            try { Shell.Controls.Remove(t); t.Dispose(); } catch { }
+            TouchKeyboard.Hide();
+            try { Shell.Focus(); } catch { }
+            Shell.Invalidate();
+        }
+
+        public override void OnLeave() => StopTyping();
+
         void Press(string k)
         {
+            if (k == "⌨ 직접 입력") { StartTyping(); return; }
             if (k == "지우기") { if (query.Length > 0) query = query.Substring(0, query.Length - 1); }
             else if (k == "모두 지우기") query = "";
             else query += k;
@@ -108,9 +149,11 @@ namespace TkoolLauncher
             int pad = S(40);
             // 검색 칸
             var box = new Rectangle(Area.X + pad, Area.Y + S(16), Area.Width - pad * 2, S(52));
-            Draw.Fill(g, box, S(6), Color.FromArgb(200, 23, 29, 37));
-            Draw.Ring(g, box, S(6), Color.FromArgb(70, 255, 255, 255), S(1));
-            if (query.Length == 0)
+            boxR = box;
+            Draw.Fill(g, box, S(6), Color.FromArgb(255, 23, 29, 37));
+            Draw.Ring(g, box, S(6), Typing ? Theme.Accent : Color.FromArgb(70, 255, 255, 255), Typing ? S(2) : S(1));
+            if (Typing) { }   // 글자는 입력 칸이 그림
+            else if (query.Length == 0)
                 Draw.Text(g, "글자를 골라 검색 — 한글은 초성으로 (ㅁㄴㅇㅈ → 마녀의 집)", Draw.Body, Rectangle.Inflate(box, -S(20), 0), Theme.SubText);
             else
                 Draw.Text(g, query, Theme.Px(22, true), Rectangle.Inflate(box, -S(20), 0), Theme.Text);
@@ -120,6 +163,15 @@ namespace TkoolLauncher
             resRects.Clear();
             int ch = (int)(Area.Height * 0.30f), cw = ch * 2 / 3;
             int ry = box.Bottom + S(18);
+            if (Typing)
+            {
+                // 터치 키보드가 아래를 덮으니 결과는 키보드 위 남은 곳에만 (넘치지 않게 크기 줄임)
+                var scr = System.Windows.Forms.Screen.FromControl(Shell).Bounds;
+                int safe = Shell.PointToClient(new Point(0, TouchKeyboard.SafeBottom(scr))).Y;
+                int room = Math.Min(Area.Bottom, safe) - ry - S(34);
+                ch = Math.Max(S(60), Math.Min(ch, room)); cw = ch * 2 / 3;
+                Draw.Text(g, "Enter = 다 썼어요 · 결과 누르면 바로 열기", Draw.Small, new Rectangle(Area.X + pad, ry + ch + S(6), Area.Width - pad * 2, S(24)), Theme.SubText);
+            }
             int start = onResults ? Math.Max(0, rfocus - Math.Max(1, (Area.Width - pad * 2) / (cw + S(14)) - 2)) : 0;
             int x = Area.X + pad;
             for (int i = start; i < results.Count && x < Area.Right; i++)
@@ -140,6 +192,7 @@ namespace TkoolLauncher
 
             // 키보드
             keyRects.Clear();
+            if (Typing) return;   // 직접 입력 중엔 화면 글자판 숨김 (터치 키보드 자리)
             int ky = ry + ch + S(22);
             int kh = Math.Min(S(52), (Area.Bottom - ky - S(10)) / Keys.Length - S(6));
             int maxCols = 14;
@@ -168,6 +221,12 @@ namespace TkoolLauncher
 
         public override void OnPad(Pad b)
         {
+            if (Typing)
+            {
+                // 직접 입력 중: B = 입력 끝, 아래 = 결과로
+                if (b == Pad.B || b == Pad.Down || b == Pad.Y) { StopTyping(); if (b != Pad.B && results.Count > 0) onResults = true; Shell.FocusChanged(); }
+                return;
+            }
             if (b == Pad.B)
             {
                 if (query.Length > 0) Press("지우기"); else Shell.Pop();
@@ -204,6 +263,7 @@ namespace TkoolLauncher
 
         public override void OnTap(Point p)
         {
+            if (boxR.Contains(p)) { StartTyping(); return; }
             foreach (var kv in keyRects)
                 if (kv.Value.Contains(p))
                 {
@@ -217,7 +277,7 @@ namespace TkoolLauncher
                 if (resRects[i].Contains(p))
                 {
                     int idx = resStart + i;
-                    if (idx < results.Count) { rfocus = idx; Shell.Push(new DetailScreen(results[idx])); }
+                    if (idx < results.Count) { rfocus = idx; StopTyping(); Shell.Push(new DetailScreen(results[idx])); }
                     return;
                 }
         }

@@ -28,7 +28,8 @@ namespace TkoolLauncher
             ok.FlatAppearance.BorderSize = 0; cancel.FlatAppearance.BorderSize = 0;
             Controls.AddRange(new Control[] { lab, box, ok, cancel });
             AcceptButton = ok; CancelButton = cancel;
-            Shown += (s, e) => { box.Focus(); box.SelectAll(); ShowTouchKeyboard(); };
+            FormClosed += (s, e) => TouchKeyboard.Hide();
+            Shown += (s, e) => { box.Focus(); box.SelectAll(); TouchKeyboard.Show(); };
         }
 
         static void ShowTouchKeyboard()
