@@ -58,9 +58,10 @@ namespace TkoolLauncher
                 GameData.Load();
                 Gamepad.Start();
                 Application.ApplicationExit += (s, e) => { try { Log.Info("프로그램 종료 신호"); } catch { } };
-                try { Application.Run(new ShellForm()); }
+                try { Application.ApplicationExit += (o, e) => GameFreeze.Resume();   // 런처가 꺼져도 멈춘 게임은 꼭 풀기
+            Application.Run(new ShellForm()); }
                 catch (Exception ex) { Log.Error("실행", ex); throw; }
-                finally { Log.Stop(); }
+                finally { try { GameFreeze.Resume(); } catch { } Log.Stop(); }
             }
         }
     }

@@ -220,7 +220,7 @@ namespace TkoolLauncher
             popupMapWas = Gamepad.MapKeys; Gamepad.MapKeys = false;
             popupPadOffWas = VirtualPad.ControllerOff;
             if (VirtualPad.Running) VirtualPad.ControllerOff = true;
-            else if (GameWatch.Running) VirtualPad.HideForPopup(true);   // 패드를 직접 읽는 게임이 팝업 조작에 같이 움직이지 않게
+            if (GameWatch.Running) GameFreeze.Freeze();   // 패드를 직접 읽는 게임이 팝업 조작에 같이 움직이지 않게 — 여는 동안 게임 일시 정지
             Gamepad.Overlay = popup;
             popup.Open();
         }
@@ -253,6 +253,7 @@ namespace TkoolLauncher
         /// <summary>게임 화면 크기 강제 (원래·꽉 채우기·정수배·2배·3배) + 이 게임은 다음에도</summary>
         public void SetGameScreenSize(int mode)
         {
+            GameFreeze.Resume();   // 멈춘 게임 창은 크기 바꾸기 신호를 못 받음
             IntPtr gw = gameHwnd != IntPtr.Zero ? gameHwnd : GetForegroundWindow();
             ScreenFit.Apply(gw, mode, 2);
             if (PlayingGame != null) ScreenFit.Remember(PlayingGame, mode);
@@ -262,6 +263,7 @@ namespace TkoolLauncher
         /// <summary>전체 화면 ↔ 창 (Alt+Enter) 뒤 창이 되면 화면 가운데로</summary>
         public void ToggleFullscreen()
         {
+            GameFreeze.Resume();
             IntPtr gw = gameHwnd != IntPtr.Zero ? gameHwnd : GetForegroundWindow();
             var pg = PlayingGame;
             bool mvmz = pg != null && pg.IsTkool && (pg.Version == TkoolVersion.MV || pg.Version == TkoolVersion.MZ);
@@ -293,7 +295,7 @@ namespace TkoolLauncher
             Gamepad.Overlay = null;
             Gamepad.MapKeys = popupMapWas && GameWatch.Running;
             VirtualPad.ControllerOff = popupPadOffWas;
-            VirtualPad.HideForPopup(false);
+            GameFreeze.Resume();
             // 팝업이 포커스를 안 가져가니 보통은 게임이 그대로 앞 — 혹시 다른 창이 앞이면 게임으로
             if (backToGame && gameHwnd != IntPtr.Zero && gameHwnd != Handle && GetForegroundWindow() != gameHwnd)
             {
@@ -822,6 +824,7 @@ namespace TkoolLauncher
 
         public void ExitForReal()
         {
+            GameFreeze.Resume();
             realExit = true; TaskbarHide.Show();
             Log.Info("알림 아이콘에서 완전히 종료");
             Close();

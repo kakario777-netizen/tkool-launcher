@@ -25,6 +25,7 @@ namespace TkoolLauncher
         // 성능 표시(오버레이) 꾸미기
         public static int OvStyle = 0, OvPos = 0, OvSize = 1, OvColor = 0, OvBg = 60, OvText = 100, OvItems = 0x7FF, OvMargin = 1;
         public static bool OvOn;
+        public static bool PopupFreeze = true;   // 게임 위 팝업 여는 동안 게임 일시 정지
         public static string OvOrder = "", OvItemColors = "", OvGame = "";   // 항목 순서 "0,1,…"·항목별 색 "i=c;…"·게임별 위치 "id=pos,x,y;…"
         public static int OvLabels = 0x7FF;   // 항목 이름(회색 글자) 보이기 비트   // 성능 표시 켜 둔 채로 기억
         public static float OvX = -1, OvY = -1;   // 끌어 놓은 위치 (화면 비율 0~1)
@@ -85,6 +86,7 @@ namespace TkoolLauncher
                     else if (key == "OvItems") { int.TryParse(val, out OvItems); if (OvItems == 0x3FF) OvItems = 0x7FF; }   // 예전 "다 보이기"면 새 항목(충전 전력)도
                     else if (key == "OvMargin") int.TryParse(val, out OvMargin);
                     else if (key == "OvOn") OvOn = val == "1";
+                    else if (key == "PopupFreeze") PopupFreeze = val != "0";
                     else if (key == "OvOrder") OvOrder = val;
                     else if (key == "OvItemColors") OvItemColors = val;
                     else if (key == "OvGame") OvGame = val;
@@ -156,7 +158,7 @@ namespace TkoolLauncher
                 sb.AppendLine("HardwareControl=" + (HardwareControl ? "1" : "0"));
                 sb.AppendLine("OvStyle=" + OvStyle); sb.AppendLine("OvPos=" + OvPos); sb.AppendLine("OvSize=" + OvSize);
                 sb.AppendLine("OvColor=" + OvColor); sb.AppendLine("OvBg=" + OvBg); sb.AppendLine("OvText=" + OvText); sb.AppendLine("OvItems=" + OvItems);
-                sb.AppendLine("OvMargin=" + OvMargin); sb.AppendLine("OvOn=" + (OvOn ? "1" : "0")); sb.AppendLine("OvOrder=" + OvOrder); sb.AppendLine("OvItemColors=" + OvItemColors); sb.AppendLine("OvGame=" + OvGame); sb.AppendLine("OvLabels=" + OvLabels); sb.AppendLine("PerfMode=" + PerfMode); sb.AppendLine("LibStartTab=" + LibStartTab); sb.AppendLine("ChipOrder=" + ChipOrder); sb.AppendLine("DupIgnore=" + DupIgnore); sb.AppendLine("TagList=" + TagList);
+                sb.AppendLine("OvMargin=" + OvMargin); sb.AppendLine("OvOn=" + (OvOn ? "1" : "0")); sb.AppendLine("PopupFreeze=" + (PopupFreeze ? "1" : "0")); sb.AppendLine("OvOrder=" + OvOrder); sb.AppendLine("OvItemColors=" + OvItemColors); sb.AppendLine("OvGame=" + OvGame); sb.AppendLine("OvLabels=" + OvLabels); sb.AppendLine("PerfMode=" + PerfMode); sb.AppendLine("LibStartTab=" + LibStartTab); sb.AppendLine("ChipOrder=" + ChipOrder); sb.AppendLine("DupIgnore=" + DupIgnore); sb.AppendLine("TagList=" + TagList);
                 sb.AppendLine("OvX=" + OvX.ToString(System.Globalization.CultureInfo.InvariantCulture)); sb.AppendLine("OvY=" + OvY.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 sb.AppendLine("AdminTaskExe=" + AdminTaskExe);
                 sb.AppendLine("Tdp=" + Tdp);
