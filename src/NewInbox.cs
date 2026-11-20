@@ -35,6 +35,22 @@ namespace TkoolLauncher
             catch { }
         }
 
+        /// <summary>
+        /// 폴더가 2일보다 전에 만들어졌으면 원래 있던 게임: 복사·압축 풀기로 들어온 새 게임은 폴더 만든 날짜가 지금이고,
+        /// 같은 드라이브 안에서 옮기거나 이름만 바꾼 폴더는 만든 날짜가 그대로라 새 게임이 아님.
+        /// </summary>
+        static bool OldFolder(string folder)
+        {
+            try
+            {
+                string d = (folder ?? "").TrimEnd('\\');
+                if (!Directory.Exists(d)) return false;
+                var c = Directory.GetCreationTime(d);
+                return c.Year > 1990 && (DateTime.Now - c).TotalDays > 2;
+            }
+            catch { return false; }
+        }
+
         public static int Count { get { lock (lk) { Load(); return fresh.Count; } } }
 
         public static bool IsNew(GameInfo g)
@@ -63,10 +79,15 @@ namespace TkoolLauncher
                         var st = GameData.Get(g);
                         if (st.TotalSeconds > 0 || st.LastPlayed > 0) continue;   // 폴더만 옮긴 예전 게임(기록 있음)은 새 게임 아님
                         if (GameData.Relinked.Contains(GameData.IdOf(g))) continue;   // 이름·위치만 바뀐 예전 게임 (게임 데이터가 같음)
+                        if (OldFolder(g.Folder)) continue;   // 폴더가 만들어진 지 오래 = 원래 있던 게임을 옮기거나 이름만 바꾼 것
                         if (fresh.Add(k)) added++;
                     }
                 }
                 fresh.RemoveWhere(k => !keys.Contains(k));   // 지웠거나 옮긴 것
+                // 예전 판이 원래 있던 게임까지 새 게임으로 넣은 것 정리 (폴더가 오래됐으면 새 게임 아님)
+                int before = fresh.Count;
+                fresh.RemoveWhere(OldFolder);
+                if (fresh.Count != before) Log.Info("새 게임 칸에서 원래 있던 게임 " + (before - fresh.Count) + "개 뺌");
                 Save();
                 if (added > 0) Log.Info("새로 들어온 게임 " + added + "개");
                 return added;
