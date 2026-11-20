@@ -1234,6 +1234,8 @@ namespace TkoolLauncher
                     if (c.Count < 2) { Shell.ShowToast("다른 이름 후보가 없어요", 1500); return; }
                     int i = c.IndexOf(g.Title);
                     string next = c[(i + 1) % c.Count];
+                    if (st.NameFrom == null || !st.NameFrom.EndsWith(NameFinder.ByUser))
+                        st.NameFrom = (st.NameFrom != null && !st.NameFrom.StartsWith("-") ? st.NameFrom.Split(new[] { " · " }, StringSplitOptions.None)[0] : (g.RawTitle ?? g.Title)) + NameFinder.ByUser;
                     g.Title = next; st.Title = "=" + next; GameData.Save();
                     break;
                 case 1:

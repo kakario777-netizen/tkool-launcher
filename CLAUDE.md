@@ -126,3 +126,4 @@
 - 팝업 중 게임 멈춤(HidHide 방식은 실패 — 이미 켜진 게임은 열어 둔 패드를 계속 읽음): GameFreeze.cs — 게임 위 팝업 열면 게임 폴더 프로그램을 NtSuspendProcess로 일시 정지, 닫으면 NtResumeProcess. 화면 크기·전체 화면 바꾸기 전·런처 종료·예외 때도 꼭 풂. 빠른 설정 컨트롤러 탭 "팝업 여는 동안 게임 멈춤"(Settings.PopupFreeze, 기본 켬). HidHide 설치 줄은 뺌.
 - 팝업 중 입력 완전 차단: 팝업 바깥 터치·클릭은 거의 투명한 덮개(Shell/PopupShield — 맨 위·포커스 안 뺏음, 팝업은 그 위)가 받아 팝업만 닫음(예전엔 멈춘 게임에 클릭이 쌓였다가 풀릴 때 눌림). 닫을 때 GameFreeze.ResumeWhenReleased — 패드 버튼을 다 뗄 때까지(최대 2초) 기다렸다 게임 풂(Gamepad.Held).
 - 시리즈 폴더: 사용자가 시리즈 게임을 "[시리즈] 이름" 폴더에 모음 → GameScanner.Series로 태그 "시리즈: 이름"(TagsAll 맨 앞, 태그 ▾에서 고름), FolderName·FolderNames는 그 폴더 이름을 게임 이름으로 안 씀.
+- 직접 바꾼 이름 보호: 폴더 이름을 사용자가 바꾸면(Reconcile에서 같은 Sig·다른 폴더 이름) 그 폴더 이름을 "=이름" + " · 직접 고침"으로 고정. 정리 모드 이름 돌리기·창 제목 이름도 직접 고침이면 안 건드림.

@@ -107,6 +107,17 @@ namespace TkoolLauncher
                             }
                             catch { }
                         }
+                    // 사용자가 폴더 이름을 직접 바꿨으면 그 이름을 사용자가 고른 이름으로 — 런처가 다시 자동으로 안 바꿈
+                    if (!string.IsNullOrEmpty(st.FolderName) && st.FolderName != folder && g.FromFolder)
+                    {
+                        string nm = GameScanner.FolderName(g.Folder);
+                        if (!string.IsNullOrEmpty(nm) && nm == folder)
+                        {
+                            st.Title = "=" + nm.Trim();
+                            st.NameFrom = "폴더 이름" + NameFinder.ByUser;
+                            Log.Info("폴더 이름 직접 바뀜 → 이름 고정: " + st.FolderName + " → " + nm);
+                        }
+                    }
                     st.FolderName = folder; st.Sig = sig;
                     stats[id] = st;
                     changed = true;

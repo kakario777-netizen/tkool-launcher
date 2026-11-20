@@ -86,6 +86,7 @@ namespace TkoolLauncher
         public static bool ApplyWinTitle(GameInfo g, string t)
         {
             var st = GameData.Get(g);
+            if (st.NameFrom != null && st.NameFrom.EndsWith(ByUser)) return false;   // 직접 고친 이름은 안 건드림
             t = (t ?? "").Trim();
             string pick = null, from = "게임 창 제목";
             if (t.Length > 0 && !Meaningless(g, t) && !BadName(t)) pick = t;
