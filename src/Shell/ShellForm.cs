@@ -571,7 +571,6 @@ namespace TkoolLauncher
                     {
                         wc.Headers[System.Net.HttpRequestHeader.UserAgent] = "TkoolLauncher";
                         string json = Updater.LatestJson(wc, new[] {
-                            "https://api.github.com/repos/kakario777-netizen/mini-cheat-release/releases/latest",
                             "https://api.github.com/repos/kakario777-netizen/mini-cheat/releases/latest" });
                         string url = TextDecode.JsonString(json, "browser_download_url");
                         if (url == null) throw new Exception("릴리스를 못 찾음");

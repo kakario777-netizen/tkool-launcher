@@ -15,10 +15,8 @@ namespace TkoolLauncher
     /// </summary>
     static class Updater
     {
-        // 배포는 공개 릴리스 저장소(코드 저장소는 비공개). 옮기는 동안은 예전 저장소도 한 번 더 봄
         static readonly string[] Apis =
         {
-            "https://api.github.com/repos/kakario777-netizen/tkool-launcher-release/releases/latest",
             "https://api.github.com/repos/kakario777-netizen/tkool-launcher/releases/latest",
         };
 
