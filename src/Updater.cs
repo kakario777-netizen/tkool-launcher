@@ -15,7 +15,25 @@ namespace TkoolLauncher
     /// </summary>
     static class Updater
     {
-        const string Api = "https://api.github.com/repos/kakario777-netizen/tkool-launcher/releases/latest";
+        // 배포는 공개 릴리스 저장소(코드 저장소는 비공개). 옮기는 동안은 예전 저장소도 한 번 더 봄
+        static readonly string[] Apis =
+        {
+            "https://api.github.com/repos/kakario777-netizen/tkool-launcher-release/releases/latest",
+            "https://api.github.com/repos/kakario777-netizen/tkool-launcher/releases/latest",
+        };
+
+        /// <summary>앞에서부터 받아지는 첫 릴리스 정보</summary>
+        public static string LatestJson(WebClient wc, string[] apis)
+        {
+            Exception last = null;
+            foreach (var a in apis)
+            {
+                try { string j = wc.DownloadString(a); if (j != null && j.Contains("tag_name")) return j; }
+                catch (Exception ex) { last = ex; }
+            }
+            if (last != null) throw last;
+            return null;
+        }
 
         public static bool RestartPending;
 
@@ -53,7 +71,8 @@ namespace TkoolLauncher
                     {
                         wc.Encoding = Encoding.UTF8;
                         wc.Headers[HttpRequestHeader.UserAgent] = "TkoolLauncher";
-                        string json = wc.DownloadString(Api);
+                        string json = LatestJson(wc, Apis);
+                        if (json == null) return;
 
                         string tag = TextDecode.JsonString(json, "tag_name");
                         if (tag == null) return;
