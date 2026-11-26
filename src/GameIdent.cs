@@ -20,6 +20,12 @@ namespace TkoolLauncher
         {
             string id = GameData.IdOf(g);
             lock (mem) { Tuple<string, string, string, List<string>> t; if (mem.TryGetValue(id, out t)) return t; }
+            if (UiThread.IsUi)
+            {
+                // 화면 그리다 처음 만난 게임: 폴더 속을 뒤지는 건 뒤에서 (첫 시작 때 화면이 1분 넘게 멈추던 원인)
+                var gg = g; UiThread.Later("ident:" + id, () => Scan(gg));
+                return Tuple.Create<string, string, string, List<string>>(null, null, null, new List<string>());
+            }
             string rj = null, dmm = null, steam = null; var names = new List<string>();
             string dir = g.InstallDir ?? g.Folder;
             try

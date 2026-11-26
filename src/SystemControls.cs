@@ -363,27 +363,46 @@ namespace TkoolLauncher
         // ───────── 윈도우 시작 시 자동 실행 ─────────
         const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
-        public static bool GetAutoStart()
+        static bool RunKeyExists()
         {
-            try
-            {
-                using (var k = Registry.CurrentUser.OpenSubKey(RunKey))
-                    return k?.GetValue("TkoolLauncher") != null;
-            }
+            try { using (var k = Registry.CurrentUser.OpenSubKey(RunKey)) return k?.GetValue("TkoolLauncher") != null; }
             catch { return false; }
         }
 
+        public static bool GetAutoStart() => Settings.AutoStartTask || RunKeyExists();
+
+        /// <summary>
+        /// 자동 실행: 로그인 작업(관리자 권한·배터리여도·10초 뒤)으로 등록 — 예전 시작프로그램(Run) 방식은
+        /// 관리자 작업을 한 번 더 거쳐야 해서 부팅 때 자주 안 켜졌음. 작업을 못 만들면 예전 방식으로.
+        /// </summary>
         public static void SetAutoStart(bool on)
         {
             try
             {
-                using (var k = Registry.CurrentUser.OpenSubKey(RunKey, true))
+                if (on)
                 {
-                    if (on) k.SetValue("TkoolLauncher", "\"" + Application.ExecutablePath + "\" --tray");   // 부팅 땐 알림 영역으로 조용히
-                    else k.DeleteValue("TkoolLauncher", false);
+                    if (Hardware.CreateStartTask())
+                    {
+                        Settings.AutoStartTask = true;
+                        using (var k = Registry.CurrentUser.OpenSubKey(RunKey, true)) k?.DeleteValue("TkoolLauncher", false);
+                        Log.Info("자동 실행: 로그인 작업으로 등록");
+                    }
+                    else
+                    {
+                        Settings.AutoStartTask = false;
+                        using (var k = Registry.CurrentUser.OpenSubKey(RunKey, true)) k?.SetValue("TkoolLauncher", "\"" + Application.ExecutablePath + "\" --tray");
+                        Log.Info("자동 실행: 작업을 못 만들어 시작프로그램으로 등록");
+                    }
                 }
+                else
+                {
+                    using (var k = Registry.CurrentUser.OpenSubKey(RunKey, true)) k?.DeleteValue("TkoolLauncher", false);
+                    if (Settings.AutoStartTask || Hardware.StartTaskExists()) Hardware.DeleteStartTask();
+                    Settings.AutoStartTask = false;
+                }
+                Settings.Save();
             }
-            catch { }
+            catch (Exception ex) { Log.Info("자동 실행 설정 실패: " + ex.Message); }
         }
     }
 }

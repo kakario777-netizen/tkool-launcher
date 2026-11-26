@@ -41,6 +41,14 @@ namespace TkoolLauncher
         {
             string id = GameData.IdOf(g);
             lock (mem) { Result r; if (mem.TryGetValue(id, out r)) return r; }
+            if (UiThread.IsUi)
+            {
+                // 폴더 속 파일을 뒤지는 건 뒤에서 — 그동안은 "모름"
+                var gg = g; UiThread.Later("input:" + id, () => Get(gg));
+                var tmp = new Result();
+                string us0; lock (mem) if (User().TryGetValue(id, out us0) && us0.Length == 4) { tmp.S = us0.ToCharArray(); tmp.User = true; }
+                return tmp;
+            }
             var res = Detect(g);
             string us; lock (mem) { if (User().TryGetValue(id, out us) && us.Length == 4) { res.S = us.ToCharArray(); res.User = true; } mem[id] = res; }
             return res;

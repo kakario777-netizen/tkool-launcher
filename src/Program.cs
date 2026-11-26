@@ -51,7 +51,23 @@ namespace TkoolLauncher
                     // 관리자로 다시 켤 때 '알림 영역으로 시작'을 넘겨줌 (작업엔 인수를 못 붙여서 표시 파일로)
                     if (tray) try { System.IO.File.WriteAllText(trayFlag, "1"); } catch { }
                     if (string.Equals(Settings.AdminTaskExe, exe, StringComparison.OrdinalIgnoreCase) && Hardware.RunAdminTask())
-                    { Log.Info("관리자 권한으로 다시 켬"); return; }
+                    {
+                        // 관리자 런처가 정말 떴는지 확인 (부팅 직후·배터리 등으로 작업이 안 켜지면 그냥 이대로 켬)
+                        bool ok = false;
+                        try
+                        {
+                            var me = System.Diagnostics.Process.GetCurrentProcess();
+                            for (int i = 0; i < 16 && !ok; i++)
+                            {
+                                Thread.Sleep(500);
+                                ok = System.Diagnostics.Process.GetProcessesByName(me.ProcessName).Any(p => p.Id != me.Id);
+                            }
+                        }
+                        catch { ok = true; }
+                        if (ok) { Log.Info("관리자 권한으로 다시 켬"); Log.Stop(); return; }
+                        Log.Info("관리자 작업이 안 떠서 그냥 켬");
+                        try { System.IO.File.Delete(trayFlag); } catch { }
+                    }
                 }
                 if (System.IO.File.Exists(trayFlag)) { tray = true; try { System.IO.File.Delete(trayFlag); } catch { } }
                 ShellForm.StartInTray = tray;

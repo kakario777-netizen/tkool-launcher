@@ -403,18 +403,90 @@ namespace TkoolLauncher
             catch { return false; }
         }
 
+        /// <summary>
+        /// 작업 스케줄러 작업을 XML로 만듦 — 기본값이면 배터리일 때 안 켜지고(휴대 기기라 치명적), 3일 지나면 강제로 꺼지고,
+        /// 우선순위가 낮아서(7) 런처가 굼떠짐. 그래서: 배터리여도 켜기·시간 제한 없음·보통 우선순위.
+        /// logon = 윈도우 로그인할 때 자동으로(자동 실행용).
+        /// </summary>
+        static string TaskXml(string exe, string args, bool logon)
+        {
+            string user = System.Security.Principal.WindowsIdentity.GetCurrent().Name;
+            Func<string, string> X = v => System.Security.SecurityElement.Escape(v);
+            return "<?xml version=\"1.0\" encoding=\"UTF-16\"?>\r\n" +
+                "<Task version=\"1.2\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">" +
+                (logon ? "<Triggers><LogonTrigger><Enabled>true</Enabled><UserId>" + X(user) + "</UserId><Delay>PT10S</Delay></LogonTrigger></Triggers>" : "") +
+                "<Principals><Principal id=\"Author\"><UserId>" + X(user) + "</UserId><LogonType>InteractiveToken</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>" +
+                "<Settings><MultipleInstancesPolicy>Parallel</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>" +
+                "<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><AllowHardTerminate>true</AllowHardTerminate><StartWhenAvailable>true</StartWhenAvailable>" +
+                "<RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable><IdleSettings><StopOnIdleEnd>false</StopOnIdleEnd><RestartOnIdle>false</RestartOnIdle></IdleSettings>" +
+                "<AllowStartOnDemand>true</AllowStartOnDemand><Enabled>true</Enabled><Hidden>false</Hidden><RunOnlyIfIdle>false</RunOnlyIfIdle><WakeToRun>false</WakeToRun>" +
+                "<ExecutionTimeLimit>PT0S</ExecutionTimeLimit><Priority>4</Priority></Settings>" +
+                "<Actions Context=\"Author\"><Exec><Command>" + X(exe) + "</Command><Arguments>" + X(args) + "</Arguments></Exec></Actions></Task>";
+        }
+
+        /// <summary>작업 만들기. 이미 관리자면 창 없이, 아니면 허락 창 한 번</summary>
+        static bool MakeTask(string name, string xml, bool admin)
+        {
+            string tmp = Path.Combine(Path.GetTempPath(), name + ".xml");
+            try
+            {
+                File.WriteAllText(tmp, xml, System.Text.Encoding.Unicode);
+                var psi = new ProcessStartInfo("schtasks.exe", "/create /f /tn " + name + " /xml \"" + tmp + "\"");
+                if (admin) { psi.UseShellExecute = false; psi.CreateNoWindow = true; }
+                else { psi.UseShellExecute = true; psi.Verb = "runas"; psi.WindowStyle = ProcessWindowStyle.Hidden; }
+                var p = Process.Start(psi);
+                p.WaitForExit(15000);
+                if (p.ExitCode != 0) Log.Info("작업 만들기 실패(" + name + "): " + p.ExitCode);
+                return p.ExitCode == 0;
+            }
+            catch (Exception ex) { Log.Info("작업 만들기 실패(" + name + "): " + ex.Message); return false; }
+            finally { try { File.Delete(tmp); } catch { } }
+        }
+
+        static bool AdminNow()
+        {
+            try { return new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent()).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator); }
+            catch { return false; }
+        }
+
         /// <summary>윈도우 허락 창이 한 번 뜨고, 관리자 작업을 만든 뒤 바로 관리자 런처로 다시 켬</summary>
         public static bool CreateAdminTask()
         {
             string exe = System.Windows.Forms.Application.ExecutablePath;
-            string args = "/create /f /tn " + TaskName + " /rl highest /sc once /st 00:00 /tr \"\\\"" + exe + "\\\" --elevated\"";
+            return MakeTask(TaskName, TaskXml(exe, "--elevated", false), AdminNow());
+        }
+
+        // ───── 윈도우 켤 때 자동 실행: 로그인 작업(관리자·배터리 상관없이) ─────
+        public const string StartTask = "TkoolLauncherStart";
+
+        public static bool StartTaskExists()
+        {
             try
             {
-                var p = Process.Start(new ProcessStartInfo("schtasks.exe", args) { UseShellExecute = true, Verb = "runas", WindowStyle = ProcessWindowStyle.Hidden });
-                p.WaitForExit(15000);
+                var p = Process.Start(new ProcessStartInfo("schtasks.exe", "/query /tn " + StartTask) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true });
+                p.StandardOutput.ReadToEnd();
+                p.WaitForExit(5000);
                 return p.ExitCode == 0;
             }
             catch { return false; }
+        }
+
+        public static bool CreateStartTask()
+        {
+            string exe = System.Windows.Forms.Application.ExecutablePath;
+            return MakeTask(StartTask, TaskXml(exe, "--elevated --tray", true), AdminNow());
+        }
+
+        public static void DeleteStartTask()
+        {
+            try
+            {
+                var psi = new ProcessStartInfo("schtasks.exe", "/delete /f /tn " + StartTask);
+                if (AdminNow()) { psi.UseShellExecute = false; psi.CreateNoWindow = true; }
+                else { psi.UseShellExecute = true; psi.Verb = "runas"; psi.WindowStyle = ProcessWindowStyle.Hidden; }
+                Process.Start(psi)?.WaitForExit(10000);
+            }
+            catch { }
         }
 
         public static void DeleteAdminTask()

@@ -51,8 +51,31 @@ namespace TkoolLauncher
 
         public Screen Cur => stack[stack.Count - 1];
 
+        static bool IsAdminNow()
+        {
+            try { return new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent()).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator); }
+            catch { return false; }
+        }
+
+        // 윈도우 끄기·다시 시작: 정상 종료로 기록 (다음에 켤 때 "지난번에 갑자기 꺼졌어요"가 뜨던 것)
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == 0x0016 && m.WParam != IntPtr.Zero)   // WM_ENDSESSION
+            {
+                try { Log.Info("윈도우 종료·다시 시작으로 끔"); } catch { }
+                try { GameFreeze.Resume(); } catch { }
+                try { if (TaskbarHide.Hidden) TaskbarHide.Show(); } catch { }
+                try { Hardware.Shutdown(); } catch { }
+                try { Log.Stop(); } catch { }
+            }
+            base.WndProc(ref m);
+        }
+
         public ShellForm()
         {
+            UiThread.Init();
+            UiThread.Post = a => { try { if (IsHandleCreated) BeginInvoke(a); } catch { } };
+            UiThread.Refresh = () => { try { if (IsHandleCreated) BeginInvoke(new Action(RefreshLists)); } catch { } };
             Text = "쯔꾸르 런처";
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
             FormBorderStyle = FormBorderStyle.None;
@@ -78,7 +101,21 @@ namespace TkoolLauncher
             ResForce.Start(() => GameDoctor.Library);
             StartHealth();
             if (StartInTray) trayTipShown = true;
-            try { if (SystemControls.GetAutoStart()) SystemControls.SetAutoStart(true); } catch { }   // 예전 등록도 --tray로 고침
+            // 한 번만: 관리자 작업을 배터리·시간 제한 없이 다시 만들고, 자동 실행은 로그인 작업으로 옮김 (부팅 때 안 켜지던 것)
+            if (Settings.TaskVer < 2 && IsAdminNow())
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        if (string.Equals(Settings.AdminTaskExe, Application.ExecutablePath, StringComparison.OrdinalIgnoreCase)) Hardware.CreateAdminTask();
+                        if (SystemControls.GetAutoStart()) SystemControls.SetAutoStart(true);
+                        Settings.TaskVer = 2; Settings.Save();
+                        Log.Info("작업 스케줄러 작업 다시 만듦 (배터리·시간 제한 없음)");
+                    }
+                    catch (Exception ex) { Log.Error("작업 다시 만들기", ex); }
+                });
+            else if (Settings.AutoStartTask && !string.Equals(Settings.AdminTaskExe, Application.ExecutablePath, StringComparison.OrdinalIgnoreCase) && IsAdminNow())
+                Task.Run(() => SystemControls.SetAutoStart(true));   // exe를 옮겼으면 자동 실행 작업도 새 위치로
             if (Settings.OvOn) { try { OverlayForm.Toggle(true); } catch { } }
             anim.Tick += OnAnim;
             clock.Tick += (s, e) => Invalidate();
@@ -1929,6 +1966,7 @@ namespace TkoolLauncher
             ShowCurtain(g.Title);   // 게임하는 동안 런처는 빈 배경으로 게임 뒤에
 
             // 키보드 변환은 패드를 못 읽는 쯔꾸르(2000~VX Ace)만
+            UiThread.Now(() => { InputNeeds.Get(g); GameIdent.RjCode(g); });   // 켤 때는 판단에 필요한 걸 바로 계산
             Gamepad.MapKeys = PadMap.Want(g);   // 게임별로 켬/끔 고를 수 있음 (자동 = 진짜 쯔꾸르 2000~VX Ace + 키보드만 받는 유니티)
             Gamepad.Profile = PadMap.Profile(g);
             // 마우스로만 하는 게임(읽어보기 "マウスでの操作" 등, 패드 지원 없음): 패드를 마우스로 자동 전환
