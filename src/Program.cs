@@ -42,7 +42,11 @@ namespace TkoolLauncher
                 if (!updated && !IsAdmin())
                 {
                     string exe = Application.ExecutablePath;
-                    if (!string.Equals(Settings.AdminTaskExe, exe, StringComparison.OrdinalIgnoreCase) && Settings.AdminTaskExe != "거절:" + exe)
+                    // 예전엔 한 번 거절(부팅 때 허락 창이 그냥 지나간 것 포함)하면 영영 안 물었음 → 직접 켤 때는 하루 한 번 다시 물음
+                    string today = DateTime.Now.ToString("yyyyMMdd");
+                    bool askAgain = Settings.AdminTaskExe == "거절:" + exe && !tray && Settings.AdminAskDay != today;
+                    if (askAgain) { Settings.AdminAskDay = today; Settings.Save(); }
+                    if (!string.Equals(Settings.AdminTaskExe, exe, StringComparison.OrdinalIgnoreCase) && (Settings.AdminTaskExe != "거절:" + exe || askAgain))
                     {
                         if (Hardware.CreateAdminTask()) { Settings.AdminTaskExe = exe; Settings.HardwareControl = true; }
                         else Settings.AdminTaskExe = "거절:" + exe;   // 허락 안 하면 다시 묻지 않음
@@ -50,7 +54,14 @@ namespace TkoolLauncher
                     }
                     // 관리자로 다시 켤 때 '알림 영역으로 시작'을 넘겨줌 (작업엔 인수를 못 붙여서 표시 파일로)
                     if (tray) try { System.IO.File.WriteAllText(trayFlag, "1"); } catch { }
-                    if (string.Equals(Settings.AdminTaskExe, exe, StringComparison.OrdinalIgnoreCase) && Hardware.RunAdminTask())
+                    bool ran = string.Equals(Settings.AdminTaskExe, exe, StringComparison.OrdinalIgnoreCase) && Hardware.RunAdminTask();
+                    if (!ran && string.Equals(Settings.AdminTaskExe, exe, StringComparison.OrdinalIgnoreCase) && !tray)
+                    {
+                        // 작업이 지워졌거나 고장: 다시 만들고 한 번 더
+                        Log.Info("관리자 작업이 안 켜져서 다시 만듦");
+                        if (Hardware.CreateAdminTask()) ran = Hardware.RunAdminTask();
+                    }
+                    if (ran)
                     {
                         // 관리자 런처가 정말 떴는지 확인 (부팅 직후·배터리 등으로 작업이 안 켜지면 그냥 이대로 켬)
                         bool ok = false;

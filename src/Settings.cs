@@ -29,6 +29,7 @@ namespace TkoolLauncher
         public static string OvOrder = "", OvItemColors = "", OvGame = "";   // 항목 순서 "0,1,…"·항목별 색 "i=c;…"·게임별 위치 "id=pos,x,y;…"
         public static int OvLabels = 0x7FF;   // 항목 이름(회색 글자) 보이기 비트   // 성능 표시 켜 둔 채로 기억
         public static float OvX = -1, OvY = -1;   // 끌어 놓은 위치 (화면 비율 0~1)
+        public static string AdminAskDay = "";   // 관리자 허락을 다시 물어본 날 (하루 한 번)
         public static bool AutoStartTask;   // 자동 실행을 로그인 작업으로 등록함
         public static int TaskVer;          // 2 = 작업을 배터리·시간 제한 없이 다시 만듦
         public static string AdminTaskExe = "";   // 관리자 작업이 가리키는 exe 경로 (옮기면 다시 만듦)
@@ -101,6 +102,7 @@ namespace TkoolLauncher
                     else if (key == "OvX") float.TryParse(val, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out OvX);
                     else if (key == "OvY") float.TryParse(val, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out OvY);
                     else if (key == "AdminTaskExe") AdminTaskExe = val;
+                    else if (key == "AdminAskDay") AdminAskDay = val;
                     else if (key == "AutoStartTask") AutoStartTask = val == "1";
                     else if (key == "TaskVer") { int tv; if (int.TryParse(val, out tv)) TaskVer = tv; }
                     else if (key == "Tdp") int.TryParse(val, out Tdp);
@@ -165,6 +167,7 @@ namespace TkoolLauncher
                 sb.AppendLine("OvMargin=" + OvMargin); sb.AppendLine("OvOn=" + (OvOn ? "1" : "0")); sb.AppendLine("PopupFreeze=" + (PopupFreeze ? "1" : "0")); sb.AppendLine("OvOrder=" + OvOrder); sb.AppendLine("OvItemColors=" + OvItemColors); sb.AppendLine("OvGame=" + OvGame); sb.AppendLine("OvLabels=" + OvLabels); sb.AppendLine("PerfMode=" + PerfMode); sb.AppendLine("LibStartTab=" + LibStartTab); sb.AppendLine("ChipOrder=" + ChipOrder); sb.AppendLine("DupIgnore=" + DupIgnore); sb.AppendLine("TagList=" + TagList);
                 sb.AppendLine("OvX=" + OvX.ToString(System.Globalization.CultureInfo.InvariantCulture)); sb.AppendLine("OvY=" + OvY.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 sb.AppendLine("AdminTaskExe=" + AdminTaskExe);
+                sb.AppendLine("AdminAskDay=" + AdminAskDay);
                 sb.AppendLine("AutoStartTask=" + (AutoStartTask ? "1" : "0"));
                 sb.AppendLine("TaskVer=" + TaskVer);
                 sb.AppendLine("Tdp=" + Tdp);

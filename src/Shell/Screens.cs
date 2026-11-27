@@ -2291,6 +2291,18 @@ namespace TkoolLauncher
                           Act = () => { Settings.StoreScan = !Settings.StoreScan; Settings.Save(); Shell.Rescan(); } },
                 new Row { Title = "게임 직접 추가", Sub = "자동으로 못 찾은 게임의 실행 파일(exe)을 골라 넣어요", Value = Settings.ManualGames.Count + "개",
                           Act = Shell.AddManualGame },
+                new Row { Title = "관리자 권한으로 켜기", Value = Hardware.IsAdmin ? "켜짐" : "꺼짐",
+                          Sub = Hardware.IsAdmin ? "켤 때마다 자동으로 관리자 권한 (허락 창 없음)" : "누르면 허락 창이 한 번 뜨고, 그 뒤로는 언제나 관리자로 켜져요",
+                          Act = () =>
+                          {
+                              if (Hardware.IsAdmin) { Shell.ShowToast("이미 관리자 권한으로 켜져 있어요", 2500); return; }
+                              if (Hardware.CreateAdminTask())
+                              {
+                                  Settings.AdminTaskExe = Application.ExecutablePath; Settings.Save();
+                                  if (Hardware.RunAdminTask()) { Log.Stop(); Application.Exit(); return; }
+                              }
+                              Shell.ShowToast("관리자 허락을 받지 못했어요", 4000);
+                          } },
                 new Row { Title = "고급 하드웨어 제어 (팬·조명·TDP)", Toggle = Settings.HardwareControl,
                           Sub = Settings.HardwareControl ? (Hardware.Ready ? "켜짐 · " + (Hardware.SmuReady ? "TDP " : "") + (Hardware.EcReady ? "팬 조명 " : "") + (Hardware.TempReady ? "온도" : "") : Hardware.Problem)
                                                          : (Hardware.PawnInstalled ? "켜면 관리자 권한으로 다시 켜져요 (허락 창은 처음 한 번만)" : "PawnIO 드라이버 설치부터 해요 (누르면 설치 시작)"),

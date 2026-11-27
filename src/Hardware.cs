@@ -66,7 +66,7 @@ namespace TkoolLauncher
 
         // ───────── 상태 ─────────
         public static bool PawnInstalled;
-        public static bool IsAdmin;
+        public static bool IsAdmin = AdminNow();
         public static bool IsAirPlusMendocino;
         public static bool EcReady, SmuReady, TempReady;
         public static string Problem = "";
